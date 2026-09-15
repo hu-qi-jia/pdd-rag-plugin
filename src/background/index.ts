@@ -40,6 +40,8 @@ import type {
   GetMemoryListResponse,
   DeleteQaRequest,
   DeleteQaResponse,
+  ClearMemoryDataRequest,
+  ClearMemoryDataResponse,
   GetPanelDataRequest,
   GetPanelDataResponse,
   UpdateGoldenRequest,
@@ -52,6 +54,8 @@ import type {
   RenameFolderResponse,
   DeleteFolderRequest,
   DeleteFolderResponse,
+  FlattenFoldersRequest,
+  FlattenFoldersResponse,
   CreateKbRequest,
   CreateKbResponse,
   UpdateKbRequest,
@@ -76,9 +80,11 @@ import {
   updateGoldenWithReembed,
 } from "./goldens";
 import {
+  clearMemoryData,
   createFolder,
   deleteFolder,
   deleteQa,
+  flattenFolders,
   getMemoryList,
   getPanelData,
   renameFolder,
@@ -348,6 +354,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
       return true;
 
+    case "CLEAR_MEMORY_DATA":
+      clearMemoryData(message as ClearMemoryDataRequest)
+        .then((out) =>
+          sendResponse({
+            type: "CLEAR_MEMORY_DATA_RESPONSE",
+            payload: out,
+          } as ClearMemoryDataResponse),
+        )
+        .catch((err) =>
+          sendResponse({
+            type: "CLEAR_MEMORY_DATA_RESPONSE",
+            payload: { success: false, deletedQa: 0, error: String(err) },
+          }),
+        );
+      return true;
+
     case "GET_PANEL_DATA":
       getPanelData(message as GetPanelDataRequest)
         .then((out) =>
@@ -360,6 +382,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({
             type: "GET_PANEL_DATA_RESPONSE",
             payload: { folders: [], goldens: [], knowledge: [], error: String(err) },
+          }),
+        );
+      return true;
+
+    case "FLATTEN_FOLDERS":
+      flattenFolders(message as FlattenFoldersRequest)
+        .then((out) =>
+          sendResponse({
+            type: "FLATTEN_FOLDERS_RESPONSE",
+            payload: out,
+          } as FlattenFoldersResponse),
+        )
+        .catch((err) =>
+          sendResponse({
+            type: "FLATTEN_FOLDERS_RESPONSE",
+            payload: { success: false, flattened: 0, error: String(err) },
           }),
         );
       return true;

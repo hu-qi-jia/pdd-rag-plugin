@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../utils/message-passing'
 import type {
+  ClearMemoryDataResponse,
   ExportDataResponse,
   GetStatsResponse,
   ImportDataResponse,
@@ -27,21 +28,34 @@ export function SettingsTab({
   onDataChanged: () => Promise<void> | void
 }) {
   const [draft, setDraft] = useState<PddSettings | null>(null)
+  // 存储(PM6a):各表计数 + 浏览器存储用量估算
+  const [stats, setStats] = useState<GetStatsResponse['payload'] | null>(null)
+  const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [busy, setBusy] = useState(false)
   const [includeMemory, setIncludeMemory] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const resp = await sendMessage<GetStatsResponse>({ type: 'GET_STATS' })
-        setDraft(resp.payload.settings)
-      } catch (err) {
-        setMsg({ ok: false, text: `读取设置失败:${String(err)}` })
-      }
-    })()
+  const refreshStorageInfo = useCallback(async () => {
+    try {
+      const resp = await sendMessage<GetStatsResponse>({ type: 'GET_STATS' })
+      setDraft(resp.payload.settings)
+      setStats(resp.payload)
+    } catch (err) {
+      setMsg({ ok: false, text: `读取设置失败:${String(err)}` })
+    }
+    try {
+      const est = await navigator.storage.estimate()
+      setStorage({ usage: est.usage ?? 0, quota: est.quota ?? 0 })
+    } catch {
+      /* 无 estimate API:用量行不展示,计数仍可用 */
+    }
   }, [])
+
+  useEffect(() => {
+    void refreshStorageInfo()
+  }, [refreshStorageInfo])
 
   // 自动保存:开关/滑杆变更即时落库,弹窗随时可关不丢改动。
   // (真实 bug:此前依赖手动"保存设置",popup 失焦关闭后未保存的 draft 直接丢失。)
@@ -82,6 +96,29 @@ export function SettingsTab({
     sliderTimer.current = window.setTimeout(() => {
       void persist(next)
     }, 500)
+  }
+
+  /** 清空问答记忆(PM6a):qa+replies 全清,长期资产保留;danger 二次确认 */
+  const clearMemory = async () => {
+    setBusy(true)
+    try {
+      const resp = await sendMessage<ClearMemoryDataResponse>({ type: 'CLEAR_MEMORY_DATA' })
+      if (resp.payload.success) {
+        setMsg({
+          ok: true,
+          text: `已清空 ${resp.payload.deletedQa} 条问答记录(标准回答/知识库/文件夹保留)`,
+        })
+      } else {
+        setMsg({ ok: false, text: `清空失败:${resp.payload.error ?? '未知错误'}` })
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `清空失败:${String(err)}` })
+    } finally {
+      setBusy(false)
+      setConfirmClear(false)
+    }
+    await onDataChanged()
+    await refreshStorageInfo()
   }
 
   const exportJson = async () => {
@@ -242,6 +279,56 @@ export function SettingsTab({
         </div>
       </Card>
 
+      <Card tk={tk} title="存储">
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: `4px ${spacing.lg}px`,
+            fontSize: fontSize.caption,
+            color: tk.textMuted,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {stats && (
+            <>
+              <span>问答 {stats.qaCount}</span>
+              <span>回复 {stats.replyCount}</span>
+              <span>标准回答 {stats.goldenCount}</span>
+              <span>知识 {stats.knowledgeCount}</span>
+              <span>文件夹 {stats.folderCount}</span>
+            </>
+          )}
+          {storage && storage.quota > 0 && (
+            <span>
+              已用 {fmtBytes(storage.usage)}(配额约 {fmtBytes(storage.quota)})
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
+          {confirmClear ? (
+            <>
+              <span style={{ fontSize: fontSize.caption + 0.5, color: tk.errorText }}>
+                清空全部问答与回复?标准回答/知识库/文件夹保留。
+              </span>
+              <Btn tk={tk} variant="danger" disabled={busy} onClick={() => void clearMemory()}>
+                确认清空
+              </Btn>
+              <Btn tk={tk} variant="ghost" onClick={() => setConfirmClear(false)}>
+                取消
+              </Btn>
+            </>
+          ) : (
+            <Btn tk={tk} variant="danger" onClick={() => setConfirmClear(true)}>
+              清空问答数据
+            </Btn>
+          )}
+        </div>
+        <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
+          问答记录与回复按保留期自动清理;此操作立即清空全部问答数据(含自检数据),不可撤销。
+        </div>
+      </Card>
+
       <Card tk={tk} title="关于">
         <div style={{ fontSize: fontSize.secondary - 0.5, color: tk.textMuted, lineHeight: 1.7 }}>
           本工具仅读取聊天页内容并填充官方输入框,发送始终由人工完成;
@@ -255,6 +342,14 @@ export function SettingsTab({
 
 
 // ─── 快捷键行:展示 + 按键录入 ────────────────────────────────────────────────────
+
+/** 字节 → 人类可读(KB/MB/GB,一位小数) */
+function fmtBytes(n: number): string {
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`
+  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`
+  if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`
+  return `${n} B`
+}
 
 function HotkeyRow({
   tk,

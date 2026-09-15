@@ -57,6 +57,14 @@ export class PddDatabase extends Dexie {
     this.version(3).stores({
       knowledge: "id, questionHash, hasEmbedding, enabled, docId",
     });
+
+    // msgId 库级幂等(SW 重启后重放防御):qaRecords 首条买家消息锚点 + replies 平台 msg_id 索引
+    // (旧 findReplyByMsgId 走全表 filter,此处升为索引查询)
+    this.version(4).stores({
+      qaRecords:
+        "id, sessionKey, questionHash, questionTs, hasEmbedding, [sessionKey+questionTs], msgId",
+      replies: "id, qaId, contentHash, ts, msgId",
+    });
   }
 
   // ─── 初始化/预置 ──────────────────────────────────────────────────────────────
@@ -148,6 +156,11 @@ export class PddDatabase extends Dexie {
     return record.id;
   }
 
+  /** 平台 msg_id 查问答(SW 重启后 content 重放防御;msgId 为库级幂等锚) */
+  async findQaByMsgId(msgId: string): Promise<QaRecord | undefined> {
+    return this.qaRecords.where("msgId").equals(msgId).first();
+  }
+
   /** 会话内按问题哈希查最近一条问答记录(幂等/追加判断用) */
   async findLatestQaByHash(sessionKey: string, questionHash: string): Promise<QaRecord | undefined> {
     const hits = await this.qaRecords
@@ -211,10 +224,9 @@ export class PddDatabase extends Dexie {
     return record.id;
   }
 
-  /** 平台 msg_id 幂等查重(网络层来源) */
+  /** 平台 msg_id 幂等查重(v4 起走 msgId 索引) */
   async findReplyByMsgId(msgId: string): Promise<ReplyRecord | undefined> {
-    // msgId 无独立索引,走 qaId 全量过滤开销大;P1 网络层引入时如需高频可升索引
-    return this.replies.filter((r) => r.msgId === msgId).first();
+    return this.replies.where("msgId").equals(msgId).first();
   }
 
   /** 同内容折叠:某问答下已存在同一归一化文本的回复 */
@@ -295,19 +307,48 @@ export class PddDatabase extends Dexie {
     await table.update(id, { hasEmbedding: -1 });
   }
 
-  /** 待嵌问答(启动扫描/批量补嵌) */
-  async getPendingQaEmbeddings(limit = 100): Promise<QaRecord[]> {
-    return this.qaRecords.where("hasEmbedding").equals(0).limit(limit).toArray();
+  /**
+   * 待嵌问答(启动扫描/批量补嵌)。
+   * 含 hasEmbedding=-1 的失败记录(2026-09-15 修复:旧查询只取 =0,
+   * 与"失败下次启动扫描重试"的注释承诺相矛盾,失败记录被永久丢弃);
+   * excludeIds 用于在**同一次**补嵌运行内排除刚失败者,防止查到又失败造成死循环。
+   */
+  async getPendingQaEmbeddings(
+    limit = 100,
+    excludeIds: ReadonlySet<string> = new Set(),
+  ): Promise<QaRecord[]> {
+    return this.qaRecords
+      .where("hasEmbedding")
+      .anyOf([0, -1])
+      .filter((r) => !excludeIds.has(r.id))
+      .limit(limit)
+      .toArray();
   }
 
-  /** 待嵌金标准 */
-  async getPendingGoldenEmbeddings(limit = 100): Promise<GoldenRecord[]> {
-    return this.goldens.where("hasEmbedding").equals(0).limit(limit).toArray();
+  /** 待嵌金标准(含 -1 重试,口径同上) */
+  async getPendingGoldenEmbeddings(
+    limit = 100,
+    excludeIds: ReadonlySet<string> = new Set(),
+  ): Promise<GoldenRecord[]> {
+    return this.goldens
+      .where("hasEmbedding")
+      .anyOf([0, -1])
+      .filter((r) => !excludeIds.has(r.id))
+      .limit(limit)
+      .toArray();
   }
 
-  /** 待嵌知识库条目 */
-  async getPendingKnowledgeEmbeddings(limit = 100): Promise<KnowledgeRecord[]> {
-    return this.knowledge.where("hasEmbedding").equals(0).limit(limit).toArray();
+  /** 待嵌知识库条目(含 -1 重试,口径同上) */
+  async getPendingKnowledgeEmbeddings(
+    limit = 100,
+    excludeIds: ReadonlySet<string> = new Set(),
+  ): Promise<KnowledgeRecord[]> {
+    return this.knowledge
+      .where("hasEmbedding")
+      .anyOf([0, -1])
+      .filter((r) => !excludeIds.has(r.id))
+      .limit(limit)
+      .toArray();
   }
 
   /** 已嵌问答记录(检索源 B;TTL 保证都在保留期内) */

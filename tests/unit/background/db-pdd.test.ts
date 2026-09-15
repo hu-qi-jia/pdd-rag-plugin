@@ -140,6 +140,62 @@ describe('统计与自检数据隔离', () => {
   })
 })
 
+describe('待嵌扫描(含失败重试)', () => {
+  it('★ 回归:getPending* 应同时返回 hasEmbedding=0 与 -1(失败记录可被重试)', async () => {
+    const now = Date.now()
+    await testDb.addQaRecord(makeQa({ id: 'qa-p' })) // 待嵌
+    await testDb.addQaRecord(makeQa({ id: 'qa-f', hasEmbedding: -1 })) // 失败
+    await testDb.addQaRecord(makeQa({ id: 'qa-d', hasEmbedding: 1 })) // 已嵌,不参与
+    const got = await testDb.getPendingQaEmbeddings(100)
+    expect(got.map((r) => r.id).sort()).toEqual(['qa-f', 'qa-p'])
+
+    await testDb.addGolden({
+      id: 'g-f',
+      folderId: null,
+      question: 'q',
+      answer: 'a',
+      questionHash: hashText('q'),
+      hasEmbedding: -1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const gotGolden = await testDb.getPendingGoldenEmbeddings(100)
+    expect(gotGolden.map((r) => r.id)).toEqual(['g-f'])
+
+    await testDb.addKnowledge({
+      id: 'k-f',
+      title: 't',
+      content: 'c',
+      questionHash: hashText('t'),
+      hasEmbedding: -1,
+      enabled: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const gotKb = await testDb.getPendingKnowledgeEmbeddings(100)
+    expect(gotKb.map((r) => r.id)).toEqual(['k-f'])
+  })
+
+  it('getPending* 支持 excludeIds 排除(同一次补嵌运行内已失败者不重复入批)', async () => {
+    await testDb.addQaRecord(makeQa({ id: 'qa-p' }))
+    await testDb.addQaRecord(makeQa({ id: 'qa-f', hasEmbedding: -1 }))
+    const got = await testDb.getPendingQaEmbeddings(100, new Set(['qa-p']))
+    expect(got.map((r) => r.id)).toEqual(['qa-f'])
+  })
+})
+
+describe('msgId 库级幂等查询(Dexie v4 索引)', () => {
+  it('findQaByMsgId / findReplyByMsgId 按索引命中已入库记录', async () => {
+    await testDb.addQaRecord(makeQa({ id: 'qa-1', msgId: 'b-100' }))
+    await testDb.addReply(makeReply({ id: 'r-1', msgId: 'a-200' }))
+
+    expect((await testDb.findQaByMsgId('b-100'))?.id).toBe('qa-1')
+    expect((await testDb.findReplyByMsgId('a-200'))?.id).toBe('r-1')
+    expect(await testDb.findQaByMsgId('missing')).toBeUndefined()
+    expect(await testDb.findReplyByMsgId('missing')).toBeUndefined()
+  })
+})
+
 describe('保留期清理(TTL)', () => {
   it('仅删除早于 cutoff 的问答及其回复,金标准不受影响', async () => {
     const now = Date.now()

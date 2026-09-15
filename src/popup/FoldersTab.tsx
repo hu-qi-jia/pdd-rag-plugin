@@ -1,9 +1,10 @@
 /**
- * 回复文件夹页(P3,设计文档 §7)— 工具风重构:可折叠分区树 + 分隔线行 + 悬浮操作。
+ * 回复文件夹页(P3,设计文档 §7)— 工具风分区树(2026-09-15 二次重设计)。
  *
- * 结构(参照 pddddd 知识库 doc-list 与导航折叠模式):
- *   工具栏(新建根文件夹)→ 根文件夹分区(可折叠)→ 子文件夹(左侧引导线)→ 标准回答行。
- * 行操作分层:填充(常驻黑色主钮)/ 复制 / 编辑 / 迁移 / 删除(悬浮显现的图标钮);
+ * 结构:工具栏(新建根文件夹)→ 根文件夹分区容器(可折叠标题栏)→ 子文件夹(平铺缩进行)
+ * → 标准回答行。层级表达只用三件事:统一缩进节奏(12 + 16×深度)、字重/字号、
+ * 根夹标题栏底色 —— 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
+ * 行操作分层:填充(常驻主钮)/ 复制 / 编辑 / 迁移 / 删除(悬浮显现的图标钮);
  * 文件夹操作:新建子夹 / 重命名 / 删除(内联确认行,常驻可见)。
  * 数据流与全部功能不变:未分类不可改名删除且置底;删除文件夹仅移出标准回答。
  */
@@ -456,17 +457,21 @@ export function FoldersTab({
 
   // ─── 标准回答行 ────────────────────────────────────────────────────────────────
 
+  /** 统一缩进节奏(2026-09-15 重设计):基础 12px,每深一层 +16px;
+   *  分区头、子夹行、标准回答行、内联表单全部走同一基线,不再有引导线与混合缩进 */
+  const rowIndent = (depth: number): number => 12 + depth * 16
+
   const goldenRow = (g: PanelGolden, depth = 0): React.ReactNode => {
     const editing = editingId === g.id
     const moving = movingId === g.id
-    /** 问答卡片居左(2026-09-15 用户要求):与容器内其他内容同一基线,子级每层 +12 */
-    const rowPadLeft = 12 + depth * 12
+    /** 标准回答行与所在分区的头/表单/占位共用同一左基线 */
+    const rowPadLeft = rowIndent(depth)
     if (editing) {
       return (
         <div
           key={g.id}
           style={{
-            padding: `${spacing.md}px ${spacing.xl - 2}px ${spacing.sm}px ${rowPadLeft}px`,
+            padding: `${spacing.md}px ${spacing.xl}px ${spacing.sm}px ${rowPadLeft}px`,
             borderBottom: `1px solid ${tk.borderLight}`,
             display: 'flex',
             flexDirection: 'column',
@@ -504,7 +509,7 @@ export function FoldersTab({
         key={g.id}
         className="pddcs-row"
         style={{
-          padding: `${spacing.md}px ${spacing.xl - 2}px ${spacing.sm + 2}px ${rowPadLeft}px`,
+          padding: `${spacing.md}px ${spacing.xl}px ${spacing.sm + 2}px ${rowPadLeft}px`,
           borderBottom: `1px solid ${tk.borderLight}`,
           transition: `background-color ${motion.fast}`,
         }}
@@ -654,7 +659,8 @@ export function FoldersTab({
     const expanded = !isCollapsed || confirmFolderDelete === f.id
     const empty = node.goldens.length === 0 && node.children.length === 0
 
-    /** 分区头:根夹为标题栏(常驻浅灰底 + 展开时底边分隔线),子夹为透明行 */
+    /** 分区头:根夹为标题栏(常驻浅灰底 + 展开时底边分隔线),子夹为同构缩进行;
+     *  两者结构完全一致(chevron + 文件夹图标 + 名称 + 计数),层级只靠缩进与字重表达 */
     const header = (
       <div
         className="pddcs-row"
@@ -663,8 +669,8 @@ export function FoldersTab({
           display: 'flex',
           alignItems: 'center',
           gap: spacing.sm,
-          height: isRoot ? 32 : 28,
-          padding: isRoot ? '0 8px 0 10px' : '0 8px 0 4px',
+          height: isRoot ? 34 : 30,
+          padding: `0 8px 0 ${rowIndent(depth)}px`,
           backgroundColor: isRoot ? tk.bgSecondary : 'transparent',
           borderBottom: isRoot && expanded ? `1px solid ${tk.borderLight}` : 'none',
           cursor: renamingId === f.id ? 'default' : 'pointer',
@@ -761,7 +767,7 @@ export function FoldersTab({
       isCollapsed && confirmFolderDelete !== f.id ? null : (
         <>
           {(createParent === f.id || confirmFolderDelete === f.id) && (
-            <div style={{ padding: `6px ${spacing.xl - 2}px 6px ${isRoot ? spacing.xl - 2 : spacing.xl + 2}px` }}>
+            <div style={{ padding: `6px ${spacing.xl}px 6px ${rowIndent(depth)}px` }}>
               {createParent === f.id &&
                 inlineForm(
                   '子文件夹名称',
@@ -779,24 +785,17 @@ export function FoldersTab({
                 )}
             </div>
           )}
-          {/* 文件夹优先于内容(资源管理器直觉):子夹排在标准回答之前 */}
+          {/* 文件夹优先于内容(资源管理器直觉):子夹排在标准回答之前。
+              子夹直接平铺渲染,层级只靠统一缩进节奏表达(2026-09-15 重设计:
+              移除旧的 borderLeft 引导线包裹层 —— 它与容器边框、行分隔线叠在一起显乱) */}
           {node.children.map((c) => (
-            <div
-              key={c.folder.id}
-              style={{
-                marginLeft: spacing.xl - 2,
-                paddingLeft: spacing.sm,
-                borderLeft: `1px solid ${tk.border}`,
-              }}
-            >
-              {folderSection(c, depth + 1)}
-            </div>
+            <div key={c.folder.id}>{folderSection(c, depth + 1)}</div>
           ))}
           {node.goldens.map((g) => goldenRow(g, depth))}
           {empty && (
             <div
               style={{
-                padding: `10px ${spacing.xl - 2}px 12px 12px`,
+                padding: `10px ${spacing.xl}px 12px ${rowIndent(depth) + 2}px`,
                 fontSize: fontSize.caption,
                 color: tk.textTertiary,
               }}

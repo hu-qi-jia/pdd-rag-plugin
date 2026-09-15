@@ -1,6 +1,9 @@
 # 设计规范(Design System)
 
-> 版本 2.6.7 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.8 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> v2.6.8 增补:设置项标签统一加粗(semibold 600:Toggle/Slider 标签与快捷键行「快捷键」)、
+> 快捷键行两行式重排 —— 行1 = 标签 + kbd 展示 + 「修改」钮推至行右(marginLeft:auto),
+> kbd 显式取 controlH.form(26px)与「修改」钮严格等高(等高铁律);行2 = 说明/录入提示
 > v2.6.7 增补:设置页控件重设计 —— 开关改「文字居左、开关居右」行式(36×20 轨道,滑块位移/按压拉伸
 > 由 RESET_CSS 按 aria-checked/:active 驱动,选中 accent、未选中专用轨道令牌 switchTrack);
 > 滑杆换自定义填充轨道(4px 圆轨按值 accent 硬切填充 + 14px 白圆描边拇指钮,悬浮/按住放大);
@@ -122,8 +125,8 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 | `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口;**成功提示 4s 自动消失**(v2.6.3,`onDismiss` 回调父级清 state;失败提示常驻供读错因) |
 | `EmptyState` | 空状态(居中、两行文案) |
 | `SearchInput` | 带放大镜的搜索输入框 |
-| `Toggle` | 拨杆开关,**行式布局:文字居左、开关居右**(v2.6.7 用户要求;36×20 轨道 + 16 滑块)。选中态 accent(悬浮 accentHover),未选中走专用令牌 `switchTrack`(悬浮 `switchTrackHover`,比 inputBorder 深一档)。**滑块位移与按压拉伸(顺拖动方向 +2px)全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动**,React 只声明结构(knob 无内联 left,内联会压过 :active);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + focus-visible accent 焦点环) |
-| `Slider` | 数值滑杆(v2.6.7 重设计):4px 圆轨**按值填充**(accent 到当前值硬切,渐变由组件按 (value-min)/(max-min) 内联注入)+ 14px 白圆 accent 描边拇指钮(RESET_CSS `.pddcs-slider`,悬浮放大 1.12、按住 1.22);数值 tabular-nums 右对齐 |
+| `Toggle` | 拨杆开关,**行式布局:文字居左、开关居右**(v2.6.7 用户要求;36×20 轨道 + 16 滑块)。标签 semibold 加粗(v2.6.8)。选中态 accent(悬浮 accentHover),未选中走专用令牌 `switchTrack`(悬浮 `switchTrackHover`,比 inputBorder 深一档)。**滑块位移与按压拉伸(顺拖动方向 +2px)全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动**,React 只声明结构(knob 无内联 left,内联会压过 :active);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + focus-visible accent 焦点环) |
+| `Slider` | 数值滑杆(v2.6.7 重设计):4px 圆轨**按值填充**(accent 到当前值硬切,渐变由组件按 (value-min)/(max-min) 内联注入)+ 14px 白圆 accent 描边拇指钮(RESET_CSS `.pddcs-slider`,悬浮放大 1.12、按住 1.22);标签 semibold 加粗(v2.6.8);数值 tabular-nums 右对齐 |
 | `SectionLabel` | 小节标签 |
 | `inputStyle` | 表单元素统一样式原语(独立成行的输入框/文本域) |
 | `controlStyle` | 与按钮同排的输入框样式原语(显式高度,保证等高) |
@@ -252,8 +255,9 @@ CSS 由纯函数 `utils/overlayTheme.ts#buildOverlayCss(tk)` 按主题令牌生�
     关闭就是不希望自动填充,哪怕只有一条候选,也应弹面板让人确认。
   - 面板由快捷键唤起时脚注提示「按 Enter 填充第一条」;Esc/点外部关闭即解除。
   - 快捷键在设置页展示(`kbd` 样式)+「修改」按钮进入录入态。
-  - 行布局(v2.6.1):第一行 = 标签 + `kbd` + 修改钮;说明与录入提示各占**独立一行**
-    (`flexWrap` + `flexBasis:100%`)—— popup 宽度有限,四段挤一行会把「快捷键」标签压成竖排。
+  - 行布局(v2.6.8 重排):第一行 = 标签(semibold)+ `kbd` + 「修改」钮推至行右
+    (`marginLeft:auto`);`kbd` 显式取 `controlH.form` 与「修改」钮严格等高(等高铁律)。
+    第二行 = 说明或录入提示,独立一行 —— popup 宽度有限,四段挤一行会把「快捷键」标签压成竖排。
 
 ## 八、文案规范
 

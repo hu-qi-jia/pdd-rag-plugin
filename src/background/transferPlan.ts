@@ -15,6 +15,7 @@ import type {
   ReplyRecord,
 } from '../types/memory'
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../types/memory'
+import { hashText } from '../utils/text'
 
 export const EXPORT_VERSION = '2.0'
 
@@ -163,25 +164,60 @@ export function buildExportEnvelope(input: {
 export interface GoldenImportPlan {
   toAdd: GoldenRecord[]
   skipped: number
+  /** 因目标问题已达上限而跳过的条数 */
+  limited: number
+}
+
+/** (问题, 答案) 唯一键 —— 同一问题可有多条标准回答(答案不同),跨问题不冲突 */
+export function goldenPairKey(questionHash: string, answer: string): string {
+  return `${questionHash}|${hashText(answer)}`
+}
+
+/** 导入时已存在的标准回答快照:(问题+答案) 键集合 + 每问题条数 */
+export interface GoldenImportContext {
+  existingKeys: Set<string>
+  /** questionHash → 已有条数 */
+  existingCounts: Map<string, number>
+}
+
+export function goldenImportContext(
+  existing: Array<Pick<GoldenRecord, 'questionHash' | 'answer'>>,
+): GoldenImportContext {
+  const existingKeys = new Set<string>()
+  const existingCounts = new Map<string, number>()
+  for (const g of existing) {
+    existingKeys.add(goldenPairKey(g.questionHash, g.answer))
+    existingCounts.set(g.questionHash, (existingCounts.get(g.questionHash) ?? 0) + 1)
+  }
+  return { existingKeys, existingCounts }
 }
 
 /**
- * 金标准导入计划:按归一化问题 hash 幂等(已存在跳过,不覆盖本地编辑);
- * 导入包内部同 hash 重复只留第一条;入列记录强制 hasEmbedding=0 待重嵌。
+ * 标准回答导入计划:按 **(问题 + 答案)** 幂等(已存在跳过,不覆盖本地编辑);
+ * 导入包内部同键重复只留第一条;每个问题上限 maxPerQuestion(超限计入 limited);
+ * 入列记录强制 hasEmbedding=0 待重嵌。
  */
 export function planGoldenImports(
   incoming: ExportedGolden[],
-  existingQuestionHashes: Set<string>,
+  ctx: GoldenImportContext,
+  maxPerQuestion: number,
 ): GoldenImportPlan {
   const toAdd: GoldenRecord[] = []
-  const seen = new Set<string>()
+  const counts = new Map(ctx.existingCounts)
   let skipped = 0
+  let limited = 0
   for (const g of incoming) {
-    if (existingQuestionHashes.has(g.questionHash) || seen.has(g.questionHash)) {
+    const key = goldenPairKey(g.questionHash, g.answer)
+    if (ctx.existingKeys.has(key)) {
       skipped += 1
       continue
     }
-    seen.add(g.questionHash)
+    if ((counts.get(g.questionHash) ?? 0) >= maxPerQuestion) {
+      limited += 1
+      continue
+    }
+    ctx.existingKeys.add(key)
+    counts.set(g.questionHash, (counts.get(g.questionHash) ?? 0) + 1)
     // 显式挑字段:导入来源可能携带多余运行时字段(如向量),一律丢弃待重嵌
     toAdd.push({
       id: g.id,
@@ -196,7 +232,7 @@ export function planGoldenImports(
       updatedAt: g.updatedAt,
     })
   }
-  return { toAdd, skipped }
+  return { toAdd, skipped, limited }
 }
 
 export interface FolderImportPlan {

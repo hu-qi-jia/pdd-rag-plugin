@@ -9,12 +9,14 @@ import { loadSettings, saveSettings } from "./settings";
 import {
   EXPORT_VERSION,
   buildExportEnvelope,
+  goldenImportContext,
   planFolderImports,
   planGoldenImports,
   planKnowledgeImports,
   planMemoryImports,
   type ExportEnvelope,
 } from "./transferPlan";
+import { MAX_GOLDENS_PER_QUESTION } from "./goldens";
 import type { ExportDataRequest, ImportDataRequest } from "../types/messages";
 
 export async function exportData(
@@ -51,6 +53,8 @@ export async function exportData(
 export interface ImportOutcome {
   addedGoldens?: number;
   skippedGoldens?: number;
+  /** 因目标问题已达上限而未导入的条数 */
+  limitedGoldens?: number;
   addedFolders?: number;
   skippedFolders?: number;
   addedKnowledge?: number;
@@ -81,11 +85,13 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     );
     if (folderPlan.toAdd.length > 0) await db.folders.bulkAdd(folderPlan.toAdd);
 
-    // 2) 金标准(hash 幂等;悬空 folderId 归"未分类")
-    const existingHashes = new Set(
-      (await db.goldens.toArray()).map((g) => g.questionHash),
+    // 2) 金标准((问题+答案) 幂等 + 每问题上限;悬空 folderId 归"未分类")
+    const goldenCtx = goldenImportContext(await db.goldens.toArray());
+    const goldenPlan = planGoldenImports(
+      asArray(env.goldens),
+      goldenCtx,
+      MAX_GOLDENS_PER_QUESTION,
     );
-    const goldenPlan = planGoldenImports(asArray(env.goldens), existingHashes);
     const knownFolderIds = new Set([
       ...existingFolderIds,
       ...folderPlan.toAdd.map((f) => f.id),
@@ -139,6 +145,7 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     return {
       addedGoldens: goldenPlan.toAdd.length,
       skippedGoldens: goldenPlan.skipped,
+      limitedGoldens: goldenPlan.limited,
       addedFolders: folderPlan.toAdd.length,
       skippedFolders: folderPlan.skipped,
       addedKnowledge: kbPlan.toAdd.length,

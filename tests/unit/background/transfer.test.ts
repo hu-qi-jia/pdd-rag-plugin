@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   EXPORT_VERSION,
   buildExportEnvelope,
+  goldenImportContext,
   planGoldenImports,
   planFolderImports,
   planMemoryImports,
@@ -22,16 +23,25 @@ import type {
   FolderRecord,
   KnowledgeRecord,
 } from '../../../src/types/memory'
-import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../../../src/types/memory'
+import {
+  MAX_GOLDENS_PER_QUESTION,
+  SELF_TEST_SESSION_KEY,
+  UNCATEGORIZED_FOLDER_ID,
+} from '../../../src/types/memory'
 import { DEFAULT_SETTINGS } from '../../../src/types/memory'
 
 // ─── 造数 ──────────────────────────────────────────────────────────────────────
 
-const golden = (id: string, question: string, withVec = false): GoldenRecord => ({
+const golden = (
+  id: string,
+  question: string,
+  withVec = false,
+  answer = `answer-of-${id}`,
+): GoldenRecord => ({
   id,
   folderId: null,
   question,
-  answer: `answer-of-${id}`,
+  answer,
   questionHash: `hash-${question}`,
   ...(withVec
     ? { qEmbedding: new Float32Array([0.1, 0.2]), embeddingModel: 'Xenova/bge-small-zh-v1.5', embeddingVersion: '2.0.0' }
@@ -143,22 +153,58 @@ describe('buildExportEnvelope', () => {
 // ─── planGoldenImports ─────────────────────────────────────────────────────────
 
 describe('planGoldenImports', () => {
-  it('已存在 hash 跳过并计数;全新记录入列', () => {
-    const incoming = [golden('g1', '问题一'), golden('g2', '问题二')]
-    const plan = planGoldenImports(incoming, new Set(['hash-问题一']))
+  const ctx = (existing: GoldenRecord[] = []) => goldenImportContext(existing)
+
+  it('已存在 (问题+答案) 跳过并计数;全新记录入列', () => {
+    const incoming = [
+      golden('g1', '问题一', false, '同一答复'),
+      golden('g2', '问题二'),
+    ]
+    const existing = [golden('old', '问题一', false, '同一答复')]
+    const plan = planGoldenImports(incoming, ctx(existing), MAX_GOLDENS_PER_QUESTION)
     expect(plan.toAdd.map((g) => g.id)).toEqual(['g2'])
     expect(plan.skipped).toBe(1)
   })
 
-  it('导入包内部同 hash 重复只留第一条', () => {
-    const incoming = [golden('g1', '问题一'), golden('g1-dup', '问题一')]
-    const plan = planGoldenImports(incoming, new Set())
+  it('同问题同答案但答案文本归一化后相同(空白差异)→ 视为重复跳过', () => {
+    const incoming = [golden('g1', '问题一', false, '  同一答复 ')]
+    const existing = [golden('old', '问题一', false, '同一答复')]
+    const plan = planGoldenImports(incoming, ctx(existing), MAX_GOLDENS_PER_QUESTION)
+    expect(plan.toAdd).toEqual([])
+    expect(plan.skipped).toBe(1)
+  })
+
+  it('同问题不同答案可一并导入(同问题可多条)', () => {
+    const incoming = [golden('g1', '问题一', false, '答复甲'), golden('g2', '问题一', false, '答复乙')]
+    const plan = planGoldenImports(incoming, ctx(), MAX_GOLDENS_PER_QUESTION)
+    expect(plan.toAdd.map((g) => g.id)).toEqual(['g1', 'g2'])
+    expect(plan.skipped).toBe(0)
+  })
+
+  it('导入包内部同 (问题+答案) 重复只留第一条', () => {
+    const incoming = [
+      golden('g1', '问题一', false, '同一答复'),
+      golden('g1-dup', '问题一', false, '同一答复'),
+    ]
+    const plan = planGoldenImports(incoming, ctx(), MAX_GOLDENS_PER_QUESTION)
     expect(plan.toAdd.map((g) => g.id)).toEqual(['g1'])
     expect(plan.skipped).toBe(1)
   })
 
+  it('目标问题已达上限 → 跳过并计入 limited', () => {
+    const existing = [
+      golden('e1', '问题一', false, 'a'),
+      golden('e2', '问题一', false, 'b'),
+      golden('e3', '问题一', false, 'c'),
+    ]
+    const incoming = [golden('g1', '问题一', false, 'd'), golden('g2', '问题二')]
+    const plan = planGoldenImports(incoming, ctx(existing), MAX_GOLDENS_PER_QUESTION)
+    expect(plan.toAdd.map((g) => g.id)).toEqual(['g2'])
+    expect(plan.limited).toBe(1)
+  })
+
   it('入列记录强制 hasEmbedding=0(待重嵌)', () => {
-    const plan = planGoldenImports([golden('g1', '问题一', true)], new Set())
+    const plan = planGoldenImports([golden('g1', '问题一', true)], ctx(), MAX_GOLDENS_PER_QUESTION)
     expect(plan.toAdd[0].hasEmbedding).toBe(0)
     expect(plan.toAdd[0].qEmbedding).toBeUndefined()
   })

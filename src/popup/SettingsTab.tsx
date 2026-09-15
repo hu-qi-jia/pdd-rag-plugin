@@ -292,8 +292,10 @@ function HotkeyRow({
   }, [recording, onChange])
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-      <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium }}>快捷键</span>
+    // 控件一行(标签 + kbd + 修改),说明文字整行换行展示(2026-09-15 用户反馈:
+    // popup 宽度有限,四段挤一行会把「快捷键」标签压成竖排)
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: 6 }}>
+      <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium, flexShrink: 0 }}>快捷键</span>
       <kbd
         style={{
           padding: '2px 8px',
@@ -304,12 +306,13 @@ function HotkeyRow({
           fontSize: fontSize.caption,
           fontFamily: 'ui-monospace, Consolas, monospace',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
         }}
       >
         {formatHotkey(hotkey)}
       </kbd>
       {recording ? (
-        <span style={{ fontSize: fontSize.caption, color: tk.accent }}>
+        <span style={{ flexBasis: '100%', fontSize: fontSize.caption, color: tk.accent }}>
           请按下新的快捷键(Esc 取消;需带 Ctrl/Alt/Shift)
         </span>
       ) : (
@@ -319,7 +322,7 @@ function HotkeyRow({
           </span>
         </Btn>
       )}
-      <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
+      <span style={{ flexBasis: '100%', fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
         在聊天页按此键唤起推荐回复
       </span>
     </div>

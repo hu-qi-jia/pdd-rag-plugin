@@ -1,11 +1,12 @@
 /**
- * 回复文件夹页(P3,设计文档 §7)— 工具风分区树(2026-09-15 二次重设计)。
+ * 回复文件夹页(P3,设计文档 §7)— 工具风分区树(2026-09-15 三次重设计)。
  *
- * 结构:工具栏(新建根文件夹)→ 根文件夹分区容器(可折叠标题栏)→ 子文件夹(平铺缩进行)
- * → 标准回答行。层级表达只用三件事:统一缩进节奏(12 + 16×深度)、字重/字号、
- * 根夹标题栏底色 —— 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
+ * 结构:工具栏(新建文件夹)→ 文件夹分区容器(可折叠标题栏)→ 标准回答行。
+ * 仅支持一级文件夹(v2.6.1 用户要求,子文件夹创建入口已移除;历史遗留的子夹数据仍照常展示可删)。
+ * 层级表达只用三件事:统一缩进节奏(12 + 16×深度)、字重/字号、标题栏底色 ——
+ * 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
  * 行操作分层:填充(常驻主钮)/ 复制 / 编辑 / 迁移 / 删除(悬浮显现的图标钮);
- * 文件夹操作:新建子夹 / 重命名 / 删除(内联确认行,常驻可见)。
+ * 文件夹操作:重命名 / 删除(内联确认行,常驻可见)。
  * 数据流与全部功能不变:未分类不可改名删除且置底;删除文件夹仅移出标准回答。
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -33,7 +34,6 @@ import {
   CopyIcon,
   FolderIcon,
   FolderInputIcon,
-  FolderPlusIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
@@ -111,11 +111,10 @@ export function FoldersTab({
 
   const submitCreate = async () => {
     if (!createParent) return
-    const parentId = createParent === 'root' ? null : createParent
     try {
       const resp = await sendMessage<CreateFolderResponse>({
         type: 'CREATE_FOLDER',
-        payload: { name: newName, parentId },
+        payload: { name: newName, parentId: null }, // 仅一级文件夹
       })
       if (resp.payload.error) setMsg({ ok: false, text: `新建失败:${resp.payload.error}` })
       else {
@@ -737,11 +736,6 @@ export function FoldersTab({
             {countPill(count)}
             {opsWrap(
               <>
-                {isRoot &&
-                  iconBtn('在此文件夹下新建子文件夹', <FolderPlusIcon size={13} strokeWidth={2} />, () => {
-                    setCreateParent(f.id)
-                    setNewName('')
-                  })}
                 {!isUnc && (
                   <>
                     {iconBtn('重命名', <PencilIcon size={13} strokeWidth={2} />, () => {
@@ -766,23 +760,13 @@ export function FoldersTab({
     const body =
       isCollapsed && confirmFolderDelete !== f.id ? null : (
         <>
-          {(createParent === f.id || confirmFolderDelete === f.id) && (
+          {confirmFolderDelete === f.id && (
             <div style={{ padding: `6px ${spacing.xl}px 6px ${rowIndent(depth)}px` }}>
-              {createParent === f.id &&
-                inlineForm(
-                  '子文件夹名称',
-                  newName,
-                  setNewName,
-                  () => void submitCreate(),
-                  () => setCreateParent(null),
-                  '创建',
-                )}
-              {confirmFolderDelete === f.id &&
-                confirmRow(
-                  '删除该文件夹?其下标准回答将移入「未分类」。',
-                  () => void deleteFolder(f.id),
-                  () => setConfirmFolderDelete(null),
-                )}
+              {confirmRow(
+                '删除该文件夹?其下标准回答将移入「未分类」。',
+                () => void deleteFolder(f.id),
+                () => setConfirmFolderDelete(null),
+              )}
             </div>
           )}
           {/* 文件夹优先于内容(资源管理器直觉):子夹排在标准回答之前。
@@ -846,10 +830,10 @@ export function FoldersTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
-      {/* 工具栏:新建根文件夹(左对齐,与知识库按钮行同款;新建时原位变表单) */}
+      {/* 工具栏:新建文件夹(左对齐,与知识库按钮行同款;新建时原位变表单) */}
       {createParent === 'root' ? (
         inlineForm(
-          '根文件夹名称',
+          '文件夹名称',
           newName,
           setNewName,
           () => void submitCreate(),
@@ -886,14 +870,14 @@ export function FoldersTab({
             }}
           >
             <PlusIcon size={12} strokeWidth={2.2} />
-            新建根文件夹
+            新建文件夹
           </button>
         </div>
       )}
 
       <Notice tk={tk} msg={msg} />
 
-      {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击左上角「新建根文件夹」开始整理</EmptyState>}
+      {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击左上角「新建文件夹」开始整理</EmptyState>}
       {tree.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
           {tree.map((n) => (

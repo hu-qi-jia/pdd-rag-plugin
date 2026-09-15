@@ -196,7 +196,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="自动回复"
-          desc="开启后按快捷键直接填充第一条推荐回复;关闭后按快捷键弹出推荐回复面板,再按 Enter 填充第一条"
+          desc="开启后点击「AI回复」或按快捷键,直接填充第一条推荐回复;关闭后总是弹出推荐回复面板,由你点选(或按 Enter 填第一条)。两种方式都不会自动发送"
           checked={draft.directFillEnabled}
           onChange={(v) => void persist({ ...draft, directFillEnabled: v })}
         />

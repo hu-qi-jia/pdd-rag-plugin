@@ -1,6 +1,7 @@
 // P2-4 content UI 纯逻辑(chrome/DOM 无关,可单测)。
 // UI 行为状态机见设计文档 §6.3:直填开关开 → 永远直填最高分;
-// 关 → 单候选直填,多候选弹推荐回复面板,无候选仅提示。
+// 关 → 永远弹推荐回复面板由人工选(2026-09-15 用户反馈:开关关就不该静默直填,
+// 原实现"单候选免面板直填"与开关语义冲突,已移除),无候选仅提示。
 // 面板条数由检索侧类别配额决定(标准回答全部 + 历史最近 2 + 知识库 1,
 // 见 retrieval.ts#PANEL_QUOTA),此处不再截断。
 
@@ -30,8 +31,6 @@ export function decideUiAction(
   directFillEnabled: boolean,
 ): UiAction {
   if (suggestions.length === 0) return { action: "none" };
-  if (directFillEnabled || suggestions.length === 1) {
-    return { action: "fill", fillIndex: 0 };
-  }
+  if (directFillEnabled) return { action: "fill", fillIndex: 0 };
   return { action: "popup", items: suggestions };
 }

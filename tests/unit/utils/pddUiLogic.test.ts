@@ -36,8 +36,10 @@ describe('decideUiAction:直填/弹窗状态机', () => {
   it('直填开关开 → 无论几条都直填最高分(下标0)', () => {
     expect(decideUiAction([sug('a'), sug('b')], true)).toEqual({ action: 'fill', fillIndex: 0 })
   })
-  it('开关关 + 单候选 → 直接填充', () => {
-    expect(decideUiAction([sug('a')], false)).toEqual({ action: 'fill', fillIndex: 0 })
+  it('开关关 + 单候选 → 仍弹面板(2026-09-15 用户反馈:开关关就不该静默直填)', () => {
+    const r = decideUiAction([sug('a')], false)
+    expect(r.action).toBe('popup')
+    if (r.action === 'popup') expect(r.items).toHaveLength(1)
   })
   it('开关关 + 多候选 → 弹窗展示全部候选(条数由检索侧配额决定,此处不截断)', () => {
     const items = [sug('a'), sug('b'), sug('c'), sug('d')]

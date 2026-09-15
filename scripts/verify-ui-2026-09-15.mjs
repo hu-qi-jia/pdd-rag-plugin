@@ -193,6 +193,17 @@ const hkText = await pop.evaluate(() => document.querySelector('kbd')?.textConte
 check('设置页展示快捷键(默认 Ctrl + Enter)', hkText === 'Ctrl + Enter', hkText)
 const modifyBtn = pop.locator('button', { hasText: '修改' })
 check('快捷键可进入录入(有「修改」按钮)', (await modifyBtn.count()) === 1)
+// ── 快捷键行几何(第十七轮):kbd 与「修改」钮等高(等高铁律),修改推至行右 ──
+const hkGeo = await pop.evaluate(() => {
+  const kbdEl = document.querySelector('kbd')
+  const mod = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('修改'))
+  if (!kbdEl || !mod) return null
+  const k = kbdEl.getBoundingClientRect()
+  const m = mod.getBoundingClientRect()
+  return { kH: Math.round(k.height), mH: Math.round(m.height), kRight: Math.round(k.right), mLeft: Math.round(m.left) }
+})
+check('快捷键 kbd 与「修改」钮等高', hkGeo !== null && hkGeo.kH === hkGeo.mH, hkGeo ? `${hkGeo.kH}/${hkGeo.mH}px` : 'missing')
+check('「修改」钮在快捷键展示右侧', hkGeo !== null && hkGeo.mLeft > hkGeo.kRight, hkGeo ? `kbd.right=${hkGeo.kRight} btn.left=${hkGeo.mLeft}` : '')
 await modifyBtn.click()
 await sleep(300)
 const recHint = await pop.evaluate(() => document.body.innerText.includes('请按下新的快捷键'))

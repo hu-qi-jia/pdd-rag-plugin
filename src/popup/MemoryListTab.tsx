@@ -10,6 +10,7 @@ import type {
   DeleteQaResponse,
   GetMemoryListResponse,
   MemoryListItem,
+  MemoryReplyItem,
 } from '../types/messages'
 import { filterQaRecords, remainingDays } from '../utils/panelLogic'
 import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
@@ -177,6 +178,38 @@ export function MemoryListTab({
     setConfirmDeleteId(null)
   }
 
+  /** 回复的金标控件:已设 → 徽标;未设 → 主钮(原位「设置中…」反馈保留) */
+  const goldenControl = (item: MemoryListItem, r: MemoryReplyItem) =>
+    goldenReplyIds.has(r.id) ? (
+      <span
+        title="该回复已设为标准回答;可在文件夹页取消"
+        style={{
+          height: controlH.form,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          flexShrink: 0,
+          fontSize: fontSize.caption,
+          fontWeight: fontWeight.medium,
+          color: tk.successText,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <CheckIcon size={12} strokeWidth={2.4} />
+        已设为标准回答
+      </span>
+    ) : (
+      <Btn
+        tk={tk}
+        variant="primary"
+        disabled={busyReplyId === r.id}
+        onClick={() => void setGolden(item, r.id, r.text)}
+        title="将此问题与回复设为标准回答"
+      >
+        {busyReplyId === r.id ? '设置中…' : '设置标准回答'}
+      </Btn>
+    )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
@@ -314,38 +347,12 @@ export function MemoryListTab({
                     >
                       {r.text}
                     </div>
-                    {goldenReplyIds.has(r.id) ? (
-                      <span
-                        title="该回复已设为标准回答;可在文件夹页取消"
-                        style={{
-                          height: controlH.form,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          flexShrink: 0,
-                          fontSize: fontSize.caption,
-                          fontWeight: fontWeight.medium,
-                          color: tk.successText,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        <CheckIcon size={12} strokeWidth={2.4} />
-                        已设为标准回答
-                      </span>
-                    ) : (
-                      <Btn
-                        tk={tk}
-                        variant="primary"
-                        disabled={busyReplyId === r.id}
-                        onClick={() => void setGolden(item, r.id, r.text)}
-                        title="将此问题与回复设为标准回答"
-                      >
-                        {busyReplyId === r.id ? '设置中…' : '设置标准回答'}
-                      </Btn>
-                    )}
+                    {/* 金标控件:仅多回复卡片留在回复行内(放底部无法区分对应哪条回复);
+                        单回复卡片移到底部操作行(2026-09-15 用户要求) */}
+                    {item.replies.length > 1 && goldenControl(item, r)}
                   </div>
                 ))}
-                {/* 删除单条(内联二次确认) */}
+                {/* 底部操作行:删除(内联二次确认)+ 单回复卡片的金标控件(删除右侧) */}
                 <div style={{ borderTop: `1px solid ${tk.separator}`, paddingTop: spacing.md, display: 'flex', gap: spacing.sm, alignItems: 'center' }}>
                   {confirmDeleteId === item.id ? (
                     <>
@@ -358,9 +365,12 @@ export function MemoryListTab({
                       </Btn>
                     </>
                   ) : (
-                    <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(item.id)}>
-                      删除
-                    </Btn>
+                    <>
+                      <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(item.id)}>
+                        删除
+                      </Btn>
+                      {item.replies.length === 1 && goldenControl(item, item.replies[0])}
+                    </>
                   )}
                 </div>
               </div>

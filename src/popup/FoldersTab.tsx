@@ -762,6 +762,8 @@ export function FoldersTab({
               {f.name}
             </span>
             {countPill(count)}
+            {/* 常驻可见(2026-09-15 用户反馈"父文件夹不能改名":功能本就有,
+                但纯悬浮显现不可发现);未分类不给改名/删除 */}
             {opsWrap(
               <>
                 {!isUnc && (
@@ -776,6 +778,7 @@ export function FoldersTab({
                   </>
                 )}
               </>,
+              true,
             )}
           </>
         )}

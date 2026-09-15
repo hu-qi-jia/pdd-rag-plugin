@@ -196,7 +196,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="自动回复"
-          desc="开启后点击「AI回复」或按快捷键,直接填充第一条推荐回复;关闭后总是弹出推荐回复面板,由你点选(或按 Enter 填第一条)。两种方式都不会自动发送"
+          desc="开:点「AI回复」或快捷键直接填充第一条;关:弹面板人工选择"
           checked={draft.directFillEnabled}
           onChange={(v) => void persist({ ...draft, directFillEnabled: v })}
         />
@@ -208,7 +208,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="标准回答优先"
-          desc="候选排序时标准回答置顶(建议保持开启)"
+          desc="标准回答命中时置顶,建议开启"
           checked={draft.goldenPriorityEnabled}
           onChange={(v) => void persist({ ...draft, goldenPriorityEnabled: v })}
         />
@@ -248,7 +248,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="导出包含记忆数据"
-          desc="问答记录与回复一并导出(向量不导出,导入后自动重嵌);默认仅导出标准回答、文件夹与设置"
+          desc="额外导出问答记录与回复(向量导入后自动重嵌)"
           checked={includeMemory}
           onChange={setIncludeMemory}
         />
@@ -275,7 +275,7 @@ export function SettingsTab({
           />
         </div>
         <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-          导入按内容幂等:已存在的标准回答与问答自动跳过并计数,不覆盖本地编辑;版本不符将拒绝导入。
+          重复内容自动跳过,不覆盖本地编辑;版本不符将拒绝导入。
         </div>
       </Card>
 
@@ -325,7 +325,7 @@ export function SettingsTab({
           )}
         </div>
         <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-          问答记录与回复按保留期自动清理;此操作立即清空全部问答数据(含自检数据),不可撤销。
+          问答按保留期自动清理;清空立即生效,不可撤销。
         </div>
       </Card>
 

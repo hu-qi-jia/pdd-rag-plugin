@@ -75,6 +75,15 @@ describe('rrfFuse:两路排名融合', () => {
     expect(fused[3]).toBeGreaterThan(fused[8])
     expect(fused[0]).toBe(0) // 未上榜得 0
   })
+  it('超大候选池不触发 spread 栈溢出(2026-09-15 评审 工程5)', () => {
+    // V8 对 spread 实参个数有上限(≈十万级):Math.max(-1, ...flat) 在
+    // 几万条记录过阈时直接 RangeError。改循环后必须能吃下 20 万下标。
+    const big: number[] = []
+    for (let i = 0; i < 200_000; i++) big.push(i)
+    const fused = rrfFuse([big, [...big].reverse()])
+    expect(fused).toHaveLength(200_000)
+    expect(fused[0]).toBeGreaterThan(0) // 正序首名与倒序末名都上榜
+  })
 })
 
 describe('timeDecay:半衰期', () => {

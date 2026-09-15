@@ -126,7 +126,11 @@ export function bm25Scores(docsTokens: string[][], queryTokens: string[]): numbe
  * 返回与文档下标对齐的融合分数。
  */
 export function rrfFuse(rankLists: number[][]): number[] {
-  const maxIdx = Math.max(-1, ...rankLists.flat())
+  // 最大下标用循环求(spread 有 V8 实参上限,几万条候选过阈时 Math.max(...flat) 直接栈溢出)
+  let maxIdx = -1
+  for (const list of rankLists) {
+    for (const idx of list) if (idx > maxIdx) maxIdx = idx
+  }
   const fused = new Array<number>(maxIdx + 1).fill(0)
   for (const list of rankLists) {
     for (let rank = 0; rank < list.length; rank++) {

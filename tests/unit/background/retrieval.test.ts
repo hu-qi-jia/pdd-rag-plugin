@@ -195,6 +195,70 @@ describe('assembleSuggestions:展开回复/折叠/金标准置顶', () => {
     const out = assembleSuggestions(ranked, { getReplies: (id) => rep.get(id)!, getGoldenAnswer: () => '', goldenPriority, now: 1000, maxSuggestions: 5 })
     expect(out).toHaveLength(5)
   })
+
+  // 2026-09-15:同一问题可挂多条标准回答(上限 3);展示按设置时间倒序
+  const multiGolden = new Map([
+    ['g-old', '方案甲(最早设置)'],
+    ['g-mid', '方案乙(中间设置)'],
+    ['g-new', '方案丙(最近设置)'],
+  ])
+  const gq = '这个支持7天无理由退换吗'
+
+  it('同一问题的多条标准回答全部保留(不被同内容折叠吃掉)', () => {
+    const ranked = [
+      { source: mkSource('g-old', 'golden', gq, 100), cosine: 0.9, rrfScore: 0.03 },
+      { source: mkSource('g-mid', 'golden', gq, 200), cosine: 0.9, rrfScore: 0.03 },
+      { source: mkSource('g-new', 'golden', gq, 300), cosine: 0.9, rrfScore: 0.03 },
+    ]
+    const out = assembleSuggestions(ranked, {
+      getReplies: () => [],
+      getGoldenAnswer: (id) => multiGolden.get(id)!,
+      goldenPriority,
+      now: 1000,
+    })
+    expect(out).toHaveLength(3)
+    expect(out.every((s) => s.kind === 'golden')).toBe(true)
+  })
+
+  it('同问题的多条标准回答按设置时间倒序:最近设置的靠前', () => {
+    // 故意乱序传入,且融合分刻意让老的更高,验证分组内以时间倒序覆盖
+    const ranked = [
+      { source: mkSource('g-old', 'golden', gq, 100), cosine: 0.9, rrfScore: 0.05 },
+      { source: mkSource('g-new', 'golden', gq, 300), cosine: 0.9, rrfScore: 0.01 },
+      { source: mkSource('g-mid', 'golden', gq, 200), cosine: 0.9, rrfScore: 0.03 },
+    ]
+    const out = assembleSuggestions(ranked, {
+      getReplies: () => [],
+      getGoldenAnswer: (id) => multiGolden.get(id)!,
+      goldenPriority,
+      now: 1000,
+    })
+    expect(out.map((s) => s.text)).toEqual([
+      '方案丙(最近设置)',
+      '方案乙(中间设置)',
+      '方案甲(最早设置)',
+    ])
+  })
+
+  it('多问题的标准回答:组按名次落位,组内仍按时间倒序', () => {
+    const ans = new Map([
+      ['g-qa-new', 'A 问题新答复'],
+      ['g-qa-old', 'A 问题旧答复'],
+      ['g-qb', 'B 问题答复'],
+    ])
+    const ranked = [
+      { source: mkSource('g-qb', 'golden', '什么时候发货', 500), cosine: 0.95, rrfScore: 0.09 },
+      { source: mkSource('g-qa-old', 'golden', gq, 100), cosine: 0.9, rrfScore: 0.03 },
+      { source: mkSource('g-qa-new', 'golden', gq, 300), cosine: 0.9, rrfScore: 0.02 },
+    ]
+    const out = assembleSuggestions(ranked, {
+      getReplies: () => [],
+      getGoldenAnswer: (id) => ans.get(id)!,
+      goldenPriority,
+      now: 1000,
+    })
+    expect(out.map((s) => s.text)).toEqual(['B 问题答复', 'A 问题新答复', 'A 问题旧答复'])
+  })
 })
 
 // ─── 知识库源(P4-KB v1)────────────────────────────────────────────────────────

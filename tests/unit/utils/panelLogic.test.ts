@@ -7,6 +7,8 @@ import {
   filterQaRecords,
   remainingDays,
   buildFolderTree,
+  countGoldensByQuestion,
+  orderGoldensByRecency,
   type PanelFolder,
   type PanelGolden,
   type FolderNode,
@@ -111,5 +113,57 @@ describe('buildFolderTree 两层文件夹树', () => {
     const tree = buildFolderTree([folder('f1', null, 1)], [golden('g1', null)])
     const unc = tree.find((n) => n.folder.id === UNCATEGORIZED_FOLDER_ID) as FolderNode
     expect(unc.goldens.map((g) => g.id)).toEqual(['g1'])
+  })
+})
+
+// ─── 多答案标准回答(2026-09-15:同一问题可挂多条,上限 3)──────────────────────
+
+describe('orderGoldensByRecency / countGoldensByQuestion', () => {
+  const g = (id: string, question: string, updatedAt: number, folderId: string | null = 'f1'): PanelGolden => ({
+    id,
+    folderId,
+    question,
+    answer: `a-${id}`,
+    hasEmbedding: 1,
+    updatedAt,
+  })
+
+  it('同问题的多条按设置时间倒序,组位置取首成员位置', () => {
+    const list = [
+      g('g1', '问题甲', 100),
+      g('g2', '问题乙', 100),
+      g('g3', '问题甲', 300),
+      g('g4', '问题甲', 200),
+    ]
+    expect(orderGoldensByRecency(list).map((x) => x.id)).toEqual(['g3', 'g4', 'g1', 'g2'])
+  })
+
+  it('问题文本前后空白差异视为同一问题(归一化后同 hash)', () => {
+    const list = [g('g1', '能开发票吗', 100), g('g2', '  能开发票吗 ', 200)]
+    expect(orderGoldensByRecency(list).map((x) => x.id)).toEqual(['g2', 'g1'])
+  })
+
+  it('单条/空数组原样返回', () => {
+    expect(orderGoldensByRecency([])).toEqual([])
+    const one = [g('g1', '问题甲', 1)]
+    expect(orderGoldensByRecency(one)).toBe(one)
+  })
+
+  it('分组计数:同问题累加,不同问题分开', () => {
+    const counts = countGoldensByQuestion([
+      g('g1', '问题甲', 1),
+      g('g2', '问题甲', 2),
+      g('g3', '问题乙', 3),
+    ])
+    expect(counts.size).toBe(2)
+    expect([...counts.values()].sort()).toEqual([1, 2])
+  })
+
+  it('buildFolderTree 内已按设置时间倒序(面板与候选同一口径)', () => {
+    const tree = buildFolderTree(
+      [{ id: 'f1', parentId: null, name: 'f1', position: 0 }],
+      [g('old', '问题甲', 100), g('new', '问题甲', 300)],
+    )
+    expect(tree[0].goldens.map((x) => x.id)).toEqual(['new', 'old'])
   })
 })

@@ -2,7 +2,7 @@
  * 面板纯逻辑(popup 消费):记忆列表关键词筛选 / 剩余保留天数 / 两层文件夹树构建。
  * 设计依据:设计文档 §7(面板结构)。纯函数,无 chrome/DB 依赖,便于单测。
  */
-import { normalizeText } from './text'
+import { hashText, normalizeText } from './text'
 import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../types/memory'
 import type { PanelFolder, PanelGolden } from '../types/messages'
 
@@ -79,5 +79,41 @@ export function buildFolderTree(folders: PanelFolder[], goldens: PanelGolden[]):
 
   roots.sort(byPosition)
   for (const node of nodes.values()) node.children.sort(byPosition)
+  // 同一问题的多条标准回答(每问上限见 MAX_GOLDENS_PER_QUESTION)按设置时间倒序:
+  // 最近设置的靠前,与聊天页候选顺序同一口径
+  for (const node of nodes.values()) {
+    node.goldens = orderGoldensByRecency(node.goldens)
+  }
   return roots
+}
+
+/**
+ * 同问题的多条标准回答按 updatedAt 倒序(最近设置靠前);
+ * 组的位置取该组在入参中最早出现的位置,其余条目保持原序 —— 不打乱既有阅读顺序。
+ */
+export function orderGoldensByRecency(goldens: PanelGolden[]): PanelGolden[] {
+  if (goldens.length < 2) return goldens
+  const keyOf = new Map<PanelGolden, string>()
+  for (const g of goldens) keyOf.set(g, hashText(g.question))
+  const out: PanelGolden[] = []
+  const used = new Set<PanelGolden>()
+  for (const g of goldens) {
+    if (used.has(g)) continue
+    const group = goldens.filter((x) => !used.has(x) && keyOf.get(x) === keyOf.get(g))
+    for (const m of group) used.add(m)
+    out.push(...group.sort((a, b) => b.updatedAt - a.updatedAt))
+  }
+  return out
+}
+
+/** 标准回答按问题分组计数(questionHash → 条数):面板标"同问题 N 条 / 已满"用 */
+export function countGoldensByQuestion(
+  goldens: Array<Pick<PanelGolden, 'question'>>,
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const g of goldens) {
+    const k = hashText(g.question)
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  return counts
 }

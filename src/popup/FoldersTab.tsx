@@ -7,7 +7,7 @@
  * 文件夹操作:新建子夹 / 重命名 / 删除(内联确认行,常驻可见)。
  * 数据流与全部功能不变:未分类不可改名删除且置底;删除文件夹仅移出标准回答。
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../utils/message-passing'
 import type {
@@ -22,7 +22,9 @@ import type {
   UpdateGoldenResponse,
 } from '../types/messages'
 import { UNCATEGORIZED_FOLDER_ID } from '../types/memory'
-import { buildFolderTree, type FolderNode } from '../utils/panelLogic'
+import { buildFolderTree, countGoldensByQuestion, type FolderNode } from '../utils/panelLogic'
+import { hashText } from '../utils/text'
+import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
 import { EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
 import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
 import {
@@ -75,6 +77,9 @@ export function FoldersTab({
   const [confirmGoldenDelete, setConfirmGoldenDelete] = useState<string | null>(null)
   // 折叠的文件夹 id 集合(默认全部展开)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+
+  /** 同问题标准回答条数(questionHash → n):多答案问题的行上标注 n / 已满 */
+  const questionCounts = useMemo(() => countGoldensByQuestion(goldens), [goldens])
 
   const load = useCallback(async () => {
     try {
@@ -501,7 +506,7 @@ export function FoldersTab({
           borderBottom: `1px solid ${tk.borderLight}`,
         }}
       >
-        {/* 问题行:加粗单行 + 向量状态 */}
+        {/* 问题行:加粗单行 + 同问题条数 + 向量状态 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: 2 }}>
           <div
             style={{
@@ -515,6 +520,18 @@ export function FoldersTab({
           >
             {g.question}
           </div>
+          {(() => {
+            const n = questionCounts.get(hashText(g.question)) ?? 1
+            if (n < 2) return null
+            return (
+              <span
+                title={`同一问题的标准回答共 ${n} 条(上限 ${MAX_GOLDENS_PER_QUESTION} 条),按设置时间倒序展示`}
+                style={{ fontSize: fontSize.caption, color: tk.textTertiary, flexShrink: 0, whiteSpace: 'nowrap' }}
+              >
+                同问题 {n} 条{n >= MAX_GOLDENS_PER_QUESTION ? ' · 已满' : ''}
+              </span>
+            )
+          })()}
           {g.hasEmbedding === 0 && (
             <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, flexShrink: 0 }}>
               向量生成中

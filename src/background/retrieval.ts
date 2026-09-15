@@ -288,7 +288,7 @@ export function assembleSuggestions(
   // 排序:金标准 > 历史 > 知识库(可选置顶)→ 融合分 → 原始余弦 → 新
   const tier = (c: Cand): number =>
     opts.goldenPriority ? foldWinnerRank(c.kind) : 1
-  winners.sort(
+  const basic = [...winners].sort(
     (a, b) =>
       tier(a) - tier(b) ||
       b.rrfScore - a.rrfScore ||
@@ -297,13 +297,51 @@ export function assembleSuggestions(
   )
 
   const max = opts.maxSuggestions ?? 10
-  return winners.slice(0, max).map((c) => ({
-    kind: c.kind,
-    text: c.text,
-    sourceQuestion: c.sourceQuestion,
-    score: c.score,
-    sourceId: c.sourceId,
-    replyId: c.replyId,
-    foldCount: c.foldCount,
-  }))
+  return groupGoldenAnswersByRecency(basic)
+    .slice(0, max)
+    .map((c) => ({
+      kind: c.kind,
+      text: c.text,
+      sourceQuestion: c.sourceQuestion,
+      score: c.score,
+      sourceId: c.sourceId,
+      replyId: c.replyId,
+      foldCount: c.foldCount,
+    }))
+}
+
+/**
+ * 同一问题的多条标准回答归为一组:组内按设置时间倒序(**最近设置的靠前**),
+ * 组的位置取该组名次最高成员的位置;其余候选保持原序。
+ * 依据 2026-09-15 用户口径:一个问题的多条标准回答共同参与检索(均为独立检索源,
+ * 问题向量相同 → 原始余弦天然一致),展示顺序只按设置时间倒序最有意义。
+ */
+function groupGoldenAnswersByRecency<
+  T extends { kind: Suggestion['kind']; sourceQuestion: string; ts: number },
+>(list: T[]): T[] {
+  if (!list.some((c) => c.kind === 'golden')) return list
+  const keyCache = new Map<T, string>()
+  const keyOf = (c: T): string => {
+    let k = keyCache.get(c)
+    if (k === undefined) {
+      k = hashText(c.sourceQuestion)
+      keyCache.set(c, k)
+    }
+    return k
+  }
+
+  const out: T[] = []
+  const used = new Set<T>()
+  for (const c of list) {
+    if (used.has(c)) continue
+    if (c.kind !== 'golden') {
+      used.add(c)
+      out.push(c)
+      continue
+    }
+    const group = list.filter((x) => !used.has(x) && x.kind === 'golden' && keyOf(x) === keyOf(c))
+    for (const g of group) used.add(g)
+    out.push(...group.sort((a, b) => b.ts - a.ts))
+  }
+  return out
 }

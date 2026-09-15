@@ -188,6 +188,19 @@ await sleep(600)
 const settingsSummary = (await projectHeader())
 check('设置页不展示统计', settingsSummary.trim() === '', JSON.stringify(settingsSummary))
 
+// ── 设置页:快捷键展示与录入入口 ──
+const hkText = await pop.evaluate(() => document.querySelector('kbd')?.textContent ?? '')
+check('设置页展示快捷键(默认 Ctrl + Enter)', hkText === 'Ctrl + Enter', hkText)
+const modifyBtn = pop.locator('button', { hasText: '修改' })
+check('快捷键可进入录入(有「修改」按钮)', (await modifyBtn.count()) === 1)
+await modifyBtn.click()
+await sleep(300)
+const recHint = await pop.evaluate(() => document.body.innerText.includes('请按下新的快捷键'))
+check('点修改 → 进入录入态(等待新组合键)', recHint)
+await pop.keyboard.press('Escape')
+await sleep(300)
+check('Esc 可取消录入', !(await pop.evaluate(() => document.body.innerText.includes('请按下新的快捷键'))))
+
 // ── ③ 标准回答行的小控件也应等高 ──
 await pop.locator('button[title="文件夹"]').click()
 await sleep(500)

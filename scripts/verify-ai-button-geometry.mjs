@@ -51,6 +51,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 await page.addInitScript(() => {
   // content script 依赖的最小 chrome 桩(本用例不点击,不触发 sendMessage)
   window.chrome = {
+    storage: { local: {}, onChanged: { addListener() {} } },
     runtime: {
       onMessage: { addListener() {} },
       sendMessage() {},

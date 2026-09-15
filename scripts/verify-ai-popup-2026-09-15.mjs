@@ -37,7 +37,21 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   <li class="onemsg"><div class="buyer-item"><span class="avatar"></span>
     <div currentuid="u1"><div class="msg-content"><p class="msg-content-box">这个支持7天无理由退换吗</p></div></div>
   </div></li>
-</ul></div></body></html>`
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u2"><div class="msg-content"><p class="msg-content-box">填充消息 2:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u3"><div class="msg-content"><p class="msg-content-box">填充消息 3:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u4"><div class="msg-content"><p class="msg-content-box">填充消息 4:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u5"><div class="msg-content"><p class="msg-content-box">填充消息 5:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u6"><div class="msg-content"><p class="msg-content-box">填充消息 6:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u7"><div class="msg-content"><p class="msg-content-box">填充消息 7:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u8"><div class="msg-content"><p class="msg-content-box">填充消息 8:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u9"><div class="msg-content"><p class="msg-content-box">填充消息 9:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u10"><div class="msg-content"><p class="msg-content-box">填充消息 10:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u11"><div class="msg-content"><p class="msg-content-box">填充消息 11:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u12"><div class="msg-content"><p class="msg-content-box">填充消息 12:把最后一条买家消息压到视口底部</p></div></div></div></li>
+<li class="onemsg"><div class="buyer-item"><span class="avatar"></span><div currentuid="u13"><div class="msg-content"><p class="msg-content-box">填充消息 13:把最后一条买家消息压到视口底部</p></div></div></div></li>
+</ul></div>
+<textarea id="replyTextarea" style="position:fixed; left:20px; bottom:20px; width:600px; height:60px"></textarea>
+</body></html>`
 
 const browser = await chromium.launch({
   executablePath:
@@ -65,12 +79,20 @@ await page.addInitScript(() => {
   window.__goldenCount = 1
   window.__forceLimit = false
   window.chrome = {
+    storage: { local: {}, onChanged: { addListener() {} } },
     runtime: {
       onMessage: { addListener() {} },
       lastError: undefined,
       sendMessage(msg) {
         sent.push(msg)
         const p = msg?.payload ?? {}
+        if (msg?.type === 'GET_STATS') {
+          return Promise.resolve({
+            payload: {
+              settings: { directFillEnabled: false, goldenPriorityEnabled: true, autoReplyHotkey: { ctrl: true, alt: false, shift: false, key: 'Enter' } },
+            },
+          })
+        }
         if (msg?.type === 'GET_SUGGESTIONS') {
           return Promise.resolve({
             payload: {
@@ -162,6 +184,43 @@ console.log('toast =', JSON.stringify(toast))
 check('达上限时提示「该问题已有 3 条标准回答…」且不误报成功', toast.includes('已有 3 条标准回答'), toast)
 const afterLimit = await rows()
 check('达上限时按钮不翻转为已设置态', afterLimit[2]?.actions.includes('设置标准回答'), JSON.stringify(afterLimit[2]?.actions))
+
+// ── ④ 快捷键:Ctrl+Enter 唤起面板 → Enter 填充第一条 ──
+await page.evaluate(() => {
+  document.querySelector('.pddcs-popup-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+})
+await sleep(400)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+})
+await sleep(900)
+const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
+const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
+check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
+check('面板脚注提示 Enter 填充第一条', hkFoot.includes('按 Enter 填充第一条'), hkFoot)
+
+// 面板不溢出视口:顶部 ≥ 8 且底部 ≤ 视口高 - 8
+const fit = await page.evaluate(() => {
+  const r = document.querySelector('.pddcs-popup').getBoundingClientRect()
+  return { top: r.top, bottom: r.bottom, vh: window.innerHeight }
+})
+check(
+  '面板完整落在视口内(不因气泡靠近屏幕底部而溢出)',
+  fit.top >= 8 && fit.bottom <= fit.vh - 8,
+  JSON.stringify(fit),
+)
+
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+})
+await sleep(500)
+const filled = await page.evaluate(() => document.querySelector('#replyTextarea')?.value ?? '')
+const popupGone = await page.evaluate(() => !document.querySelector('.pddcs-popup'))
+check(
+  '再按 Enter → 第一条推荐回复填入输入框,面板关闭',
+  filled.length > 0 && popupGone,
+  `value=${filled.slice(0, 24)}… popupGone=${popupGone}`,
+)
 
 await page.screenshot({ path: ROOT + '\\logs\\ui-0915-ai-popup.png' })
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)

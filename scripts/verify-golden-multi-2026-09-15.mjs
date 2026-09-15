@@ -134,9 +134,40 @@ check('取消的那条已不在库中,新条入列', !after.some((g) => g.id ===
 const order2 = await panelOrder()
 check('取消+新设后,最新设置的排最前(5 → 3 → 1)', order2.join(',') === '5,3,1', `order=${order2.join(',')}`)
 
-// ── ⑥ 清理 ──
+// ── ⑥ 结构:文件夹优先于内容(2026-09-15 文件夹页重设计)──
+const rootF = await send('CREATE_FOLDER', { name: '结构验收根夹', parentId: null })
+const childF = await send('CREATE_FOLDER', { name: '结构验收子夹', parentId: rootF.id })
+// 用独立问题,避免撞上上面那个问题的 3 条上限
+const gStruct = await send('ADD_GOLDEN', { question: '结构验收:换个问题问一次?', answer: '结构验收答复' })
+const moved = await send('UPDATE_GOLDEN', { id: gStruct.id, folderId: rootF.id })
+check('搬家成功(结构验收用标准回答已入根夹)', moved.id === gStruct.id, JSON.stringify(moved))
+await pop.reload({ waitUntil: 'domcontentloaded' })
+await sleep(1500)
+await pop.locator('button[title="文件夹"]').click()
+await sleep(1200)
+const rel = await pop.evaluate(() => {
+  const headers = [...document.querySelectorAll('.pddcs-row')]
+  const head = headers.find((el) => (el.textContent || '').includes('结构验收根夹'))
+  const box = head && head.parentElement
+  const t = box?.innerText ?? ''
+  return { childIdx: t.indexOf('结构验收子夹'), answerIdx: t.indexOf('结构验收答复') }
+})
+check(
+  '子文件夹排在父夹标准回答之前(文件夹优先于内容)',
+  rel.childIdx >= 0 && rel.answerIdx >= 0 && rel.childIdx < rel.answerIdx,
+  JSON.stringify(rel),
+)
+
+// ── ⑦ 清理 ──
 for (const g of after) await send('DELETE_GOLDEN', { id: g.id })
 check('清理完毕(该问题下无残留)', (await preg(Q)).length === 0)
+await send('DELETE_GOLDEN', { id: gStruct.id })
+await send('DELETE_FOLDER', { id: childF.id })
+await send('DELETE_FOLDER', { id: rootF.id })
+check('结构验收文件夹已清理', !(await pop.evaluate(async () => {
+  const r = await chrome.runtime.sendMessage({ type: 'GET_PANEL_DATA' })
+  return (r?.payload?.folders ?? []).some((f) => String(f.name).startsWith('结构验收'))
+})))
 check('无页面错误', pageErrors.length === 0, JSON.stringify(pageErrors))
 
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)

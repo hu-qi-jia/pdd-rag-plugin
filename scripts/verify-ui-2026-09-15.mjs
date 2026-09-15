@@ -100,15 +100,20 @@ await sleep(1500)
 await pop.reload({ waitUntil: 'domcontentloaded' })
 await sleep(1800)
 
-const header = () => pop.evaluate(() => document.body.innerText.split('\n')[1] ?? '')
-const before = await header()
+/** 头部概览行:页签标题下的那行统计(设置页为空串) */
+const projectHeader = () =>
+  pop.evaluate(() => {
+    const el = document.querySelector('header > div:nth-child(2)')
+    return el?.textContent ?? ''
+  })
+const before = await projectHeader()
 const statsBefore = (await send('GET_STATS')).goldenCount
 
 // ── ① 记忆页:点击设置标准回答 ──
 const btn = pop.locator('button', { hasText: '设置标准回答' }).first()
 await btn.click()
 await sleep(2200)
-const after = await header()
+const after = await projectHeader()
 const statsAfter = (await send('GET_STATS')).goldenCount
 const doneMarker = await pop.locator('text=已设为标准回答').count()
 
@@ -135,12 +140,18 @@ check(
 )
 
 check(`头部统计刷新(标准回答 ${statsBefore} → ${statsAfter})`, statsAfter > statsBefore)
-check('头部统计文案已更新', after.includes(`标准回答 ${statsAfter}`), after)
+check('记忆页只展示本页统计(问答/回复),不再堆四个计数', /^问答 \d+ · 回复 \d+$/.test(after.trim()), after)
 await pop.screenshot({ path: ROOT + '\\logs\\ui-0915-memory.png' })
 
 // ── ② 文件夹页:内联表单等高 ──
 await pop.locator('button[title="文件夹"]').click()
 await sleep(600)
+const foldersSummary = (await projectHeader())
+check(
+  '文件夹页统计 = 文件夹 n · 标准回答 m',
+  /^文件夹 \d+ · 标准回答 \d+$/.test(foldersSummary.trim()),
+  foldersSummary,
+)
 const railLogos = await pop.evaluate(
   () => document.querySelectorAll('nav [title="拼多多客服快捷回复"]').length,
 )
@@ -171,7 +182,15 @@ check(
 )
 await pop.screenshot({ path: ROOT + '\\logs\\ui-0915-folders.png' })
 
+// ── 设置页:不展示任何统计 ──
+await pop.locator('button[title="设置"]').click()
+await sleep(600)
+const settingsSummary = (await projectHeader())
+check('设置页不展示统计', settingsSummary.trim() === '', JSON.stringify(settingsSummary))
+
 // ── ③ 标准回答行的小控件也应等高 ──
+await pop.locator('button[title="文件夹"]').click()
+await sleep(500)
 await pop.locator('button', { hasText: '取消' }).first().click()
 await sleep(400)
 const inlineGeo = await pop.evaluate(() => {

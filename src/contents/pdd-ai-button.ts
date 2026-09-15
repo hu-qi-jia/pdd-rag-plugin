@@ -20,7 +20,8 @@ import {
   mergeBuyerQuery,
   type UiAction,
 } from '../utils/pddUiLogic'
-import { fontFamily, fontSize, radius, semantic } from '../ui/design'
+import { findBubbleElement } from '../utils/pddBubbleAnchor'
+import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
 import { lightTheme as tk } from '../ui/theme'
 
 export const config: PlasmoCSConfig = {
@@ -43,10 +44,13 @@ const CSS = `
 #${OVERLAY_ID} { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
   font-family: ${fontFamily}; }
 
-/* AI回复按钮 — 工具风小控件(紧跟买家气泡右侧;纯文字、20px 高、4px 圆角) */
-.pddcs-ai-btn { position: fixed; height: 20px; border-radius: ${radius.sm}px; border: 1px solid ${tk.btnBorder};
-  cursor: pointer; pointer-events: auto; padding: 0 10px; display: inline-flex; align-items: center;
-  background: ${tk.btnBg}; color: ${tk.textMuted}; font-size: ${fontSize.secondary}px; font-weight: 500; line-height: 1;
+/* AI回复按钮 — 与 popup 的 .pddcs-btn 同档工具风控件
+   (26px 高 / 6px 圆角 / 12.5px 字号:2026-09-15 用户反馈原 20px 偏小,与整体设计脱节)
+   box-sizing 显式声明:本样式注入平台页面,不享受 popup 的全局 border-box 重置 */
+.pddcs-ai-btn { position: fixed; box-sizing: border-box; height: ${controlH.form}px;
+  border-radius: ${radius.md}px; border: 1px solid ${tk.btnBorder};
+  cursor: pointer; pointer-events: auto; padding: 0 ${spacing.xl}px; display: inline-flex; align-items: center;
+  background: ${tk.btnBg}; color: ${tk.text}; font-size: ${fontSize.body}px; font-weight: 500; line-height: 1;
   letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
 .pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: ${tk.textTertiary}; }
@@ -97,7 +101,8 @@ const CSS = `
 `
 
 /** Lucide "sparkles" 图标已按用户要求移除(2026-09-15):按钮为纯文字胶囊 */
-const AI_BTN_W = 70 // "AI回复" 纯文字胶囊预估宽度(定位用)
+const AI_BTN_W = 72 // "AI回复" 纯文字胶囊预估宽度(首帧尚未排版时定位用)
+const BTN_GAP = spacing.xl // 气泡与按钮的间距(实测按真实气泡右缘计,不再按 <p> 内缘)
 
 function ensureOverlay(): HTMLDivElement {
   let overlay = document.getElementById(OVERLAY_ID) as HTMLDivElement | null
@@ -178,6 +183,27 @@ function buyerRowText(li: Element): string | null {
   return text || null
 }
 
+// ─── 气泡可视矩形 ─────────────────────────────────────────────────────────────
+//
+// 真实结构:li.onemsg > .buyer-item > div[currentuid] > .msg-content > p.msg-content-box
+// 气泡底色与内边距挂在上层容器上,<p> 的 rect 右缘落在气泡 padding 之内。
+// 2026-09-15 用户反馈「按钮压住气泡」实测根因:按 <p> 右缘 +12px 定位,扣掉约 10px 的
+// 气泡内边距后视觉间距只剩 ~1px。故改为向上吸收有背景色的祖先,取最外层带背景者
+// 作锚(算法见 utils/pddBubbleAnchor.ts,含单测)。
+
+/** 行 → 真实气泡元素(WeakMap 缓存:DOM 结构跨轮稳定,免每轮 getComputedStyle) */
+const bubbleCache = new WeakMap<Element, HTMLElement>()
+
+function resolveBubble(li: Element): HTMLElement | null {
+  const cached = bubbleCache.get(li)
+  if (cached?.isConnected) return cached
+  const box = li.querySelector('.buyer-item .msg-content-box')
+  if (!(box instanceof HTMLElement)) return null
+  const bubble = findBubbleElement(box, li.querySelector('.buyer-item'))
+  bubbleCache.set(li, bubble)
+  return bubble
+}
+
 /** 点击行 + 向上连续买家行(时间序)合并为检索 query */
 function buildQuery(clicked: Element): string {
   const texts: string[] = []
@@ -228,19 +254,21 @@ function scanButtons(): void {
       overlay.appendChild(btn)
       rowBtns.set(li, btn)
     }
-    // 锚定到买家气泡本身(.msg-content-box)右侧 —— 气泡在哪按钮就跟在哪,
-    // 不再贴整行右缘(行右缘距气泡太远)。气泡取不到时退回整行矩形。
-    const bubble = li.querySelector('.buyer-item .msg-content-box')
-    const anchor = (bubble as HTMLElement | null)?.getBoundingClientRect() ?? rect
+    // 锚定到买家气泡本身(真实气泡容器)右侧 —— 气泡在哪按钮就跟在哪,不再贴整行右缘
+    // (行右缘距气泡太远),也不再按 <p>.msg-content-box 定位(其右缘短掉气泡内边距,
+    //  会让按钮视觉上压住气泡)。气泡解析不到时退回整行矩形。
+    const bubble = resolveBubble(li)
+    const anchor = bubble?.getBoundingClientRect() ?? rect
     const bw = btn.offsetWidth || AI_BTN_W
-    // x:气泡右侧 12px(用户反馈贴太近会压到气泡);放不下则贴气泡左侧
-    const x = anchor.right + 12 + bw <= window.innerWidth - 8
-      ? anchor.right + 12
-      : Math.max(4, anchor.left - bw - 12)
-    // y:气泡垂直居中(按钮高 20 → 偏移 10),夹在消息容器可视区内
+    // x:气泡右缘外 12px(真间隙);放不下则移到气泡左侧
+    const x =
+      anchor.right + BTN_GAP + bw <= window.innerWidth - 8
+        ? anchor.right + BTN_GAP
+        : Math.max(4, anchor.left - bw - BTN_GAP)
+    // y:气泡垂直居中(按钮高 26 → 偏移 13),夹在消息容器可视区内
     const y = Math.min(
-      Math.max(anchor.top + anchor.height / 2 - 10, cont.top + 2),
-      cont.bottom - 22,
+      Math.max(anchor.top + anchor.height / 2 - controlH.form / 2, cont.top + 2),
+      cont.bottom - controlH.form - 2,
     )
     btn.style.left = `${Math.round(x)}px`
     btn.style.top = `${Math.round(y)}px`

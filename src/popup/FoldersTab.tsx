@@ -424,8 +424,8 @@ export function FoldersTab({
           padding: '0 10px',
           border: 'none',
           borderRadius: radius.sm,
-          backgroundColor: tk.errorText,
-          color: '#ffffff',
+          backgroundColor: tk.errorBg,
+          color: tk.errorText,
           fontSize: fontSize.caption,
           fontWeight: fontWeight.semibold,
           cursor: 'pointer',
@@ -859,19 +859,20 @@ export function FoldersTab({
               gap: 4,
               height: controlH.form,
               padding: '0 12px',
-              border: `1px solid ${tk.btnBorder}`,
+              border: 'none',
               borderRadius: radius.md,
-              backgroundColor: tk.btnBg,
-              color: tk.text,
+              backgroundColor: tk.btnPrimaryBg,
+              color: tk.btnPrimaryText,
               fontSize: fontSize.body,
+              fontWeight: fontWeight.medium,
               cursor: 'pointer',
               transition: `background-color ${motion.fast}`,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = tk.btnHoverBg
+              e.currentTarget.style.backgroundColor = tk.btnPrimaryHover
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = tk.btnBg
+              e.currentTarget.style.backgroundColor = tk.btnPrimaryBg
             }}
           >
             <PlusIcon size={12} strokeWidth={2.2} />
@@ -926,8 +927,8 @@ function BtnMini({
         padding: '0 10px',
         border: primary || danger ? 'none' : `1px solid ${tk.btnBorder}`,
         borderRadius: radius.sm,
-        backgroundColor: primary ? tk.btnPrimaryBg : danger ? tk.errorText : 'transparent',
-        color: primary || danger ? '#ffffff' : tk.textMuted,
+        backgroundColor: primary ? tk.btnPrimaryBg : danger ? tk.errorBg : 'transparent',
+        color: primary ? tk.btnPrimaryText : danger ? tk.errorText : tk.textMuted,
         fontSize: fontSize.caption,
         fontWeight: primary || danger ? fontWeight.semibold : fontWeight.regular,
         cursor: 'pointer',

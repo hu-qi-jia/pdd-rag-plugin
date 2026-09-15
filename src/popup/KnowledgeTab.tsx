@@ -296,6 +296,7 @@ export function KnowledgeTab({
           <Card
             key={k.id}
             tk={tk}
+            className="pddcs-row"
             style={{
               padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`,
               gap: spacing.sm + 1,
@@ -377,31 +378,37 @@ export function KnowledgeTab({
                   <Btn tk={tk} variant="primary" disabled={disabled} onClick={() => void fillKb(k)} title="填充到聊天页输入框,发送由人工完成">
                     填充
                   </Btn>
-                  <Btn tk={tk} disabled={disabled} onClick={() => void copyKb(k)}>
-                    复制
-                  </Btn>
-                  {k.source !== 'doc' && (
-                    <Btn tk={tk} onClick={() => startEdit(k)}>
-                      编辑
+                  {/* 次级操作悬浮显现(与文件夹页一致);进入删除确认时常驻 */}
+                  <div
+                    className={confirmDeleteId === k.id ? undefined : 'pddcs-row-ops'}
+                    style={{ display: 'flex', gap: spacing.xs, alignItems: 'center', marginLeft: 'auto' }}
+                  >
+                    <Btn tk={tk} disabled={disabled} onClick={() => void copyKb(k)}>
+                      复制
                     </Btn>
-                  )}
-                  <Btn tk={tk} title={disabled ? '启用后重新参与检索' : '停用后保留数据,不参与检索'} onClick={() => void toggleEnabled(k)}>
-                    {disabled ? '启用' : '停用'}
-                  </Btn>
-                  {confirmDeleteId === k.id ? (
-                    <>
-                      <Btn tk={tk} variant="danger" onClick={() => void deleteKb(k.id)}>
-                        确认
+                    {k.source !== 'doc' && (
+                      <Btn tk={tk} onClick={() => startEdit(k)}>
+                        编辑
                       </Btn>
-                      <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
-                        取消
-                      </Btn>
-                    </>
-                  ) : (
-                    <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(k.id)}>
-                      删除
+                    )}
+                    <Btn tk={tk} title={disabled ? '启用后重新参与检索' : '停用后保留数据,不参与检索'} onClick={() => void toggleEnabled(k)}>
+                      {disabled ? '启用' : '停用'}
                     </Btn>
-                  )}
+                    {confirmDeleteId === k.id ? (
+                      <>
+                        <Btn tk={tk} variant="danger" onClick={() => void deleteKb(k.id)}>
+                          确认
+                        </Btn>
+                        <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
+                          取消
+                        </Btn>
+                      </>
+                    ) : (
+                      <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(k.id)}>
+                        删除
+                      </Btn>
+                    )}
+                  </div>
                 </div>
               </>
             )}

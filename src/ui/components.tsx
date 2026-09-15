@@ -111,14 +111,18 @@ export function Card({
   title,
   children,
   style,
+  className,
 }: {
   tk: ThemeTokens
   title?: string
   children: React.ReactNode
   style?: React.CSSProperties
+  /** 附加 CSS 类(如 pddcs-row:配合 .pddcs-row-ops 做悬浮显现操作钮) */
+  className?: string
 }) {
   return (
     <div
+      className={className}
       style={{
         border: `1px solid ${tk.border}`,
         borderRadius: radius.lg,

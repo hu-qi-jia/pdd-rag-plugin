@@ -201,18 +201,18 @@ await pop.keyboard.press('Escape')
 await sleep(300)
 check('Esc 可取消录入', !(await pop.evaluate(() => document.body.innerText.includes('请按下新的快捷键'))))
 
-// ── ③ 标准回答行的小控件也应等高 ──
+// ── ③ 标准回答行内小控件等高(填充钮与悬浮图标钮同取 controlH.inline 档;
+//     旧步骤找第三轮时代的常驻「取消」钮,第十二轮文件夹页重构后已不存在)──
 await pop.locator('button[title="文件夹"]').click()
 await sleep(500)
-await pop.locator('button', { hasText: '取消' }).first().click()
-await sleep(400)
 const inlineGeo = await pop.evaluate(() => {
-  const boxes = [...document.querySelectorAll('button')]
-    .filter((b) => ['填充', '确认', '取消'].includes(b.textContent.trim()))
-    .map((b) => ({ t: b.textContent.trim(), h: Math.round(b.getBoundingClientRect().height) }))
-  return boxes
+  const hs = [...document.querySelectorAll('button')]
+    .filter((b) => b.textContent.trim() === '填充' || (b.title && b.title.includes('复制')))
+    .map((b) => Math.round(b.getBoundingClientRect().height))
+  return hs
 })
 console.log('行内小控件高度 =', JSON.stringify(inlineGeo))
+check('标准回答行内小控件等高(填充/图标钮同高)', inlineGeo.length >= 2 && new Set(inlineGeo).size === 1, inlineGeo.join('/'))
 
 console.log('页面错误 =', JSON.stringify(pageErrors))
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)

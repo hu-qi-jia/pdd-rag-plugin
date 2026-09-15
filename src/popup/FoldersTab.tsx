@@ -17,6 +17,7 @@ import type {
   DeleteFolderResponse,
   DeleteGoldenResponse,
   FillInputResponse,
+  FlattenFoldersResponse,
   GetPanelDataResponse,
   PanelFolder,
   PanelGolden,
@@ -78,9 +79,29 @@ export function FoldersTab({
   const [confirmGoldenDelete, setConfirmGoldenDelete] = useState<string | null>(null)
   // 折叠的文件夹 id 集合(默认全部展开)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  // 遗留子文件夹拍平确认(PM7)
+  const [confirmFlatten, setConfirmFlatten] = useState(false)
 
   /** 同问题标准回答条数(questionHash → n):多答案问题的行上标注 n / 已满 */
   const questionCounts = useMemo(() => countGoldensByQuestion(goldens), [goldens])
+
+  /** 遗留子文件夹(PM7:UI 只建一级,存量子夹给出"拍平"清入口) */
+  const legacySubfolders = useMemo(() => folders.filter((f) => f.parentId !== null), [folders])
+
+  const flattenAll = async () => {
+    try {
+      const resp = await sendMessage<FlattenFoldersResponse>({ type: 'FLATTEN_FOLDERS' })
+      if (resp.payload.success) {
+        setMsg({ ok: true, text: `已拍平 ${resp.payload.flattened} 个子文件夹,其下标准回答上移到父文件夹` })
+      } else {
+        setMsg({ ok: false, text: `拍平失败:${resp.payload.error ?? '未知错误'}` })
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `拍平失败:${String(err)}` })
+    }
+    setConfirmFlatten(false)
+    await refresh()
+  }
 
   const load = useCallback(async () => {
     try {
@@ -882,6 +903,55 @@ export function FoldersTab({
       )}
 
       <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+
+      {/* 遗留子文件夹拍平入口(PM7):仅存量数据可见,拍平 = 金标准上移父夹 + 删除子夹 */}
+      {legacySubfolders.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: spacing.sm,
+            padding: `${spacing.md}px ${spacing.lg}px`,
+            border: `1px dashed ${tk.border}`,
+            borderRadius: radius.md,
+            backgroundColor: tk.bgSecondary,
+          }}
+        >
+          {confirmFlatten ? (
+            confirmRow(
+              `拍平 ${legacySubfolders.length} 个子文件夹(${legacySubfolders
+                .map((f) => f.name)
+                .join('、')})?其下标准回答上移到父文件夹,子文件夹删除。`,
+              () => void flattenAll(),
+              () => setConfirmFlatten(false),
+            )
+          ) : (
+            <>
+              <span style={{ fontSize: fontSize.caption, color: tk.textMuted, flex: 1 }}>
+                检测到 {legacySubfolders.length} 个遗留子文件夹(新版仅支持一级文件夹)
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirmFlatten(true)}
+                style={{
+                  height: controlH.inline,
+                  padding: '0 10px',
+                  border: `1px solid ${tk.btnBorder}`,
+                  borderRadius: radius.sm,
+                  backgroundColor: 'transparent',
+                  color: tk.text,
+                  fontSize: fontSize.caption,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                一键拍平
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击左上角「新建文件夹」开始整理</EmptyState>}
       {tree.length > 0 && (

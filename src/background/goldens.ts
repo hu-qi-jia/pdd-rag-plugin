@@ -59,7 +59,7 @@ export async function updateGoldenWithReembed(
   payload: UpdateGoldenRequest["payload"],
 ): Promise<UpdateGoldenOutcome> {
   const existing = await db.getGolden(payload.id);
-  if (!existing) return { error: "金标准不存在" };
+  if (!existing) return { error: "标准回答不存在" };
 
   if (payload.folderId !== undefined && payload.folderId !== null) {
     const folder = await db.folders.get(payload.folderId);

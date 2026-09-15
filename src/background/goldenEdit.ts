@@ -31,7 +31,7 @@ export function planGoldenEdit(
     const hash = hashText(question)
     if (hash !== existing.questionHash) {
       if (otherQuestionHashes.has(hash)) {
-        return { ok: false, error: '已存在相同问题的金标准' }
+        return { ok: false, error: '已存在相同问题的标准回答' }
       }
       updates.question = question
       updates.questionHash = hash

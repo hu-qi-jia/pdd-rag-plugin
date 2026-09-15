@@ -193,7 +193,7 @@ function App() {
           </div>
           <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
             {stats
-              ? `问答 ${stats.qaCount} · 回复 ${stats.replyCount} · 金标准 ${stats.goldenCount} · 知识 ${stats.knowledgeCount}`
+              ? `问答 ${stats.qaCount} · 回复 ${stats.replyCount} · 标准回答 ${stats.goldenCount} · 知识 ${stats.knowledgeCount}`
               : '读取中…'}
           </div>
         </header>

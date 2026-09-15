@@ -74,11 +74,11 @@ export function MemoryListTab({
         },
       })
       const p = resp.payload
-      if (p.error) setMsg({ ok: false, text: `设金失败:${p.error}` })
-      else if (p.exists) setMsg({ ok: true, text: '该问题的金标准已存在,未重复创建' })
-      else setMsg({ ok: true, text: '已设为金标准,后台将自动向量化' })
+      if (p.error) setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
+      else if (p.exists) setMsg({ ok: true, text: '该问题的标准回答已存在,未重复创建' })
+      else setMsg({ ok: true, text: '已设为标准回答,后台将自动向量化' })
     } catch (err) {
-      setMsg({ ok: false, text: `设金失败:${String(err)}` })
+      setMsg({ ok: false, text: `设置标准回答失败:${String(err)}` })
     }
   }
 
@@ -188,8 +188,8 @@ export function MemoryListTab({
                     >
                       {r.text}
                     </div>
-                    <Btn tk={tk} variant="primary" onClick={() => void setGolden(item, r.id, r.text)} title="将此问题与回复设为金标准">
-                      设金
+                    <Btn tk={tk} variant="primary" onClick={() => void setGolden(item, r.id, r.text)} title="将此问题与回复设为标准回答">
+                      设置标准回答
                     </Btn>
                   </div>
                 ))}

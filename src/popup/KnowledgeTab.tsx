@@ -410,7 +410,7 @@ export function KnowledgeTab({
       })}
 
       <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-        检索层级:金标准 &gt; 知识库 &gt; 历史记录。.md 文档按 500 字/75 重叠自动分块;文档块只读,同名文档重新上传即整篇替换。
+        检索层级:标准回答 &gt; 历史记录 &gt; 知识库。.md 文档按小节整块导入,超长内容按空行/句号智能截断;文档块只读,同名文档重新上传即整篇替换。
       </div>
     </div>
   )

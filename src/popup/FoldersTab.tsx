@@ -142,7 +142,7 @@ export function FoldersTab({
         payload: { id },
       })
       if (resp.payload.success) {
-        setMsg({ ok: true, text: '文件夹已删除,其下金标准已移入「未分类」' })
+        setMsg({ ok: true, text: '文件夹已删除,其下标准回答已移入「未分类」' })
         await refresh()
       } else {
         setMsg({ ok: false, text: `删除失败:${resp.payload.error ?? '未知错误'}` })
@@ -229,7 +229,7 @@ export function FoldersTab({
         payload: { id },
       })
       if (resp.payload.success) {
-        setMsg({ ok: true, text: '金标准已删除,历史记录不受影响' })
+        setMsg({ ok: true, text: '标准回答已删除,历史记录不受影响' })
         await refresh()
       } else {
         setMsg({ ok: false, text: `删除失败:${resp.payload.error ?? '未知错误'}` })
@@ -309,7 +309,7 @@ export function FoldersTab({
                       </Btn>
                     </>
                   ) : (
-                    <Btn tk={tk} variant="ghost" title="删除文件夹(金标准保留)" onClick={() => setConfirmFolderDelete(f.id)}>
+                    <Btn tk={tk} variant="ghost" title="删除文件夹(标准回答保留)" onClick={() => setConfirmFolderDelete(f.id)}>
                       <XIcon size={12} strokeWidth={2} />
                     </Btn>
                   )}
@@ -365,7 +365,7 @@ export function FoldersTab({
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
               <Badge tk={tk} tone="golden" icon={<StarIcon size={10} strokeWidth={2.2} />}>
-                金标准
+                标准回答
               </Badge>
               {g.hasEmbedding === 0 && (
                 <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>向量生成中</span>
@@ -489,7 +489,7 @@ export function FoldersTab({
       {tree.map((n) => renderNode(n, 0))}
 
       <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-        在聊天页候选弹窗或记忆列表中可将优质回复沉淀为金标准;检索命中时金标准置顶并放宽阈值。
+        在聊天页候选弹窗或记忆列表中可将优质回复沉淀为标准回答;检索命中时标准回答置顶并放宽阈值。
       </div>
     </div>
   )

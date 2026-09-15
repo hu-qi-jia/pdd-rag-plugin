@@ -105,7 +105,7 @@ export function SettingsTab({
       a.download = `pddcs-export-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`
       a.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 5000)
-      setMsg({ ok: true, text: includeMemory ? '已导出(含记忆数据)' : '已导出(金标准+文件夹+设置)' })
+      setMsg({ ok: true, text: includeMemory ? '已导出(含记忆数据)' : '已导出(标准回答+文件夹+设置)' })
     } catch (err) {
       setMsg({ ok: false, text: `导出失败:${String(err)}` })
     } finally {
@@ -128,7 +128,7 @@ export function SettingsTab({
       }
       setMsg({
         ok: true,
-        text: `导入完成:金标准 +${p.addedGoldens ?? 0}(跳过 ${p.skippedGoldens ?? 0}) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
+        text: `导入完成:标准回答 +${p.addedGoldens ?? 0}(跳过 ${p.skippedGoldens ?? 0}) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
       })
       await onDataChanged()
     } catch {
@@ -162,8 +162,8 @@ export function SettingsTab({
         />
         <Toggle
           tk={tk}
-          label="金标准优先"
-          desc="候选排序时金标准置顶(建议保持开启)"
+          label="标准回答优先"
+          desc="候选排序时标准回答置顶(建议保持开启)"
           checked={draft.goldenPriorityEnabled}
           onChange={(v) => void persist({ ...draft, goldenPriorityEnabled: v })}
         />
@@ -179,7 +179,7 @@ export function SettingsTab({
         />
         <Slider
           tk={tk}
-          label="金标准阈值(放宽)"
+          label="标准回答阈值(放宽)"
           value={draft.goldenThreshold}
           min={0.2}
           max={0.8}
@@ -203,7 +203,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="导出包含记忆数据"
-          desc="问答记录与回复一并导出(向量不导出,导入后自动重嵌);默认仅导出金标准、文件夹与设置"
+          desc="问答记录与回复一并导出(向量不导出,导入后自动重嵌);默认仅导出标准回答、文件夹与设置"
           checked={includeMemory}
           onChange={setIncludeMemory}
         />
@@ -230,7 +230,7 @@ export function SettingsTab({
           />
         </div>
         <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-          导入按内容幂等:已存在的金标准与问答自动跳过并计数,不覆盖本地编辑;版本不符将拒绝导入。
+          导入按内容幂等:已存在的标准回答与问答自动跳过并计数,不覆盖本地编辑;版本不符将拒绝导入。
         </div>
       </Card>
 

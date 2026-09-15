@@ -320,7 +320,7 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
   if (act.action === 'fill') {
     const s = suggestions[act.fillIndex]
     if (fillInput(s.text)) {
-      const kindLabel = s.kind === 'golden' ? '金标准' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
+      const kindLabel = s.kind === 'golden' ? '标准回答' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
       toast(
         `已填充:${kindLabel}` +
           `${(s.foldCount ?? 1) > 1 ? ` · 同内容×${s.foldCount}` : ''} · 请手动发送`,
@@ -345,7 +345,7 @@ function closePopup(): void {
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
   const b = document.createElement('span')
   b.className = `pddcs-badge ${kind}`
-  b.textContent = kind === 'golden' ? '金标准' : kind === 'knowledge' ? '知识库' : '历史'
+  b.textContent = kind === 'golden' ? '标准回答' : kind === 'knowledge' ? '知识库' : '历史'
   return b
 }
 
@@ -376,8 +376,8 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   }
   const actions = document.createElement('div')
   actions.className = 'pddcs-cand-actions'
-  const goldBtn = miniBtn('设金')
-  goldBtn.title = '将当前问题 + 该回复设为金标准'
+  const goldBtn = miniBtn('设置标准回答')
+  goldBtn.title = '将当前问题 + 该回复设为标准回答'
   goldBtn.addEventListener('click', (ev) => {
     ev.stopPropagation()
     void setGolden(s, query, goldBtn)
@@ -407,7 +407,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {
-      const kindLabel = s.kind === 'golden' ? '金标准' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
+      const kindLabel = s.kind === 'golden' ? '标准回答' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
       toast(`已填充:${kindLabel} · 请手动发送`)
       closePopup()
     } else {
@@ -471,11 +471,11 @@ async function setGolden(
       },
     })
     const err = chrome.runtime.lastError?.message ?? resp?.payload?.error
-    if (err) toast(`设金标准失败:${err}`)
-    else if (resp?.payload?.exists) toast('相同问题的金标准已存在')
-    else toast('已设为金标准(后台自动向量化)')
+    if (err) toast(`设置标准回答失败:${err}`)
+    else if (resp?.payload?.exists) toast('相同问题的标准回答已存在')
+    else toast('已设为标准回答(后台自动向量化)')
   } catch (err) {
-    toast(`设金标准失败:${String(err)}`)
+    toast(`设置标准回答失败:${String(err)}`)
   }
   btn.disabled = false
 }
@@ -518,7 +518,7 @@ chrome.runtime.onMessage.addListener(
       return false
     }
     if (fillInput(text)) {
-      toast('已填充:金标准 · 请手动发送')
+      toast('已填充:标准回答 · 请手动发送')
       sendResponse({ payload: { success: true } })
     } else {
       sendResponse({ payload: { success: false, error: '未找到输入框' } })

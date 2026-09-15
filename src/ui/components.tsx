@@ -36,7 +36,7 @@ export function Btn({
       ? tk.errorText
       : isGhost
         ? tk.textMuted
-        : tk.text
+        : tk.btnText
   const bg = isPrimary
     ? tk.btnPrimaryBg
     : isDanger
@@ -301,7 +301,7 @@ export function SearchInput({
   )
 }
 
-// ── 拨杆开关(胶囊式,accent 色)─────────────────────────────────────────────
+// ── 拨杆开关(飞书蓝选中态;滑块位移由 CSS 按 aria-checked 驱动)────────────
 
 export function Toggle({
   label,
@@ -316,6 +316,9 @@ export function Toggle({
   onChange: (v: boolean) => void
   tk: ThemeTokens
 }) {
+  const [track, trackHover] = checked
+    ? [tk.accent, tk.accentHover]
+    : [tk.switchTrack, tk.switchTrackHover]
   return (
     <label
       style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.lg, cursor: 'pointer' }}
@@ -340,6 +343,12 @@ export function Toggle({
             onChange(!checked)
           }
         }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = trackHover
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = track
+        }}
         style={{
           width: size.toggleWidth,
           height: size.toggleHeight,
@@ -351,22 +360,12 @@ export function Toggle({
           cursor: 'pointer',
           // 选中态用 accent 而非 tk.text:黑白反转在深色主题下会变成"白轨道 + 白圆点",
           // 圆点直接消失(2026-09-15 用户反馈"暗色下是白色")
-          backgroundColor: checked ? tk.accent : tk.inputBorder,
+          backgroundColor: track,
         }}
       >
-        <span
-          style={{
-            position: 'absolute',
-            top: 2,
-            left: checked ? size.toggleWidth - size.toggleKnob - 2 : 2,
-            width: size.toggleKnob,
-            height: size.toggleKnob,
-            borderRadius: '50%',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.28)',
-            transition: `left ${motion.normal}`,
-          }}
-        />
+        {/* 滑块几何与位移全部在 .pddcs-switch-knob(index.tsx RESET_CSS):
+            按 aria-checked 定位,支持按压拉伸微交互;React 只声明结构 */}
+        <span className="pddcs-switch-knob" />
       </span>
       <span>
         <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium }}>{label}</span>

@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
-import { controlH, fontFamily, fontSize, fontWeight, radius, size, spacing } from '../ui/design'
+import { controlH, fontFamily, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import {
   BookOpenIcon,
   FolderIcon,
@@ -51,13 +51,14 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   transition: border-color .12s ease;
 }
 
-/* ── 滚动条:细、悬浮才出现(滑块色随主题令牌注入,暗色下必须走浅色)── */
+/* ── 滚动条:10px 槽位 / 4px 视觉滑块(两端透明留白),悬浮才出现 ──
+   (滑块色随主题令牌注入,暗色下必须走浅色;2026-09-15 第十四轮细化) */
 .pddcs-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 .pddcs-scroll:hover { scrollbar-color: var(--pddcs-scroll-thumb) transparent; }
-.pddcs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.pddcs-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 .pddcs-scroll::-webkit-scrollbar-thumb {
-  background: transparent; border-radius: 9999px; border: 2px solid transparent;
-  background-clip: content-box; min-height: 36px;
+  background: transparent; border-radius: 9999px; border: 3px solid transparent;
+  background-clip: content-box; min-height: 40px;
 }
 .pddcs-scroll:hover::-webkit-scrollbar-thumb {
   background: var(--pddcs-scroll-thumb); background-clip: content-box;
@@ -71,10 +72,26 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   cursor: pointer; position: relative;
 }
 
-/* ── 开关焦点环:仅键盘聚焦时显现(Toggle 键盘可达,2026-09-15 设计6)── */
+/* ── 开关(Toggle,2026-09-15 第十四轮重设计)────────────────────────
+   滑块位移由 aria-checked 属性驱动(CSS 单一真源,React 只声明结构);
+   按压时滑块顺拖动方向拉伸 2px,给"拨杆"以物理反馈。 */
 .pddcs-switch:focus-visible {
   outline: 2px solid var(--pddcs-accent);
   outline-offset: 2px;
+}
+.pddcs-switch .pddcs-switch-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: ${size.toggleKnob}px; height: ${size.toggleKnob}px;
+  border-radius: ${radius.pill}; background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left ${motion.emphasized}, width ${motion.fast};
+}
+.pddcs-switch[aria-checked='true'] .pddcs-switch-knob {
+  left: ${size.toggleWidth - size.toggleKnob - 2}px;
+}
+.pddcs-switch:active .pddcs-switch-knob { width: ${size.toggleKnob + 2}px; }
+.pddcs-switch[aria-checked='true']:active .pddcs-switch-knob {
+  left: ${size.toggleWidth - size.toggleKnob - 4}px;
 }
 
 /* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */

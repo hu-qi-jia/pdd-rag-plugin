@@ -329,7 +329,7 @@ export function FoldersTab({
         height: 16,
         padding: '0 5px',
         borderRadius: radius.pill,
-        backgroundColor: active ? tk.text : tk.bgSecondary,
+        backgroundColor: active ? tk.btnPrimaryBg : tk.bgSecondary,
         border: active ? 'none' : `1px solid ${tk.borderLight}`,
         color: active ? tk.btnPrimaryText : tk.textMuted,
         fontVariantNumeric: 'tabular-nums',

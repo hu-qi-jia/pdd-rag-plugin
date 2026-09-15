@@ -38,6 +38,13 @@ describe('Toggle:键盘可达', () => {
     expect(sw.tabIndex).toBe(0)
   })
 
+  it('滑块几何由 CSS 驱动(knob 无内联 left,按 aria-checked 在样式层定位)', () => {
+    renderToggle(vi.fn())
+    const knob = container.querySelector('.pddcs-switch-knob') as HTMLElement
+    expect(knob).toBeTruthy()
+    expect(knob.style.left).toBe('')
+  })
+
   it('聚焦后按 Enter 触发 onChange(true)', () => {
     const onChange = vi.fn()
     renderToggle(onChange)

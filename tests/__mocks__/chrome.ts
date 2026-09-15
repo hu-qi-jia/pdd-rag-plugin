@@ -8,6 +8,8 @@ type Listener = (...args: unknown[]) => void
 
 let _lastError: { message: string } | undefined = undefined
 let _storageOnChangedListeners: Listener[] = []
+/** storage.session 内存后端(set 后 get 可读回,模拟浏览器会话级持久) */
+const _sessionStore = new Map<string, unknown>()
 
 export const chromeMock = {
   tabs: {
@@ -62,6 +64,33 @@ export const chromeMock = {
     getContexts: vi.fn(() => Promise.resolve([])),
   },
   storage: {
+    session: {
+      get: vi.fn(
+        (
+          keys: string | string[] | null,
+          callback?: (result: Record<string, unknown>) => void,
+        ) => {
+          const result: Record<string, unknown> = {}
+          const wanted =
+            keys === null ? [..._sessionStore.keys()] : Array.isArray(keys) ? keys : [keys]
+          for (const k of wanted) {
+            if (_sessionStore.has(k)) result[k] = _sessionStore.get(k)
+          }
+          if (callback) callback(result)
+          return Promise.resolve(result)
+        },
+      ),
+      set: vi.fn(
+        (
+          items: Record<string, unknown>,
+          callback?: () => void,
+        ) => {
+          for (const [k, v] of Object.entries(items)) _sessionStore.set(k, v)
+          if (callback) callback()
+          return Promise.resolve()
+        },
+      ),
+    },
     local: {
       get: vi.fn(
         (
@@ -102,6 +131,7 @@ export const chromeMock = {
 export function resetChromeMock(): void {
   _lastError = undefined
   _storageOnChangedListeners = []
+  _sessionStore.clear()
 
   chromeMock.runtime.sendMessage.mockClear()
   chromeMock.runtime.onMessage.addListener.mockClear()

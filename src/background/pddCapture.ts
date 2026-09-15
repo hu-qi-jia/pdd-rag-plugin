@@ -9,7 +9,7 @@
  */
 import { db } from "./db";
 import { queueEmbedding } from "./offscreen";
-import { PddSegmenter, type SegmenterHooks } from "./pddSegmenter";
+import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "./pddSegmenter";
 import { loadSettings } from "./settings";
 import { hashText, normalizeText } from "../utils/text";
 import type { QaRecord, ReplyRecord } from "../types/memory";
@@ -35,12 +35,18 @@ async function hookLog(fn: string, ctx: Record<string, unknown>, err: unknown): 
 }
 
 const segmenterHooks: SegmenterHooks = {
-  /** 问题段关闭落盘:近期同内容命中既有问答(回填幂等),否则新建并触发嵌入 */
+  /** 问题段关闭落盘:msgId/近期同内容命中既有问答(回填幂等),否则新建并触发嵌入 */
   async closeQuestion(ctx) {
     try {
       if (!ctx.question) return undefined;
       const now = Date.now();
       const questionHash = hashText(ctx.question);
+
+      // 库级幂等锚:同首条消息的问题已入库(SW 重启后重放)→ 直接复用
+      if (ctx.firstMsgId) {
+        const byMsgId = await db.findQaByMsgId(ctx.firstMsgId);
+        if (byMsgId) return byMsgId.id;
+      }
 
       const existing = await db.findLatestQaByHash(ctx.sessionKey, questionHash);
       if (existing && now - existing.questionTs <= RECENT_MERGE_MS) {
@@ -54,6 +60,7 @@ const segmenterHooks: SegmenterHooks = {
         buyerIdTail: ctx.buyerIdTail,
         question: ctx.question,
         questionHash,
+        msgId: ctx.firstMsgId,
         questionTs: ctx.firstTs,
         hasEmbedding: 0,
         replyCount: 0,
@@ -74,6 +81,9 @@ const segmenterHooks: SegmenterHooks = {
     try {
       const qa = await db.getQaRecord(ctx.qaId);
       if (!qa) return; // 问答已被 TTL/删除 → 丢弃孤回复
+
+      // 库级 msgId 幂等(SW 重启后重放防御,优先于内容折叠判定)
+      if (ctx.msgId && (await db.findReplyByMsgId(ctx.msgId))) return;
 
       const contentHash = hashText(ctx.text);
       if (await db.hasReplyContent(ctx.qaId, contentHash)) return;
@@ -108,6 +118,30 @@ const segmenterHooks: SegmenterHooks = {
 };
 
 const segmenter = new PddSegmenter(segmenterHooks);
+
+// ─── 未结段快照持久化(SW 休眠 ~30s 即丢内存;storage.session 跨 SW 重启存活)────
+
+const SEGMENTER_STATE_KEY = "pddSegmenterState";
+
+async function persistSegmenterState(): Promise<void> {
+  try {
+    const snapshot = await segmenter.exportState();
+    await chrome.storage.session.set({ [SEGMENTER_STATE_KEY]: snapshot });
+  } catch (err) {
+    console.warn("[PDD CS] persist segmenter state failed:", err);
+  }
+}
+
+/** SW 启动时调用:恢复休眠前的未结问题段(idle/客服回复到达时仍能正确配对落盘) */
+export async function restoreSegmenterState(): Promise<void> {
+  try {
+    const got = await chrome.storage.session.get(SEGMENTER_STATE_KEY);
+    const state = got?.[SEGMENTER_STATE_KEY];
+    if (state) await segmenter.restoreState(state as SegmenterSnapshot);
+  } catch (err) {
+    console.warn("[PDD CS] restore segmenter state failed:", err);
+  }
+}
 
 // ─── msgId 幂等(历史重放/列表重渲染/跨页面重会话去重)───────────────────────────
 
@@ -185,9 +219,19 @@ export async function handlePddIngest(
         continue;
       }
 
-      // 消息级幂等:DOM 行 id 为平台毫秒号(重放/重渲染/重开会话均靠它去重)
+      // 消息级幂等:DOM 行 id 为平台毫秒号(重放/重渲染/重开会话均靠它去重)。
+      // 内存 seen 随 SW 休眠丢失 → 未命中时再查库(SW 重启后 content 重放防御)
       if (m.msgId) {
         if (isMsgIdSeen(sessionKey, m.msgId)) {
+          markSkip("dupmsgid");
+          continue;
+        }
+        const known =
+          m.role === "buyer"
+            ? await db.findQaByMsgId(m.msgId)
+            : await db.findReplyByMsgId(m.msgId);
+        if (known) {
+          markMsgIdSeen(sessionKey, m.msgId);
           markSkip("dupmsgid");
           continue;
         }
@@ -228,8 +272,9 @@ export async function handlePddIngest(
     }
   }
 
-  // 等待已入队事件全部落盘(维持串行写)
+  // 等待已入队事件全部落盘(维持串行写),然后把未结段快照写入 session 存储
   await segmenter.settled();
+  await persistSegmenterState();
   return {
     type: "PDD_INGEST_RESPONSE",
     payload: {

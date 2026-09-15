@@ -3,6 +3,8 @@
  * db/offscreen/settings 全 mock:只验证路由逻辑(会话解析 → 分段器 → hooks 调用)。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { chromeMock } from '../../__mocks__/chrome'
+import type { QaRecord, ReplyRecord } from '../../../src/types/memory'
 
 vi.mock('../../../src/background/db', () => {
   // 有状态最小 mock:addQaRecord 存入内存,getQaRecord 可读回(孤回复守卫需要)
@@ -10,6 +12,10 @@ vi.mock('../../../src/background/db', () => {
   return {
     db: {
       findLatestQaByHash: vi.fn(async () => undefined),
+      findQaByMsgId: vi.fn(async (_msgId: string): Promise<QaRecord | undefined> => undefined),
+      findReplyByMsgId: vi.fn(
+        async (_msgId: string): Promise<ReplyRecord | undefined> => undefined,
+      ),
       addQaRecord: vi.fn(async (r: { id: string }) => {
         qaStore.set(r.id, r)
       }),
@@ -152,5 +158,179 @@ describe('handlePddIngest: 会话解析', () => {
     expect(resp.skipped).toBe(1)
     expect(resp.detail).toContain('nosession=1')
     expect(db.addQaRecord).not.toHaveBeenCalled()
+  })
+})
+
+describe('handlePddIngest: msgId 库级幂等(SW 重启后重放防御)', () => {
+  it('★ 回归:SW 重启后 content 重放已入库消息 → 库级查重拦截,不重复落盘', async () => {
+    const ingest = await freshIngest()
+    // 内存 seenMsgIds 随 SW 休眠已丢失(mock 里 find* 命中既有记录 = 库里已有)
+    vi.mocked(db.findQaByMsgId).mockResolvedValue({ id: 'qa-exist' } as QaRecord)
+    vi.mocked(db.findReplyByMsgId).mockResolvedValue({ id: 'r-exist' } as ReplyRecord)
+    const ts = Date.now()
+    const resp = await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          {
+            kind: 'msg',
+            sessionKey: 'u8888',
+            buyerIdTail: '8888',
+            msg: { source: 'dom', role: 'buyer', text: '能开发票吗?', msgId: 'b-replay', ts },
+          },
+          {
+            kind: 'msg',
+            sessionKey: 'u8888',
+            buyerIdTail: '8888',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-replay',
+              ts,
+            },
+          },
+        ],
+      },
+    })
+
+    expect(resp.queued).toBe(0)
+    expect(resp.detail).toContain('dupmsgid=2')
+    expect(db.addQaRecord).not.toHaveBeenCalled()
+    expect(db.addReply).not.toHaveBeenCalled()
+  })
+
+  it('新建问答/回复记录携带平台 msgId(供下次库级查重)', async () => {
+    const ingest = await freshIngest()
+    // 上一测试用 mockResolvedValue 覆盖过实现(clearAllMocks 不还原),显式恢复"未入库"
+    vi.mocked(db.findQaByMsgId).mockResolvedValue(undefined)
+    vi.mocked(db.findReplyByMsgId).mockResolvedValue(undefined)
+    const ts = Date.now()
+    await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          {
+            kind: 'msg',
+            sessionKey: 'u7777',
+            buyerIdTail: '7777',
+            msg: { source: 'dom', role: 'buyer', text: '多久发货?', msgId: 'b-new', ts },
+          },
+          {
+            kind: 'msg',
+            sessionKey: 'u7777',
+            buyerIdTail: '7777',
+            msg: { source: 'dom', role: 'agent', text: '48 小时内发货。', msgId: 'a-new', ts },
+          },
+        ],
+      },
+    })
+
+    expect(vi.mocked(db.addQaRecord).mock.calls[0][0]).toMatchObject({ msgId: 'b-new' })
+    expect(vi.mocked(db.addReply).mock.calls[0][0]).toMatchObject({ msgId: 'a-new' })
+  })
+})
+
+describe('未结段持久化(chrome.storage.session,SW 休眠防御)', () => {
+  async function freshCapture() {
+    vi.resetModules()
+    const mod = await import('../../../src/background/pddCapture')
+    return {
+      ingest: async (m: PddIngestRequest, tabId?: number) => {
+        const resp = await mod.handlePddIngest(m, tabId)
+        return resp.payload
+      },
+      restoreSegmenterState: mod.restoreSegmenterState as () => Promise<void>,
+    }
+  }
+
+  it('★ 回归:ingest 落盘后把未结段快照写入 storage.session(SW 休眠可恢复)', async () => {
+    const { ingest } = await freshCapture()
+    await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          {
+            kind: 'msg',
+            sessionKey: 'u6666',
+            buyerIdTail: '6666',
+            msg: { source: 'dom', role: 'buyer', text: '还在吗?', msgId: 'b-snap', ts: Date.now() },
+          },
+        ],
+      },
+    })
+
+    expect(chromeMock.storage.session.set).toHaveBeenCalled()
+    const arg = vi.mocked(chromeMock.storage.session.set).mock.calls[0][0] as {
+      pddSegmenterState: Record<string, { buyerTexts: string[] }>
+    }
+    expect(arg.pddSegmenterState.u6666).toMatchObject({ buyerTexts: ['还在吗?'] })
+  })
+
+  it('SW 重启后 restoreSegmenterState 恢复未结段:agent 回复到达仍能配对落盘', async () => {
+    // 模拟 SW 休眠前写入的快照
+    await chromeMock.storage.session.set({
+      pddSegmenterState: {
+        u5555: { buyerTexts: ['尺码偏大吗?'], firstMsgId: 'b-old', firstTs: Date.now() - 60_000 },
+      },
+    })
+
+    const { ingest, restoreSegmenterState } = await freshCapture()
+    await restoreSegmenterState()
+
+    await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          {
+            kind: 'msg',
+            sessionKey: 'u5555',
+            buyerIdTail: '5555',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '亲,建议拍大一码哦。',
+              msgId: 'a-new',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
+    })
+
+    expect(db.addQaRecord).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.addQaRecord).mock.calls[0][0]).toMatchObject({
+      sessionKey: 'u5555',
+      question: '尺码偏大吗?',
+      msgId: 'b-old',
+    })
+    expect(db.addReply).toHaveBeenCalledTimes(1)
+  })
+
+  it('idle 事件到达 → 关闭该会话未结段为无回复问题', async () => {
+    const { ingest } = await freshCapture()
+    const ts = Date.now()
+    const resp = await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          {
+            kind: 'msg',
+            sessionKey: 'u4444',
+            buyerIdTail: '4444',
+            msg: { source: 'dom', role: 'buyer', text: '有优惠吗?', msgId: 'b-idle', ts },
+          },
+          { kind: 'idle', sessionKey: 'u4444' },
+        ],
+      },
+    })
+
+    expect(resp.queued).toBe(2)
+    expect(db.addQaRecord).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.addQaRecord).mock.calls[0][0]).toMatchObject({
+      sessionKey: 'u4444',
+      question: '有优惠吗?',
+    })
+    expect(db.addReply).not.toHaveBeenCalled()
   })
 })

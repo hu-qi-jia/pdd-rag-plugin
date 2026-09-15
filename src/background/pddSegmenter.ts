@@ -24,6 +24,8 @@ export interface CloseQuestionCtx {
   sessionKey: string
   buyerIdTail?: string
   question: string
+  /** 问题段首条买家消息的 msgId —— 落库为幂等锚(后续并入的买家消息不覆盖) */
+  firstMsgId?: string
   firstTs: number
 }
 
@@ -46,9 +48,17 @@ export interface SegmenterHooks {
 
 interface OpenQuestion {
   buyerTexts: string[]
+  /** 首条买家消息的 msgId(开段时定,不随后续消息变化) */
+  firstMsgId?: string
   firstTs: number
   buyerIdTail?: string
 }
+
+/** 未结段快照(纯 JSON 可入 chrome.storage.session;SW 休眠前导出、重启后恢复) */
+export type SegmenterSnapshot = Record<
+  string,
+  { buyerTexts: string[]; firstMsgId?: string; firstTs: number; buyerIdTail?: string }
+>
 
 export class PddSegmenter {
   private readonly sessions = new Map<string, OpenQuestion>()
@@ -97,6 +107,46 @@ export class PddSegmenter {
     return this.chain
   }
 
+  /** 导出全部未结段快照(链上串行,深拷贝——调用方可持有没有被后续事件改写的顾虑) */
+  exportState(): Promise<SegmenterSnapshot> {
+    const p = this.chain.then(() => {
+      const snap: SegmenterSnapshot = {}
+      for (const [key, open] of this.sessions) {
+        snap[key] = {
+          buyerTexts: [...open.buyerTexts],
+          firstMsgId: open.firstMsgId,
+          firstTs: open.firstTs,
+          buyerIdTail: open.buyerIdTail,
+        }
+      }
+      return snap
+    })
+    // 值任务也走链:导出本身抛错不冻结后续事件
+    this.chain = p.then(
+      () => undefined,
+      (err) => {
+        console.warn('[PDD CS] segmenter exportState failed:', err)
+      },
+    )
+    return p
+  }
+
+  /** 从快照恢复未结段(SW 重启后调用;覆盖现有表,恢复的段为拷贝) */
+  restoreState(state: SegmenterSnapshot): Promise<void> {
+    return this.enqueue(async () => {
+      this.sessions.clear()
+      for (const [key, open] of Object.entries(state ?? {})) {
+        if (!Array.isArray(open?.buyerTexts)) continue
+        this.sessions.set(key, {
+          buyerTexts: [...open.buyerTexts],
+          firstMsgId: open.firstMsgId,
+          firstTs: open.firstTs,
+          buyerIdTail: open.buyerIdTail,
+        })
+      }
+    })
+  }
+
   private async handleMessage(msg: SegMsg): Promise<void> {
     const { sessionKey, role } = msg
 
@@ -108,6 +158,7 @@ export class PddSegmenter {
       } else {
         this.sessions.set(sessionKey, {
           buyerTexts: [msg.text],
+          firstMsgId: msg.msgId,
           firstTs: msg.ts,
           buyerIdTail: msg.buyerIdTail,
         })
@@ -141,6 +192,7 @@ export class PddSegmenter {
       sessionKey,
       buyerIdTail: open.buyerIdTail,
       question,
+      firstMsgId: open.firstMsgId,
       firstTs: open.firstTs,
     })
   }

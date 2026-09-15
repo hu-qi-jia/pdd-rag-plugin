@@ -15,6 +15,8 @@ export interface QaRecord {
   buyerIdTail?: string
   /** 合并后问题全文(买家连续文本) */
   question: string
+  /** 问题段首条买家消息的平台 msg_id —— 库级幂等锚(SW 重启后重放防御),索引 */
+  msgId?: string
   /** 归一化哈希 —— 幂等/折叠用,索引 */
   questionHash: string
   /** 问题块首条消息时间;= 保留期起算点,索引 */

@@ -157,10 +157,10 @@ const railLogos = await pop.evaluate(
 )
 check('导航栏顶部品牌 logo 已移除', railLogos === 0, `品牌标命中=${railLogos}`)
 
-await pop.locator('button', { hasText: '新建根文件夹' }).click()
+await pop.locator('button', { hasText: "新建文件夹" }).click()
 await sleep(500)
 const geo = await pop.evaluate(() => {
-  const input = document.querySelector('input[placeholder="根文件夹名称"]')
+  const input = document.querySelector('input[placeholder="文件夹名称"]')
   const btns = [...document.querySelectorAll('button')].filter((b) =>
     ['创建', '取消'].includes(b.textContent.trim()),
   )

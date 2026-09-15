@@ -23,8 +23,8 @@ import type {
 } from '../types/messages'
 import { UNCATEGORIZED_FOLDER_ID } from '../types/memory'
 import { buildFolderTree, type FolderNode } from '../utils/panelLogic'
-import { EmptyState, Notice, inputStyle, type NoticeMsg } from '../ui/components'
-import { fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
+import { EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
+import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
 import {
   ChevronDownIcon,
   CopyIcon,
@@ -268,8 +268,8 @@ export function FoldersTab({
           onClick()
         }}
         style={{
-          width: 24,
-          height: 24,
+          width: controlH.inline,
+          height: controlH.inline,
           flexShrink: 0,
           display: 'inline-flex',
           alignItems: 'center',
@@ -337,7 +337,8 @@ export function FoldersTab({
     </div>
   )
 
-  /** 内联表单行(新建 / 重命名):输入框 + 创建/保存 + 取消 */
+  /** 内联表单行(新建 / 重命名):输入框 + 创建/保存 + 取消
+   *  输入框与按钮同取 controlH.form 档 → 严格等高(靠 height 而非 padding 撑) */
   const inlineForm = (
     placeholder: string,
     value: string,
@@ -357,13 +358,13 @@ export function FoldersTab({
           if (e.key === 'Enter') onOk()
           if (e.key === 'Escape') onCancel()
         }}
-        style={inputStyle(tk, { flex: 1 })}
+        style={controlStyle(tk, controlH.form, { flex: 1, minWidth: 0 })}
       />
       <button
         type="button"
         onClick={onOk}
         style={{
-          height: 28,
+          height: controlH.form,
           padding: '0 12px',
           border: 'none',
           borderRadius: radius.md,
@@ -373,6 +374,7 @@ export function FoldersTab({
           fontWeight: fontWeight.medium,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
         }}
       >
         {okLabel}
@@ -381,7 +383,7 @@ export function FoldersTab({
         type="button"
         onClick={onCancel}
         style={{
-          height: 28,
+          height: controlH.form,
           padding: '0 12px',
           border: `1px solid ${tk.btnBorder}`,
           borderRadius: radius.md,
@@ -390,6 +392,7 @@ export function FoldersTab({
           fontSize: fontSize.body,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
         }}
       >
         取消
@@ -412,7 +415,7 @@ export function FoldersTab({
         type="button"
         onClick={onOk}
         style={{
-          height: 22,
+          height: controlH.inline,
           padding: '0 10px',
           border: 'none',
           borderRadius: radius.sm,
@@ -421,6 +424,7 @@ export function FoldersTab({
           fontSize: fontSize.caption,
           fontWeight: fontWeight.semibold,
           cursor: 'pointer',
+          flexShrink: 0,
         }}
       >
         确认
@@ -429,7 +433,7 @@ export function FoldersTab({
         type="button"
         onClick={onCancel}
         style={{
-          height: 22,
+          height: controlH.inline,
           padding: '0 10px',
           border: `1px solid ${tk.btnBorder}`,
           borderRadius: radius.sm,
@@ -437,6 +441,7 @@ export function FoldersTab({
           color: tk.textMuted,
           fontSize: fontSize.caption,
           cursor: 'pointer',
+          flexShrink: 0,
         }}
       >
         取消
@@ -561,7 +566,7 @@ export function FoldersTab({
                   onChange={(e) => void moveGolden(g.id, e.target.value)}
                   onBlur={() => setMovingId(null)}
                   style={{
-                    height: 22,
+                    height: controlH.inline,
                     maxWidth: 120,
                     fontSize: fontSize.caption,
                     border: `1px solid ${tk.btnBorder}`,
@@ -570,6 +575,7 @@ export function FoldersTab({
                     color: tk.text,
                     padding: '0 3px',
                     outline: 'none',
+                    flexShrink: 0,
                   }}
                 >
                   {flatFolderOptions(tree)}
@@ -661,7 +667,7 @@ export function FoldersTab({
                 if (e.key === 'Enter') void submitRename()
                 if (e.key === 'Escape') setRenamingId(null)
               }}
-              style={inputStyle(tk, { flex: 1, height: 24, padding: '2px 8px' })}
+              style={controlStyle(tk, controlH.inline, { flex: 1, minWidth: 0 })}
             />
             <BtnMini tk={tk} primary onClick={() => void submitRename()}>
               保存
@@ -793,7 +799,7 @@ export function FoldersTab({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
-              height: 26,
+              height: controlH.form,
               padding: '0 10px',
               border: `1px solid ${tk.btnBorder}`,
               borderRadius: radius.md,
@@ -845,7 +851,7 @@ export function FoldersTab({
 
 // ─── 小工具 ────────────────────────────────────────────────────────────────────
 
-/** 22px 高小按钮(行内操作:保存/取消/确认/填充),样式全部取自主题令牌 */
+/** 行内小按钮(保存/取消/确认/填充),高度取 controlH.inline 与同排图标钮等高 */
 function BtnMini({
   tk,
   children,
@@ -867,7 +873,7 @@ function BtnMini({
       title={title}
       onClick={onClick}
       style={{
-        height: 22,
+        height: controlH.inline,
         padding: '0 10px',
         border: primary || danger ? 'none' : `1px solid ${tk.btnBorder}`,
         borderRadius: radius.sm,
@@ -877,6 +883,7 @@ function BtnMini({
         fontWeight: primary || danger ? fontWeight.semibold : fontWeight.regular,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {children}

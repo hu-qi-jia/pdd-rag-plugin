@@ -76,18 +76,30 @@ export type NoticeMsg = { ok: boolean; text: string } | null
 export function Notice({ tk, msg }: { tk: ThemeTokens; msg: NoticeMsg }) {
   if (!msg) return null
   return (
+    // 吸附在滚动区顶部:列表很长时提示不再被顶出视口(2026-09-15 用户反馈
+    // 「点击设置标准回答无反应」的真实原因之一 —— 操作成功但提示在视口外)。
     <div
       style={{
-        padding: `${spacing.sm + 2}px ${spacing.xl}px`,
-        borderRadius: radius.md,
-        fontSize: fontSize.secondary,
-        lineHeight: 1.55,
-        backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
-        color: msg.ok ? tk.successText : tk.errorText,
-        wordBreak: 'break-all',
+        position: 'sticky',
+        top: 0,
+        zIndex: 3,
+        backgroundColor: tk.bg,
+        paddingBottom: spacing.xs,
       }}
     >
-      {msg.text}
+      <div
+        style={{
+          padding: `${spacing.sm + 2}px ${spacing.xl}px`,
+          borderRadius: radius.md,
+          fontSize: fontSize.secondary,
+          lineHeight: 1.55,
+          backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
+          color: msg.ok ? tk.successText : tk.errorText,
+          wordBreak: 'break-all',
+        }}
+      >
+        {msg.text}
+      </div>
     </div>
   )
 }
@@ -387,6 +399,20 @@ export function inputStyle(tk: ThemeTokens, extra?: React.CSSProperties): React.
     ...extra,
   }
 }
+
+/**
+ * 与按钮同排的输入框样式:显式 height 取 controlH 档位,与同排按钮严格等高。
+ * (2026-09-15 用户反馈:新建子文件夹的输入框靠 padding+line-height 撑到 35px,
+ *  同排「创建/取消」为 28px,相差 7px。)
+ */
+export function controlStyle(
+  tk: ThemeTokens,
+  height: number,
+  extra?: React.CSSProperties,
+): React.CSSProperties {
+  return inputStyle(tk, { height, padding: `0 ${spacing.xl - 2}px`, ...extra })
+}
+
 
 export function formatTs(ts: number): string {
   const d = new Date(ts)

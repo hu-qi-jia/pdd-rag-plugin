@@ -5,7 +5,7 @@
  * 原则:颜色一律来自 ThemeTokens,几何一律来自 design.ts;页面不得自带样式实现。
  */
 import type React from 'react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { ThemeTokens } from './theme'
 import { fontSize, fontWeight, radius, spacing, semantic, motion, size } from './design'
 import { PlusIcon, SearchIcon } from './icons'
@@ -301,7 +301,7 @@ export function SearchInput({
   )
 }
 
-// ── 拨杆开关(胶囊式,accent 色)─────────────────────────────────────────────
+// ── 拨杆开关(胶囊式;文字居左、开关居右,2026-09-15 v2.6.7 用户要求)────────
 
 export function Toggle({
   label,
@@ -316,14 +316,42 @@ export function Toggle({
   onChange: (v: boolean) => void
   tk: ThemeTokens
 }) {
+  const [hover, setHover] = useState(false)
+  // 选中态 accent(悬浮 accentHover);未选中轨道走专用令牌(比 inputBorder 深一档,
+  // 悬浮再深一档给出"可点"暗示)。黑白反转方案已废弃:深色下白轨白点会互相吞没。
+  const track = checked
+    ? hover
+      ? tk.accentHover
+      : tk.accent
+    : hover
+      ? tk.switchTrackHover
+      : tk.switchTrack
   return (
     <label
-      style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.lg, cursor: 'pointer' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: spacing.lg, cursor: 'pointer' }}
       onClick={(e) => {
         e.preventDefault()
         onChange(!checked)
       }}
     >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: fontSize.body, fontWeight: fontWeight.medium }}>
+          {label}
+        </span>
+        <span
+          style={{
+            display: 'block',
+            fontSize: fontSize.caption,
+            color: tk.textMuted,
+            lineHeight: 1.55,
+            marginTop: 1,
+          }}
+        >
+          {desc}
+        </span>
+      </span>
       <span
         role="switch"
         aria-checked={checked}
@@ -345,48 +373,21 @@ export function Toggle({
           height: size.toggleHeight,
           flexShrink: 0,
           borderRadius: radius.pill,
-          marginTop: 2,
           position: 'relative',
           transition: `background-color ${motion.normal}`,
           cursor: 'pointer',
-          // 选中态用 accent 而非 tk.text:黑白反转在深色主题下会变成"白轨道 + 白圆点",
-          // 圆点直接消失(2026-09-15 用户反馈"暗色下是白色")
-          backgroundColor: checked ? tk.accent : tk.inputBorder,
+          backgroundColor: track,
         }}
       >
-        <span
-          style={{
-            position: 'absolute',
-            top: 2,
-            left: checked ? size.toggleWidth - size.toggleKnob - 2 : 2,
-            width: size.toggleKnob,
-            height: size.toggleKnob,
-            borderRadius: '50%',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.28)',
-            transition: `left ${motion.normal}`,
-          }}
-        />
-      </span>
-      <span>
-        <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium }}>{label}</span>
-        <span
-          style={{
-            display: 'block',
-            fontSize: fontSize.caption,
-            color: tk.textMuted,
-            lineHeight: 1.55,
-            marginTop: 1,
-          }}
-        >
-          {desc}
-        </span>
+        {/* 滑块位置/按压拉伸全由 popup RESET_CSS 的 [aria-checked] / :active 规则驱动
+            (内联 left 会压过 :active 拉伸;React 只声明结构) */}
+        <span className="pddcs-switch-knob" />
       </span>
     </label>
   )
 }
 
-// ── 滑杆 ─────────────────────────────────────────────────────────────────────
+// ── 滑杆(自定义填充轨道;拇指钮样式见 popup RESET_CSS .pddcs-slider)─────────
 
 export function Slider({
   tk,
@@ -407,6 +408,8 @@ export function Slider({
   onChange: (v: number) => void
   format: (v: number) => string
 }) {
+  // 填充进度硬切:accent 到当前值,其后是轨道色(inputBorder)
+  const pct = Math.round(((value - min) / (max - min)) * 100)
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontSize.body }}>
@@ -423,12 +426,15 @@ export function Slider({
       </div>
       <input
         type="range"
+        className="pddcs-slider"
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: tk.accent, cursor: 'pointer' }}
+        style={{
+          backgroundImage: `linear-gradient(to right, ${tk.accent} ${pct}%, ${tk.inputBorder} ${pct}%)`,
+        }}
       />
     </div>
   )

@@ -69,10 +69,10 @@ export const size = {
   railWidth: 52,
   /** 图标导航按钮 */
   railBtn: 36,
-  /** 拨杆开关 */
-  toggleWidth: 32,
-  toggleHeight: 19,
-  toggleKnob: 15,
+  /** 拨杆开关(v2.6.7 重设计:36×20 轨道 + 16 滑块,按压可拉伸) */
+  toggleWidth: 36,
+  toggleHeight: 20,
+  toggleKnob: 16,
 } as const
 
 // ── 控件高度(px)──────────────────────────────────────────────────────────────
@@ -90,6 +90,8 @@ export const controlH = {
 export const motion = {
   fast: '0.12s ease',
   normal: '0.15s ease',
+  /** 强调动效(2026-09-15 v2.6.7):减速曲线,用于开关滑块等"有分量"的位移 */
+  emphasized: '0.2s cubic-bezier(0.2, 0, 0, 1)',
 } as const
 
 // ── 语义色(与主题无关的固定色,仅用于徽标等品牌时刻)─────────────────────

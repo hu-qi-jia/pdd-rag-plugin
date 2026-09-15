@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
-import { controlH, fontFamily, fontSize, fontWeight, radius, size, spacing } from '../ui/design'
+import { controlH, fontFamily, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import {
   BookOpenIcon,
   FolderIcon,
@@ -71,11 +71,52 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   cursor: pointer; position: relative;
 }
 
+/* ── 开关(v2.6.7 重设计):滑块位置由 [aria-checked] 驱动,按压时滑块
+      顺拖动方向拉伸 2px 的微交互;减速曲线落定。React 只声明结构 ── */
+.pddcs-switch .pddcs-switch-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: ${size.toggleKnob}px; height: ${size.toggleKnob}px;
+  border-radius: 9999px; background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transition: left ${motion.emphasized}, width ${motion.fast};
+}
+.pddcs-switch[aria-checked='true'] .pddcs-switch-knob {
+  left: ${size.toggleWidth - size.toggleKnob - 2}px;
+}
+.pddcs-switch:active .pddcs-switch-knob { width: ${size.toggleKnob + 2}px; }
+.pddcs-switch[aria-checked='true']:active .pddcs-switch-knob {
+  left: ${size.toggleWidth - size.toggleKnob - 4}px;
+}
+
 /* ── 开关焦点环:仅键盘聚焦时显现(Toggle 键盘可达,2026-09-15 设计6)── */
 .pddcs-switch:focus-visible {
   outline: 2px solid var(--pddcs-accent);
   outline-offset: 2px;
 }
+
+/* ── 滑杆(v2.6.7 重设计):4px 圆轨(accent 填充到当前值,渐变由组件内联注入),
+      14px 白圆拇指 + accent 描边,悬浮放大、按住再放大 ── */
+.pddcs-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; margin: 8px 0 2px;
+  border-radius: 9999px; outline: none; cursor: pointer;
+}
+.pddcs-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--pddcs-accent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.28);
+  transition: transform .12s ease;
+}
+.pddcs-slider:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.pddcs-slider:active::-webkit-slider-thumb { transform: scale(1.22); }
+.pddcs-slider:focus-visible { outline: 2px solid var(--pddcs-accent); outline-offset: 4px; }
+.pddcs-slider::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--pddcs-accent);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.28);
+}
+.pddcs-slider::-moz-range-track { height: 4px; border-radius: 9999px; background: transparent; }
 
 /* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
 .pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }

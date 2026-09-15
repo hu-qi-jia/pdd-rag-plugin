@@ -30,6 +30,22 @@ function renderToggle(onChange: (v: boolean) => void) {
   })
 }
 
+describe('Toggle:布局与滑块契约(2026-09-15 用户要求开关右置)', () => {
+  it('开关在文字块之后(label 内最后一个元素 = 视觉右侧)', () => {
+    renderToggle(vi.fn())
+    const label = container.querySelector('label') as HTMLLabelElement
+    expect(label.lastElementChild?.getAttribute('role')).toBe('switch')
+    expect(label.textContent).toContain('自动捕获')
+  })
+
+  it('滑块位置由 CSS 驱动:knob 无内联 left(否则压过 :active 拉伸微交互)', () => {
+    renderToggle(vi.fn())
+    const knob = container.querySelector('.pddcs-switch-knob') as HTMLElement
+    expect(knob).toBeTruthy()
+    expect(knob.style.left).toBe('')
+  })
+})
+
 describe('Toggle:键盘可达', () => {
   it('开关可聚焦(tabIndex=0)且 role=switch', () => {
     renderToggle(vi.fn())

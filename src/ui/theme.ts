@@ -38,6 +38,10 @@ export interface ThemeTokens {
   errorText: string
   inputBg: string
   inputBorder: string
+  /** 开关未选中轨道色(比 inputBorder 深一档,可辨但不抢眼;2026-09-15 v2.6.7) */
+  switchTrack: string
+  /** 开关未选中轨道悬浮色 */
+  switchTrackHover: string
   shadow: string
   /** 滚动条滑块(悬浮显现);暗色下必须是浅色,否则在深底上不可见 */
   scrollThumb: string
@@ -69,6 +73,8 @@ export const lightTheme: ThemeTokens = {
   errorText: '#f24822',
   inputBg: '#ffffff',
   inputBorder: '#d4d4d4',
+  switchTrack: '#c6c8cc',
+  switchTrackHover: '#b3b6bc',
   shadow: '0 4px 16px rgba(0,0,0,0.08)',
   scrollThumb: 'rgba(0,0,0,0.16)',
 }
@@ -102,6 +108,8 @@ export const darkTheme: ThemeTokens = {
   errorText: '#ff7262',
   inputBg: '#2c2c2c',
   inputBorder: '#3b3d40',
+  switchTrack: 'rgba(255,255,255,0.16)',
+  switchTrackHover: 'rgba(255,255,255,0.24)',
   shadow: '0 12px 40px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.35)',
   scrollThumb: 'rgba(255,255,255,0.24)',
 }

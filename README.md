@@ -1,326 +1,36 @@
-<div align="center">
+# 拼多多客服检索工具
 
-# Personal AI Memory: Local-First RAG Extension for LLM
+单人客服在本地 Chrome 中使用的 MV3 扩展:自动捕获拼多多商家后台聊天页的买家问答,沉淀为本地可向量检索的回复候选;检索历史回复 / 标准回答 / 知识库,一键填充到官方输入框。
 
-**Your conversations, remembered. Privately.**
+> 由开源项目 Personal AI Memory v0.0.7(Apache 2.0)改造而来,仅保留其本地嵌入/检索底座,业务层为拼多多客服场景全新实现。
 
+## 功能
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/cjkjgbddkaoogdbfffiooeppnmbplpnh?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)
-[![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/cjkjgbddkaoogdbfffiooeppnmbplpnh)](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)
-[![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/)
-[![ChatGPT](https://img.shields.io/badge/ChatGPT-supported-74aa9c?logo=openai&logoColor=white)](https://chatgpt.com)
-[![Claude](https://img.shields.io/badge/Claude-supported-d97757?logo=anthropic&logoColor=white)](https://claude.ai)
-[![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4?logo=google&logoColor=white)](https://gemini.google.com)
-[![Perplexity](https://img.shields.io/badge/Perplexity-supported-20808D?logo=perplexity&logoColor=white)](https://perplexity.ai)
-[![Grok](https://img.shields.io/badge/Grok-supported-000000?logo=x&logoColor=white)](https://grok.com)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+- **自动捕获**:客服打开的会话内,买家连续消息合并为问题、客服回复挂载到问题,本地 IndexedDB 存储,保留期默认 90 天(可调);
+- **混合检索**:问题向量(bge-small-zh-v1.5,本地推理)+ BM25 双路 RRF 融合,完全本地运行,无云端调用;
+- **标准回答**:优秀回复可提升为标准回答(独立问答文档,文件夹归类,豁免保留期),同问题可挂多条;
+- **知识库**:手工"标题+正文"话术卡与 .md 文档上传(自动分块),作为独立检索来源;
+- **推荐回复面板**:聊天页「AI回复」按钮或自定义快捷键唤起,组成固定:标准回答全部 + 历史最近 2 + 知识库 1;
+- **一键填充**:候选点击后写入官方输入框 `textarea#replyTextarea`,**发送永远由人工点击**——绝不自动发送;
+- **主题**:亮 / 暗两主题,聊天页覆盖层与弹窗跟随设置。
 
-🌐 [繁體中文](README-multi-lan/README.zh-TW.md) | [简体中文](README-multi-lan/README.zh-CN.md) | [English](README-multi-lan/README.en.md) | [日本語](README-multi-lan/README.ja.md) | [한국어](README-multi-lan/README.ko.md) | [Español](README-multi-lan/README.es.md) | [Français](README-multi-lan/README.fr.md) | [Deutsch](README.de.md)
+## 合规边界
 
-<a href="https://www.producthunt.com/products/personal-ai-memory?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-personal-ai-memory" target="_blank" rel="noopener noreferrer"><img alt="Personal AI Memory - Captures and stores your chat from various AI platforms | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1089387&amp;theme=light&amp;t=1772644496610"></a>
+只记录与填充,不替客服发送;数据仅存本机,不上传任何服务器。
 
-
-</div>
-
----
-
-> A Chrome extension that **silently captures** your ChatGPT / Claude / Gemini / Perplexity / Grok conversations and stores them as private, locally-indexed semantic memories — with a one-click **Recall** button to inject relevant context back into new chats.
->
-> **100% local. No cloud. No server. No account required.**
-
-
----
-
-## Demo
-
-https://github.com/user-attachments/assets/d2aef66f-30b0-459c-8a92-64b8f5617bf6
-
-
-## Installation
-
-### For Users — Chrome Web Store
-
-Install directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh).
-
-> **Note:** The Chrome Web Store version may lag behind the latest release. For the newest features, download the latest `.zip` from the [Releases](../../releases) page and load it manually (see below).
-
-### Manual Install from Release
-
-1. Go to the [Releases](../../releases) page and download the latest `.zip`
-2. Unzip the file
-3. Open Chrome → `chrome://extensions/`
-4. Toggle **Developer mode** on (top-right)
-5. Click **Load unpacked** → select the unzipped folder
-
-### For Developers — Build from Source
-
-**Requirements:** Node.js 18+, pnpm (`npm install -g pnpm`), Chrome / Edge (MV3)
+## 开发
 
 ```bash
-# Fork this repository to your own GitHub account
-git clone https://github.com/<your-github-username>/personal-ai-memory.git
-cd personal-ai-memory
 pnpm install
-
-# Development mode — auto-rebuilds on every save
-pnpm dev
+pnpm dev     # 开发模式(自动加载扩展)
+pnpm build   # 产物在 build/chrome
+pnpm test    # vitest 单测
 ```
 
-Then load `build/chrome-mv3-dev/` via **Load unpacked** in `chrome://extensions/`.
-
-```bash
-# Production build
-pnpm build
-# output: build/chrome-mv3-prod/
-```
-
-> After any code change: click **Reload** on the AI Memory card, then refresh open AI tabs.
-
----
-
-## Features at a Glance
-
-| Feature | Details |
-|---------|---------|
-| **Passive capture** | Auto-intercepts ChatGPT / Claude / Gemini / Perplexity / Grok — no setup, no clicks. Just visit the page and existing conversations are captured automatically. |
-| **Hybrid search** | Vector (time-decay) + BM25, fused with RRF for best-of-both results |
-| **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT, Claude, Gemini, Grok, and Perplexity |
-| **Local backup** | Export / import full backup as JSON (embeddings included) |
-| **Favourite Prompts** | Save, autocomplete (Trie), organise into drag-and-drop folders |
-| **Floating panel** | Draggable memory panel on every AI site |
-| **8 UI languages** | zh-TW · zh-CN · en · ja · ko · es · fr · de — auto-detected |
-| **Dark / Light theme** | Apple Liquid Glass-inspired toggle |
-
-**Supported platforms:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`) · Perplexity (`perplexity.ai`) · Grok (`grok.com`)
-
----
-
-## How It Works
-
-```
-You chat on ChatGPT / Claude / Gemini / Perplexity / Grok
-        │  (extension captures silently in background)
-        ▼
-Memories stored locally in IndexedDB
-+ semantic embedding vector (ONNX, runs in browser)
-+ keyword index (MiniSearch / BM25, in Service Worker memory)
-        │
-        │  Later — you start a new chat
-        ▼
-Click 🧠 Recall next to the input box on any supported AI site
-        │
-        ▼
-Hybrid search:
-  Route A — vector similarity × time-decay (recent = higher weight)
-  Route B — BM25 keyword search (prefix matching)
-  Fusion  — Reciprocal Rank Fusion (RRF)
-        │
-        ▼
-Top-k memories injected as RAG context into the input box
-AI now has your history as background knowledge
-```
-
-### Search Algorithm (detail)
-
-```
-Route A — Vector Search + Time-Decay
-  query → Float32Array embedding (ONNX, Offscreen Document)
-  for each record: dot_product(q, r.embedding) × exp(-0.01 × daysOld)
-  group by parentId → keep max decayed score per group
-  sort descending → vectorRanked[]
-  (half-life ≈ 69 days, λ = 0.01)
-
-Route B — Keyword search (MiniSearch / BM25)
-  miniSearch.search(query, { prefix: true })
-  prefix matching: "py" finds "python", "react" finds "reactivity"
-  sort by BM25 score → kwRanked[]
-
-Fusion — Reciprocal Rank Fusion (RRF, k = 60)
-  rrfScore[key] += 1 / (60 + rank)  for each list
-  sum both lists → sort desc → top-k → merge chunks → SearchResult[]
-```
-
-**Fallback:** if embedding fails, keyword-only results are returned; if no keyword matches, vector-only results are returned.
-
----
-
-## How to Export Chat History?
-
-### ChatGPT
-
-1. Log in to your ChatGPT account and go to the main screen.
-2. Click your profile picture or name in the corner to open the menu.
-3. Select **Settings**.
-4. Go to the **Data controls** tab.
-5. Find **Export data** and click **Export**.
-6. Click **Confirm export** in the confirmation window.
-7. You will receive an email with a download link (may take up to 24 hours).
-8. Download the ZIP file. After extracting, the chat history file is `conversations-00x.json`.
-
-### Gemini
-
-Export via Google Takeout:
-
-1. Go to [Google Takeout](https://takeout.google.com) and sign in.
-2. Click **Deselect all** at the top.
-3. Scroll down and check **My Activity** (NOT ~~Gemini Apps~~).
-4. Click **Multiple formats** below that section.
-5. Change the first activity format from **HTML** to **JSON**, click OK.
-6. Click **Next step** → choose delivery method → **Create export**.
-7. Wait for the email. After extracting, the file is `my activity.json`.
-
-### Claude
-
-1. Go to [https://claude.ai/settings/data-privacy-controls](https://claude.ai/settings/data-privacy-controls).
-2. Click **Export data**.
-3. Wait for the email with the download link.
-4. After extracting, the chat history file is `conversations.json`.
-
-### Perplexity
-
-> Perplexity does **not** support user data export. Each conversation must be visited individually to be captured by the extension.
-
-### Grok
-
-1. Go to [https://grok.com](https://grok.com).
-2. Click your profile picture (bottom-left) → **Settings** → **Data controls**.
-3. Click **Export Account Data**.
-4. Wait several hours for the download link email.
-5. After extracting, the file is `prod-grok-backend.json`.
-
----
-
-## Privacy & Security
-
-This extension intercepts your AI conversations. Here is exactly what it does and does not do:
-
-| Question | Answer |
-|----------|--------|
-| Where is data stored? | **Browser-local IndexedDB only** (`AIMemoryDB`) — never leaves your device |
-| Does it make network requests? | **Conversation data never leaves your device.** Two types of optional network requests occur: (1) ONNX model download on first run; (2) anonymous usage analytics (if enabled) — event names only, no conversation content, no URLs, no personal data. Analytics can be disabled in Settings → Privacy. |
-| Can websites see my memories? | No. Data is isolated in the extension's storage, inaccessible to page scripts. |
-| Can I delete my data? | Yes — soft-delete individual records from the floating panel, or clear all via DevTools → IndexedDB. |
-
-> **Treat this extension like a local diary.** It sees everything you type and receive on supported AI sites. Review the source code if you have concerns.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Extension framework | [Plasmo](https://docs.plasmo.com) (Chrome MV3) |
-| UI | React 18 + custom Theme Tokens |
-| Persistence | IndexedDB via [Dexie](https://dexie.org) |
-| Vector search | [Transformers.js](https://xenova.github.io/transformers.js/) ONNX — `paraphrase-multilingual-MiniLM-L12-v2` |
-| Keyword search | [MiniSearch](https://github.com/lucaong/minisearch) (BM25, in-memory) |
-| Language | TypeScript |
-
-<details>
-<summary><strong>📂 Project Structure</strong></summary>
-
-```
-src/
-├── background/
-│   ├── index.ts               Message router · capture handler · MiniSearch sync
-│   ├── search.ts              Hybrid search engine (vector × decay + BM25 + RRF)
-│   ├── db.ts                  IndexedDB (Dexie) operations
-│   ├── embedding.ts           ONNX model name / version constants
-│   ├── injector.ts            MAIN-world fetch/XHR interceptor (injected into page)
-│   ├── chunking.ts            Text chunking (500-char segments, 75-char overlap)
-│   ├── domSync.ts             DOM-based conversation sync
-│   ├── offscreen.ts           Offscreen document message handler
-│   ├── perplexityBgFetch.ts   Perplexity background fetch helper
-│   ├── syncEmbeddings.ts      Embedding sync utilities
-│   └── adapters/
-│       ├── chatgpt.ts         ChatGPT SSE delta-v1 parser
-│       ├── claude.ts          Claude SSE parser
-│       ├── gemini.ts          Gemini XHR StreamGenerate parser + passive capture
-│       ├── perplexity.ts      Perplexity SSE parser
-│       └── grok.ts            Grok SSE parser
-├── contents/
-│   ├── interceptor.ts         ISOLATED-world bridge + <title> MutationObserver
-│   ├── memory-float-ui.tsx    Floating panel content script entry point
-│   ├── chatgpt-injector.tsx   ChatGPT Recall button + RAG prompt
-│   ├── claude-injector.tsx    Claude Recall button
-│   ├── gemini-injector.tsx    Gemini passive capture + Recall button
-│   ├── grok-injector.tsx      Grok Recall button
-│   └── perplexity-injector.tsx Perplexity Recall button
-├── importers/
-│   ├── base.ts                Base importer interface
-│   ├── chatgptConversations.ts ChatGPT JSON importer
-│   ├── claudeConversations.ts  Claude JSON importer
-│   ├── geminiTakeout.ts       Gemini Takeout importer
-│   ├── grokConversations.ts   Grok JSON importer
-│   └── index.ts               Importer registry
-├── tabs/
-│   └── offscreen.tsx          ONNX inference (Offscreen Document — needs DOM)
-├── popup/
-│   ├── index.tsx              Popup root — sliding panel navigation
-│   └── components/
-│       ├── FloatingMemoryPanel.tsx Draggable floating panel (logo + panel)
-│       ├── MemoryMenuContent.tsx   Memory menu content (sidebar / popup)
-│       ├── MemoryTableView.tsx Memory list grouped by session
-│       ├── ImportView.tsx     JSON import UI
-│       ├── ExportView.tsx     JSON export UI
-│       ├── FavoritePromptsSection.tsx Trie autocomplete prompts
-│       └── FolderView.tsx     Drag-and-drop folder management
-├── utils/
-│   ├── chrome-storage.ts      Shared chrome.storage.local helpers (load/save/subscribe)
-│   ├── rag.ts                 RAG prompt formatting
-│   ├── recall-button.ts       Recall button creation and injection
-│   ├── recall-helpers.ts      Shared recall utilities
-│   ├── trie.ts                Trie data structure for autocomplete
-│   ├── message-passing.ts     Type-safe Chrome message passing
-│   └── onboarding-highlight.ts Onboarding step highlight helpers
-├── i18n/
-│   ├── translations.ts        8-language string map
-│   ├── LanguageContext.tsx    Language switching (chrome.storage — syncs across tabs)
-│   ├── ThemeContext.tsx       Dark/light theme (chrome.storage — syncs across tabs)
-│   └── lang-storage.ts        Language persistence helpers
-└── types/
-    ├── memory.ts              MemoryRecord · SearchResult interfaces
-    └── messages.ts            All Chrome message type definitions
-```
-
-</details>
-
----
-
-## Debugging & Testing
-
-| Target | How to reach it |
-|--------|----------------|
-| Background Service Worker | `chrome://extensions/` → AI Memory → **Service worker** |
-| Popup | Right-click extension icon → **Inspect popup** |
-| Content scripts | DevTools → Sources → Content scripts |
-| IndexedDB | DevTools → Application → Storage → IndexedDB → `AIMemoryDB` |
-| Manual search test | Service Worker console: `testSearch('keyword', 5)` |
-
-```bash
-pnpm test              # Unit tests (Vitest)
-pnpm test:integration  # Integration tests
-pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
-```
-
----
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for the full version history.
-
----
-
-## Contributing
-
-PRs and issues are welcome! Please open an issue to discuss significant changes before submitting a PR.
-
-- Bug reports: [open an issue](../../issues)
-- Feature requests: [open an issue](../../issues)
-
----
+- 技术栈:Plasmo + React + TypeScript + Dexie(IndexedDB)+ Xenova Transformers(offscreen 本地嵌入)
+- 设计规范:`docs/DESIGN.md`;总体设计:`docs/拼多多客服快捷回复工具-设计文档.md`;架构决策:`docs/adr/`
+- 工作状态日志:`docs/工作状态-*.md`
 
 ## License
 
-[Apache 2.0](LICENSE)
+Apache 2.0(继承上游)

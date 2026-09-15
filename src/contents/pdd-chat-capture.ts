@@ -7,6 +7,7 @@
  *
  * 会话级语义:
  *  - 切换会话(检测到会话键变化) → 先发 leave 关闭上一会话未结问题段
+ *  - 3 分钟无新消息 → 发 idle 关闭当前会话未结问题段(无回复问题落盘)
  *  - 页面卸载(pagehide) → flush 并按活动会话发 leave
  *
  * 页面为 Vue2 单页应用,容器在 app 挂载后才出现 → 先轮询等容器,
@@ -23,12 +24,14 @@ export const config: PlasmoCSConfig = {
 
 const LIST_SEL = '#msgListContainer .msg-list'
 const SCAN_MS = 2500 // 兜底轮询(容器挂载期间也用它)
+const IDLE_MS = 3 * 60_000 // 无新消息阈值(与 SW 端 idle 语义一致)
 const MAX_SEEN = 6000 // 行 id 去重集上限(超出剪半)
 const DEBUG = false // true 时打印逐行捕获与 ingest 结果(链路排查用)
 
 let listEl: Element | null = null
 let lastSessionKey: string | undefined
 let pendingScan = 0
+let idleTimer = 0
 let seen = new Set<string>()
 
 function markSeen(key: string): void {
@@ -59,6 +62,20 @@ function sendEvents(events: PddCapturedEvent[]): void {
   } catch (err) {
     console.warn('[PDD CS] sendMessage 同步异常:', err)
   }
+}
+
+/** 会话有新消息后重置 idle 计时;到期发 idle 让 SW 关闭未结问题段 */
+function resetIdleTimer(sessionKey: string | undefined): void {
+  if (idleTimer) window.clearTimeout(idleTimer)
+  idleTimer = 0
+  if (!sessionKey) return
+  idleTimer = window.setTimeout(() => {
+    idleTimer = 0
+    // 到期时已切走会话 → 关段交给 leave,不发过期 idle
+    if (lastSessionKey === sessionKey) {
+      sendEvents([{ kind: 'idle', sessionKey }])
+    }
+  }, IDLE_MS)
 }
 
 function scanOnce(): void {
@@ -110,6 +127,7 @@ function scanOnce(): void {
     if (curSession) lastSessionKey = curSession
     sendEvents(events)
   }
+  if (added > 0) resetIdleTimer(curSession)
 }
 
 function scheduleScan(delay = 200): void {
@@ -142,13 +160,23 @@ function waitContainer(): void {
   window.setTimeout(waitContainer, 1000)
 }
 
-// 兜底轮询(容器挂载后每 2.5s 全量 diff,防观察遗漏)
+// 兜底轮询(容器挂载后每 2.5s 全量 diff,防观察遗漏);
+// Vue 重挂载会整体替换列表节点 → 检测到脱离文档即重新等容器自愈
 window.setInterval(() => {
-  if (listEl) scanOnce()
+  if (!listEl) return
+  if (listEl.isConnected) {
+    scanOnce()
+    return
+  }
+  listEl = null
+  seen = new Set() // 新节点会重放已有行,去重交给 SW(内存 + 库级 msgId)
+  tries = 0
+  waitContainer()
 }, SCAN_MS)
 
 // 卸载前 flush:关闭当前会话未结段
 window.addEventListener('pagehide', () => {
+  if (idleTimer) window.clearTimeout(idleTimer)
   if (listEl && lastSessionKey) {
     sendEvents([{ kind: 'leave', sessionKey: lastSessionKey }])
   }

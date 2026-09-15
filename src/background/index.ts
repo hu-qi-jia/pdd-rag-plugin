@@ -16,7 +16,7 @@ import {
   queueEmbedding,
 } from "./offscreen";
 import { processPendingEmbeddings } from "./syncEmbeddings";
-import { handlePddIngest } from "./pddCapture";
+import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { hashText } from "../utils/text";
 import {
@@ -609,12 +609,14 @@ if (chrome.alarms?.onAlarm) {
 
 // ─── 生命周期 ───────────────────────────────────────────────────────────────────
 
-// 每次 SW 唤醒:预置文件夹、清理旧库、确保每日闹钟、补嵌待嵌记录
+// 每次 SW 唤醒:预置文件夹、清理旧库、确保每日闹钟、恢复未结段快照、补嵌待嵌记录
 void db.ensurePresetFolders();
 void db.dropLegacyDbIfExists(LEGACY_DB_NAME).then((dropped) => {
   if (dropped) console.log("[PDD CS] Dropped legacy database:", LEGACY_DB_NAME);
 });
 scheduleDailyAlarm();
+// SW 休眠会丢分段器内存:从 storage.session 恢复未结问题段(浏览器会话内有效)
+void restoreSegmenterState();
 
 // 旧版 MAIN-world 网络 hook(已在 P1 重构中删除)可能残留在 profile 的
 // 动态脚本注册表里(文件已不存在 → 注入报错)。每次唤醒幂等注销一次。

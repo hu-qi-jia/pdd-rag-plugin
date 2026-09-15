@@ -4,10 +4,10 @@
  * 截断列表项导致语义不完整。方案:
  *  - mdToPlainText:剥 md 标记为纯文本(填充出去的是干净话术);
  *  - chunkMarkdown:按标题切小节,小节整块保留(≤ CHUNK_SIZE_CHARS);超长小节按行
- *    分组,永不截断单行,单行超长回退 chunkText 滑窗;全文无标题时整篇回退滑窗
- *    (原项目逻辑作为无结构文本的兜底保留)。
+ *    分组,截断点优先吸附空行(段落间隙整块分组),永不截断单行,单行超长回退
+ *    chunkText 滑窗;全文无标题时整篇回退滑窗(原项目逻辑作为无结构文本的兜底保留)。
  */
-import { chunkText, CHUNK_SIZE_CHARS } from './chunkText'
+import { chunkText, CHUNK_SIZE_CHARS, CHUNK_MIN_CHARS } from './chunkText'
 
 export interface MdChunk {
   /** 小节标题(纯文本);文档开头无标题部分 / 无结构回退块为 '' */
@@ -105,7 +105,20 @@ export function chunkMarkdown(md: string): MdChunk[] {
   return out
 }
 
-/** 按行聚合成 ≤ CHUNK_SIZE_CHARS 的组;单行超长时该行回退滑窗 */
+/**
+ * buf 内最后一个空行(段落间隙):其前内容 ≥ CHUNK_MIN_CHARS 时返回该下标
+ * (切在间隙处,空行本身不落入任何块),否则 -1(照旧整段 flush)。
+ */
+function snapBlank(buf: string[]): number {
+  for (let b = buf.length - 1; b >= 0; b--) {
+    if (buf[b] === '') {
+      return buf.slice(0, b).join('\n').length >= CHUNK_MIN_CHARS ? b : -1
+    }
+  }
+  return -1
+}
+
+/** 按行聚合成 ≤ CHUNK_SIZE_CHARS 的组;截断点优先吸附空行;单行超长时该行回退滑窗 */
 function groupLines(plain: string): string[] {
   const out: string[] = []
   let buf: string[] = []
@@ -124,9 +137,18 @@ function groupLines(plain: string): string[] {
       continue
     }
     const add = buf.length ? line.length + 1 : line.length
-    if (len + add > CHUNK_SIZE_CHARS && buf.length) flush()
+    if (len + add > CHUNK_SIZE_CHARS && buf.length) {
+      const cut = snapBlank(buf)
+      if (cut >= 0) {
+        out.push(buf.slice(0, cut).join('\n'))
+        buf = buf.slice(cut + 1)
+        len = buf.join('\n').length
+      } else {
+        flush()
+      }
+    }
     buf.push(line)
-    len += add
+    len += buf.length > 1 ? line.length + 1 : line.length
   }
   flush()
   return out

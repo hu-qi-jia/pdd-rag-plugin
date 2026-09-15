@@ -50,3 +50,46 @@ describe('chunkText(与原项目一致)', () => {
     expect(chunkText('')).toEqual([''])
   })
 })
+
+describe('chunkText 截断点吸附(空行/。)', () => {
+  it('窗口末端向前吸附到最近的「。」:第一块以。收尾', () => {
+    const t = 'A'.repeat(480) + '第一句。' + 'B'.repeat(100) // len 592,。 在 j=484
+    const chunks = chunkText(t)
+    expect(chunks[0]).toBe(t.slice(0, 484))
+    expect(chunks[0].endsWith('。')).toBe(true)
+    expect(chunks[1]).toBe(t.slice(484 - CHUNK_OVERLAP_CHARS))
+  })
+
+  it('空行与。同时存在 → 吸附最靠近窗口末端者', () => {
+    // 。 在 j=251,空行在 j=451(更靠近 500)→ 吸附空行
+    const t = 'A'.repeat(250) + '。' + 'B'.repeat(198) + '\n\n' + 'C'.repeat(100)
+    const chunks = chunkText(t)
+    expect(chunks[0]).toBe(t.slice(0, 451))
+    expect(chunks[0].endsWith('\n\n')).toBe(true)
+  })
+
+  it('边界早于最小块长(250)→ 不吸附,保持硬切', () => {
+    const t = 'x'.repeat(100) + '。' + 'y'.repeat(500) // 。 在 j=101 < 250
+    const chunks = chunkText(t)
+    expect(chunks[0]).toBe(t.slice(0, 500))
+    expect(chunks[0].endsWith('y')).toBe(true)
+  })
+
+  it('吸附后相邻块重叠仍为 75 字符(后块头部 = 前块尾部)', () => {
+    const t = ('段落' + '。').repeat(300) + '\n\n' + 'Z'.repeat(50) // len 952
+    const chunks = chunkText(t)
+    expect(chunks.length).toBeGreaterThan(2)
+    for (let k = 1; k < chunks.length; k++) {
+      expect(chunks[k].slice(0, CHUNK_OVERLAP_CHARS)).toBe(
+        chunks[k - 1].slice(-CHUNK_OVERLAP_CHARS),
+      )
+    }
+  })
+
+  it('尾段(剩余 ≤500)不吸附,整段保留到结尾', () => {
+    const t = 'y'.repeat(600) + '尾段。'
+    const chunks = chunkText(t)
+    expect(chunks[0]).toBe(t.slice(0, 500)) // 前段无边界,硬切
+    expect(chunks[chunks.length - 1].endsWith('尾段。')).toBe(true)
+  })
+})

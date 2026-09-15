@@ -101,6 +101,18 @@ describe('chunkMarkdown(结构感知分块)', () => {
     expect(joined).toContain(long)
     expect(chunks.length).toBeGreaterThan(1)
   })
+
+  it('超长小节分组截断点吸附空行:截断处落在段落间隙,块尾不残留半截空行', () => {
+    const p = (n: number) => `段落${n}:${'内容'.repeat(58)}` // 120 字/行
+    const md = `## 大节\n\n${[1, 2, 3, 4, 5].map(p).join('\n\n')}`
+    const chunks = chunkMarkdown(md)
+    // 溢出发生在追加段落5(1-4 段+分隔共 487 字);截断点吸附到最近空行
+    // (段落4/5 间隙):空行整体不落入任何块;旧行为块尾残留半个空行("\n")
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].text).toBe([p(1), p(2), p(3), p(4)].join('\n\n'))
+    expect(chunks[1].text).toBe(p(5))
+    expect(chunks[0].text.endsWith('\n')).toBe(false)
+  })
 })
 
 function tiles_fix(titles: string[]) {

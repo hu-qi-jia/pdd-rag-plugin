@@ -658,12 +658,20 @@ export function FoldersTab({
     const expanded = !isCollapsed || confirmFolderDelete === f.id
     const empty = node.goldens.length === 0 && node.children.length === 0
 
+    const startRename = () => {
+      setRenamingId(f.id)
+      setRenameName(f.name)
+    }
+
     /** 分区头:根夹为标题栏(常驻浅灰底 + 展开时底边分隔线),子夹为同构缩进行;
-     *  两者结构完全一致(chevron + 文件夹图标 + 名称 + 计数),层级只靠缩进与字重表达 */
+     *  两者结构完全一致(chevron + 文件夹图标 + 名称 + 计数),层级只靠缩进与字重表达。
+     *  重命名入口(v2.6.1):悬浮「重命名」图标钮,或**双击文件夹名**直接进入改名 */
     const header = (
       <div
         className="pddcs-row"
         onClick={renamingId === f.id ? undefined : toggle}
+        onDoubleClick={isUnc || renamingId === f.id ? undefined : startRename}
+        title={isUnc ? undefined : '单击展开/折叠,双击重命名'}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -738,10 +746,7 @@ export function FoldersTab({
               <>
                 {!isUnc && (
                   <>
-                    {iconBtn('重命名', <PencilIcon size={13} strokeWidth={2} />, () => {
-                      setRenamingId(f.id)
-                      setRenameName(f.name)
-                    })}
+                    {iconBtn('重命名(或双击文件夹名)', <PencilIcon size={13} strokeWidth={2} />, startRename)}
                     {iconBtn(
                       '删除文件夹(其下标准回答移入「未分类」)',
                       <TrashIcon size={13} strokeWidth={2} />,

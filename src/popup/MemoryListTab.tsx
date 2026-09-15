@@ -178,8 +178,29 @@ export function MemoryListTab({
           })
         return (
           <Card key={item.id} tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: 0 }}>
-            {/* 问题行:左侧折叠按钮(整行也可点)+ 问题与元信息 */}
+            {/* 问题行:问题与元信息居左,折叠按钮移到行尾(2026-09-15 用户要求);整行可点 */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.sm }}>
+              <div onClick={toggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                <div
+                  style={{
+                    fontSize: fontSize.body,
+                    fontWeight: fontWeight.semibold,
+                    lineHeight: 1.45,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {item.question}
+                </div>
+                <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
+                  <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
+                </div>
+              </div>
+
               <button
                 type="button"
                 title={expanded ? '折叠该问题' : '展开该问题'}
@@ -223,35 +244,13 @@ export function MemoryListTab({
                   <ChevronDownIcon size={13} strokeWidth={2.2} />
                 </span>
               </button>
-
-              <div onClick={toggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                <div
-                  style={{
-                    fontSize: fontSize.body,
-                    fontWeight: fontWeight.semibold,
-                    lineHeight: 1.45,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {item.question}
-                </div>
-                <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                  {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
-                  <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
-                </div>
-              </div>
             </div>
 
-            {/* 展开区:回复列表 */}
+            {/* 展开区:回复列表(与问题文字同左基线,不再给折叠钮留缩进) */}
             {expanded && (
               <div
                 style={{
                   marginTop: spacing.md,
-                  marginLeft: controlH.inline + spacing.sm,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: spacing.md,

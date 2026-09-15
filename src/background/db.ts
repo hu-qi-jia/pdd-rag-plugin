@@ -351,6 +351,15 @@ export class PddDatabase extends Dexie {
     return this.goldens.where("questionHash").equals(questionHash).first();
   }
 
+  /**
+   * 同一问题的全部标准回答 —— 一个问题可挂多条(上限见 goldens.ts)。
+   * 按 createdAt 倒序返回:最近设置的靠前(候选排序与面板展示共用该口径)。
+   */
+  async getGoldensByQuestionHash(questionHash: string): Promise<GoldenRecord[]> {
+    const list = await this.goldens.where("questionHash").equals(questionHash).toArray();
+    return list.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
   async updateGolden(id: string, patch: Partial<GoldenRecord>): Promise<void> {
     await this.goldens.update(id, { ...patch, updatedAt: Date.now() });
   }

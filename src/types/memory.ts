@@ -152,3 +152,7 @@ export const DEFAULT_SETTINGS: PddSettings = {
 }
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
+
+/** 同一问题可保留的标准回答条数上限(用户指定:合计最多 3 条)。
+ *  放在纯类型模块里,后台写入口径与聊天页 UI 提示共用同一个数字。 */
+export const MAX_GOLDENS_PER_QUESTION = 3

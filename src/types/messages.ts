@@ -136,9 +136,11 @@ export interface GetSuggestionsResponse {
   payload: { suggestions: Suggestion[]; settings?: UiSettings; error?: string }
 }
 
-// ─── ADD_GOLDEN:弹窗"设为金标准"(content UI → SW,P2 最小版)────────────────
-// 幂等:questionHash 已存在则不重复建,返回 exists。
-
+// ─── ADD_GOLDEN:弹窗"设为标准回答"(content UI → SW,P2 最小版)─────────────────
+// 同一问题可有 **多条** 标准回答(一个问题的问法常对应多种合格话术),上限
+// MAX_GOLDENS_PER_QUESTION(见 background/goldens.ts);幂等粒度 = 问题 + 答案:
+//  - exists       同问题 + 同答案已存在 → 不重复建
+//  - limitReached 该问题标准回答已达上限 → 提示先取消一条
 export interface AddGoldenRequest {
   type: 'ADD_GOLDEN'
   payload: {
@@ -151,7 +153,14 @@ export interface AddGoldenRequest {
 
 export interface AddGoldenResponse {
   type: 'ADD_GOLDEN_RESPONSE'
-  payload: { id?: string; exists?: boolean; error?: string }
+  payload: {
+    id?: string
+    exists?: boolean
+    limitReached?: boolean
+    /** 该问题当前标准回答条数(新建后;UI 展示 n/上限 用) */
+    count?: number
+    error?: string
+  }
 }
 
 // ─── P3 面板:记忆列表(popup → SW)────────────────────────────────────────────
@@ -363,6 +372,8 @@ export interface ImportDataResponse {
   payload: {
     addedGoldens?: number
     skippedGoldens?: number
+    /** 因目标问题已达上限而未导入的标准回答条数 */
+    limitedGoldens?: number
     addedFolders?: number
     skippedFolders?: number
     addedKnowledge?: number

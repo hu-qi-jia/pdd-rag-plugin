@@ -6,16 +6,16 @@
  */
 import { db } from "./db";
 import { embedViaOffscreen } from "./offscreen";
+import { getRetrievalEntries } from "./retrievalCache";
 import {
   assembleSuggestions,
   rankCandidates,
   type RetReply,
-  type RetSource,
   type Suggestion,
 } from "./retrieval";
 import { loadSettings } from "./settings";
 import { normalizeText } from "../utils/text";
-import { kbAnchorText } from "./kbAnchor";
+import type { GoldenRecord, KnowledgeRecord } from "../types/memory";
 import type { UiSettings } from "../types/messages";
 
 export interface SearchOutcome {
@@ -48,42 +48,8 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
 
   const now = Date.now();
 
-  const [qas, goldens, kbs] = await Promise.all([
-    db.getEmbeddedQaRecords(),
-    db.getEmbeddedGoldens(),
-    db.getEmbeddedKnowledge(),
-  ]);
-
-  const entries: Array<{ source: RetSource; vec: Float32Array }> = [
-    ...qas.map((q) => ({
-      source: {
-        id: q.id,
-        kind: "history" as const,
-        question: q.question,
-        questionTs: q.questionTs,
-      },
-      vec: q.embedding as Float32Array,
-    })),
-    ...goldens.map((g) => ({
-      source: {
-        id: g.id,
-        kind: "golden" as const,
-        question: g.question,
-        questionTs: g.updatedAt,
-      },
-      vec: g.qEmbedding as Float32Array,
-    })),
-    ...kbs.map((k) => ({
-      source: {
-        id: k.id,
-        kind: "knowledge" as const,
-        // 锚文本统一走 kbAnchorText(嵌入/BM25/来源摘要同源,见 kbAnchor.ts 注释)
-        question: kbAnchorText(k),
-        questionTs: k.updatedAt,
-      },
-      vec: k.qEmbedding as Float32Array,
-    })),
-  ];
+  // 三源条目走 SW 内存缓存(工程5b):命中时不触库,写路径已失效
+  const entries = await getRetrievalEntries();
 
   const ranked = rankCandidates(
     entries,
@@ -93,7 +59,7 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     now,
   );
 
-  // 只取过阈源的回复(减少 IO)
+  // 候选正文按需取(缓存只存锚+向量):只取过阈源,IO 与候选数成正比
   const qaIds = ranked
     .filter((r) => r.source.kind === "history")
     .map((r) => r.source.id);
@@ -106,8 +72,26 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
       repliesByQa.set(r.qaId, list);
     }
   }
-  const goldensById = new Map(goldens.map((g) => [g.id, g]));
-  const kbById = new Map(kbs.map((k) => [k.id, k]));
+  const goldenIds = ranked
+    .filter((r) => r.source.kind === "golden")
+    .map((r) => r.source.id);
+  const kbIds = ranked
+    .filter((r) => r.source.kind === "knowledge")
+    .map((r) => r.source.id);
+  const [goldenRows, kbRows] = await Promise.all([
+    goldenIds.length > 0 ? db.goldens.bulkGet(goldenIds) : [],
+    kbIds.length > 0 ? db.knowledge.bulkGet(kbIds) : [],
+  ]);
+  const goldensById = new Map<string, GoldenRecord>();
+  goldenIds.forEach((id, i) => {
+    const g = goldenRows[i];
+    if (g) goldensById.set(id, g);
+  });
+  const kbById = new Map<string, KnowledgeRecord>();
+  kbIds.forEach((id, i) => {
+    const k = kbRows[i];
+    if (k) kbById.set(id, k);
+  });
 
   const suggestions = assembleSuggestions(ranked, {
     getReplies: (id) => repliesByQa.get(id) ?? [],

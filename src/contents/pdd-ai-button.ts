@@ -21,6 +21,7 @@ import {
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
+import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
 import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
 import { lightTheme as tk } from '../ui/theme'
 
@@ -86,6 +87,9 @@ const CSS = `
   cursor: pointer; font-size: 10.5px; padding: 2px 8px; color: ${tk.textMuted}; font-weight: 500;
   transition: background-color .1s ease, color .1s ease; }
 .pddcs-mini:hover { background: ${tk.borderLight}; color: ${tk.text}; }
+/* 危险型迷你钮(取消标准回答):悬浮转红,与图标钮的危险态同语言 */
+.pddcs-mini-danger { color: ${tk.errorText}; }
+.pddcs-mini-danger:hover { background: ${tk.errorBg}; color: ${tk.errorText}; }
 .pddcs-cand-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
@@ -379,6 +383,11 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   row.className = 'pddcs-cand'
   row.title = '点击填入输入框(不自动发送)'
 
+  // 行内状态:该候选当前对应的标准回答 id
+  //  - 候选本身就是标准回答(kind=golden)→ 进面板即可"取消";
+  //  - 历史/知识库候选被设为标准回答后 → 原位翻转为"取消",无需重开面板。
+  let goldenId: string | null = s.kind === 'golden' ? s.sourceId : null
+
   const top = document.createElement('div')
   top.className = 'pddcs-cand-top'
   top.appendChild(badge(s.kind))
@@ -394,22 +403,88 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   }
   const actions = document.createElement('div')
   actions.className = 'pddcs-cand-actions'
-  const goldBtn = miniBtn('设置标准回答')
-  goldBtn.title = '将当前问题 + 该回复设为标准回答'
-  goldBtn.addEventListener('click', (ev) => {
-    ev.stopPropagation()
-    void setGolden(s, query, goldBtn)
-  })
-  const copyBtn = miniBtn('复制')
-  copyBtn.addEventListener('click', (ev) => {
-    ev.stopPropagation()
-    void copyText(s.text).then((ok) =>
-      toast(ok ? '已复制到剪贴板' : '复制失败,请手动选择文本'),
-    )
-  })
-  actions.append(goldBtn, copyBtn)
   top.appendChild(actions)
   row.appendChild(top)
+
+  /** 设为标准回答(每问上限见 MAX_GOLDENS_PER_QUESTION,刷新后同问题多条按时间倒序) */
+  const addGolden = async (btn: HTMLButtonElement): Promise<void> => {
+    btn.disabled = true
+    btn.textContent = '设置中…'
+    try {
+      const resp = await chrome.runtime.sendMessage({
+        type: 'ADD_GOLDEN',
+        payload: {
+          question: query,
+          answer: s.text,
+          sourceRecordId: s.sourceId,
+          sourceReplyId: s.replyId,
+        },
+      })
+      const p = resp?.payload ?? {}
+      const err = chrome.runtime.lastError?.message ?? p.error
+      if (err) toast(`设置标准回答失败:${err}`)
+      else if (p.limitReached) toast(`该问题已有 ${p.count} 条标准回答,请先取消一条`)
+      else if (p.exists) {
+        goldenId = p.id ?? goldenId
+        toast('该回复已是该问题的标准回答')
+      } else {
+        goldenId = p.id ?? goldenId
+        toast(`已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''}(后台自动向量化)`)
+      }
+    } catch (err) {
+      toast(`设置标准回答失败:${String(err)}`)
+    }
+    renderActions()
+  }
+
+  /** 取消标准回答(仅解除该回复的"标准回答"身份,历史记录不受影响) */
+  const cancelGolden = async (btn: HTMLButtonElement): Promise<void> => {
+    const id = goldenId
+    if (!id) return
+    btn.disabled = true
+    btn.textContent = '取消中…'
+    try {
+      const resp = await chrome.runtime.sendMessage({
+        type: 'DELETE_GOLDEN',
+        payload: { id },
+      })
+      const err = chrome.runtime.lastError?.message ?? resp?.payload?.error
+      if (err) toast(`取消失败:${err}`)
+      else if (resp?.payload?.success === false) toast('取消失败,请稍后重试')
+      else {
+        goldenId = null
+        toast('已取消标准回答(历史记录不受影响)')
+      }
+    } catch (err) {
+      toast(`取消失败:${String(err)}`)
+    }
+    renderActions()
+  }
+
+  /** 操作钮:按 goldenId 在「设置标准回答 / 取消标准回答」之间翻转 */
+  function renderActions(): void {
+    actions.textContent = ''
+    const isGolden = goldenId !== null
+    const goldBtn = miniBtn(isGolden ? '取消标准回答' : '设置标准回答')
+    goldBtn.title = isGolden
+      ? '取消后该回复不再作为标准回答(历史问答记录不受影响)'
+      : `将当前问题 + 该回复设为标准回答(每个问题最多 ${MAX_GOLDENS_PER_QUESTION} 条)`
+    if (isGolden) goldBtn.classList.add('pddcs-mini-danger')
+    goldBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      void (isGolden ? cancelGolden(goldBtn) : addGolden(goldBtn))
+    })
+    const copyBtn = miniBtn('复制')
+    copyBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      void copyText(s.text).then((ok) =>
+        toast(ok ? '已复制到剪贴板' : '复制失败,请手动选择文本'),
+      )
+    })
+    actions.append(goldBtn, copyBtn)
+  }
+
+  renderActions()
 
   const text = document.createElement('div')
   text.className = 'pddcs-cand-text'
@@ -470,32 +545,6 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): voi
   el.style.left = `${Math.round(x)}px`
   el.style.top = `${Math.round(y)}px`
   popupEl = el
-}
-
-async function setGolden(
-  s: Suggestion,
-  query: string,
-  btn: HTMLButtonElement,
-): Promise<void> {
-  btn.disabled = true
-  try {
-    const resp = await chrome.runtime.sendMessage({
-      type: 'ADD_GOLDEN',
-      payload: {
-        question: query,
-        answer: s.text,
-        sourceRecordId: s.sourceId,
-        sourceReplyId: s.replyId,
-      },
-    })
-    const err = chrome.runtime.lastError?.message ?? resp?.payload?.error
-    if (err) toast(`设置标准回答失败:${err}`)
-    else if (resp?.payload?.exists) toast('相同问题的标准回答已存在')
-    else toast('已设为标准回答(后台自动向量化)')
-  } catch (err) {
-    toast(`设置标准回答失败:${String(err)}`)
-  }
-  btn.disabled = false
 }
 
 // ─── 启动 ─────────────────────────────────────────────────────────────────────

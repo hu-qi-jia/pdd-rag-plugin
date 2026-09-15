@@ -19,17 +19,28 @@ import type {
 /** 记忆列表上限(360px 面板流式展示;翻页留待需要时再做) */
 const MEMORY_LIST_LIMIT = 100;
 
-/** 记忆列表:问答 + 挂载回复一次拉全(按时间升序排列回复) */
+/** 记忆列表:问答 + 挂载回复一次拉全(按时间升序排列回复);回复回带 goldenId(PM1) */
 export async function getMemoryList(
   _message: GetMemoryListRequest,
 ): Promise<{ items: MemoryListItem[] }> {
-  const qas = await db.listQaRecords(MEMORY_LIST_LIMIT);
+  const [qas, goldens] = await Promise.all([
+    db.listQaRecords(MEMORY_LIST_LIMIT),
+    db.goldens.toArray(),
+  ]);
   const replies = await db.getRepliesByQaIds(qas.map((q) => q.id));
+
+  // 持久金标徽标(2026-09-15 PM1):回复 id → 金标准 id;
+  // 只认 sourceReplyId 溯源(手工新建的金标准不属于任何回复)
+  const goldenByReply = new Map<string, string>();
+  for (const g of goldens) {
+    if (g.sourceReplyId) goldenByReply.set(g.sourceReplyId, g.id);
+  }
 
   const byQa = new Map<string, MemoryReplyItem[]>();
   for (const r of replies) {
     const list = byQa.get(r.qaId) ?? [];
-    list.push({ id: r.id, text: r.text, ts: r.ts });
+    const goldenId = goldenByReply.get(r.id);
+    list.push({ id: r.id, text: r.text, ts: r.ts, ...(goldenId ? { goldenId } : {}) });
     byQa.set(r.qaId, list);
   }
 

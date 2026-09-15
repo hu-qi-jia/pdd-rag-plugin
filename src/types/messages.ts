@@ -169,6 +169,8 @@ export interface MemoryReplyItem {
   id: string
   text: string
   ts: number
+  /** 该回复已被提升为标准回答时的金标准 id(goldens.sourceReplyId 反查,2026-09-15 PM1) */
+  goldenId?: string
 }
 
 export interface MemoryListItem {

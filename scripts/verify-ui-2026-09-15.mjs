@@ -7,12 +7,14 @@
  * 用法:node scripts/verify-ui-2026-09-15.mjs
  */
 import { chromium } from '@playwright/test'
+import { rmSync } from 'node:fs'
 
 const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
 const CHROME =
   'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
 const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = ROOT + '\\.diag-golden-profile'
+// 每次运行独立 profile:避免陈旧 SW 脚本缓存与 profile 锁(跑完即删)
+const PROFILE = ROOT + '\\.diag-run-' + Date.now()
 const SESS = 'diag-golden-click'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -43,7 +45,24 @@ if (!extId) {
 const pop = await ctx.newPage()
 const pageErrors = []
 pop.on('pageerror', (e) => pageErrors.push(String(e)))
-await pop.goto(`chrome-extension://${extId}/popup.html`, { waitUntil: 'domcontentloaded' })
+// SW reload 后扩展页可能短暂不可达 → 重试打开
+let opened = false
+for (let i = 0; i < 12 && !opened; i++) {
+  try {
+    await pop.goto(`chrome-extension://${extId}/popup.html`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    })
+    opened = true
+  } catch {
+    await sleep(2000)
+  }
+}
+if (!opened) {
+  console.log('FAIL: popup 打不开')
+  await ctx.close()
+  process.exit(1)
+}
 await sleep(1500)
 
 const send = (type, payload) =>
@@ -94,6 +113,27 @@ const statsAfter = (await send('GET_STATS')).goldenCount
 const doneMarker = await pop.locator('text=已设为标准回答').count()
 
 check('点击后按钮原位变为「已设为标准回答」', doneMarker > 0, `命中 ${doneMarker} 处`)
+
+// ── 记忆页:每个问题的折叠按钮(2026-09-15 用户反馈"目前没有")──
+const expandedBefore = await pop.locator('button[aria-expanded="true"]').count()
+const collapsedBefore = await pop.locator('button[aria-expanded="false"]').count()
+check('每条问题都有折叠按钮', expandedBefore + collapsedBefore > 0, `expanded=${expandedBefore} collapsed=${collapsedBefore}`)
+await pop.locator('button[aria-expanded]').first().click()
+await sleep(350)
+const expandedAfter = await pop.locator('button[aria-expanded="true"]').count()
+const collapsedAfter = await pop.locator('button[aria-expanded="false"]').count()
+check(
+  '点折叠按钮 → 该问题折叠(aria-expanded 翻转)',
+  expandedAfter === expandedBefore - 1 && collapsedAfter === collapsedBefore + 1,
+  `${expandedBefore}→${expandedAfter} / ${collapsedBefore}→${collapsedAfter}`,
+)
+await pop.locator('button[aria-expanded="false"]').first().click()
+await sleep(350)
+check(
+  '再点一次 → 展开复原',
+  (await pop.locator('button[aria-expanded="true"]').count()) === expandedBefore,
+)
+
 check(`头部统计刷新(标准回答 ${statsBefore} → ${statsAfter})`, statsAfter > statsBefore)
 check('头部统计文案已更新', after.includes(`标准回答 ${statsAfter}`), after)
 await pop.screenshot({ path: ROOT + '\\logs\\ui-0915-memory.png' })
@@ -145,4 +185,9 @@ console.log('行内小控件高度 =', JSON.stringify(inlineGeo))
 console.log('页面错误 =', JSON.stringify(pageErrors))
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)
 await ctx.close()
+try {
+  rmSync(PROFILE, { recursive: true, force: true })
+} catch {
+  /* 有残留句柄时留给下次清理 */
+}
 process.exit(results.every((r) => r.ok) ? 0 : 1)

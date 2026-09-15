@@ -44,3 +44,4 @@ assets/models/
 .worktrees/
 # 一次性诊断 profile(自动化用,勿入库)
 .diag-golden-profile/
+.diag-run-*/

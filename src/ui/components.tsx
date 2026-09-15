@@ -8,7 +8,7 @@ import type React from 'react'
 import { useEffect } from 'react'
 import type { ThemeTokens } from './theme'
 import { fontSize, fontWeight, radius, spacing, semantic, motion, size } from './design'
-import { SearchIcon } from './icons'
+import { PlusIcon, SearchIcon } from './icons'
 
 // ── 胶囊按钮 ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +73,33 @@ export function Btn({
     >
       {children}
     </button>
+  )
+}
+
+// ── 工具栏「新建」主钮(公共组件)────────────────────────────────────────────
+
+/** 加号图标 + 文字的主操作钮:知识库页「新建条目」与文件夹页「新建文件夹」共用,
+ *  视觉统一走 Btn primary(.pddcs-btn,高 controlH.form),不再各自手搓 */
+export function CreateBtn({
+  tk,
+  label,
+  onClick,
+  disabled,
+  title,
+}: {
+  tk: ThemeTokens
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  title?: string
+}) {
+  return (
+    <Btn tk={tk} variant="primary" onClick={onClick} disabled={disabled} title={title}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <PlusIcon size={12} strokeWidth={2.2} />
+        {label}
+      </span>
+    </Btn>
   )
 }
 

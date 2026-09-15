@@ -21,6 +21,7 @@ import {
   Badge,
   Btn,
   Card,
+  CreateBtn,
   EmptyState,
   Notice,
   SearchInput,
@@ -29,7 +30,7 @@ import {
   type NoticeMsg,
 } from '../ui/components'
 import { fontSize, fontWeight, spacing } from '../ui/design'
-import { FileTextIcon, PlusIcon, UploadIcon } from '../ui/icons'
+import { FileTextIcon, UploadIcon } from '../ui/icons'
 
 export function KnowledgeTab({
   tk,
@@ -246,11 +247,7 @@ export function KnowledgeTab({
         </Card>
       ) : (
         <div style={{ display: 'flex', gap: spacing.sm }}>
-          <Btn tk={tk} variant="primary" onClick={() => setCreating(true)}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <PlusIcon size={12} strokeWidth={2.2} />新建条目
-            </span>
-          </Btn>
+          <CreateBtn tk={tk} label="新建条目" onClick={() => setCreating(true)} />
           <Btn tk={tk} disabled={uploading} title="上传 .md 文档:自动分块(500 字/75 重叠)并逐块向量化" onClick={() => fileRef.current?.click()}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <UploadIcon size={12} strokeWidth={2} />

@@ -28,7 +28,7 @@ import { UNCATEGORIZED_FOLDER_ID } from '../types/memory'
 import { buildFolderTree, countGoldensByQuestion, type FolderNode } from '../utils/panelLogic'
 import { hashText } from '../utils/text'
 import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
-import { EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
+import { CreateBtn, EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
 import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
 import {
   ChevronDownIcon,
@@ -36,7 +36,6 @@ import {
   FolderIcon,
   FolderInputIcon,
   PencilIcon,
-  PlusIcon,
   TrashIcon,
 } from '../ui/icons'
 
@@ -868,37 +867,14 @@ export function FoldersTab({
         )
       ) : (
         <div style={{ display: 'flex', gap: spacing.sm }}>
-          <button
-            type="button"
+          <CreateBtn
+            tk={tk}
+            label="新建文件夹"
             onClick={() => {
               setCreateParent('root')
               setNewName('')
             }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              height: controlH.form,
-              padding: '0 12px',
-              border: 'none',
-              borderRadius: radius.md,
-              backgroundColor: tk.btnPrimaryBg,
-              color: tk.btnPrimaryText,
-              fontSize: fontSize.body,
-              fontWeight: fontWeight.medium,
-              cursor: 'pointer',
-              transition: `background-color ${motion.fast}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = tk.btnPrimaryHover
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = tk.btnPrimaryBg
-            }}
-          >
-            <PlusIcon size={12} strokeWidth={2.2} />
-            新建文件夹
-          </button>
+          />
         </div>
       )}
 

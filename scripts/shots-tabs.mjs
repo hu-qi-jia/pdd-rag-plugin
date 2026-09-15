@@ -65,6 +65,26 @@ const send = (type, payload) =>
   )
 
 // ── 造样本数据 ──
+// 填充问答 105 条(验证 PM2 分页:记忆页应出现"加载更早(已显示 100/107 条)")
+for (let i = 1; i <= 105; i++) {
+  await send('PDD_INGEST', {
+    events: [
+      {
+        kind: 'msg',
+        sessionKey: `shot-fill-${i}`,
+        msg: {
+          source: 'dom',
+          role: 'buyer',
+          text: `第 ${i} 条:请问这个手机壳有 iPhone 15 的型号吗?颜色有哪些?`,
+          msgId: `s-fill-${i}`,
+          ts: Date.now() - (200 + i) * 60_000,
+        },
+      },
+      { kind: 'leave', sessionKey: `shot-fill-${i}` },
+    ],
+  })
+}
+
 await send('PDD_INGEST', {
   events: [
     {
@@ -127,6 +147,40 @@ for (const theme of ['light', 'dark']) {
   }
   console.log(`${theme} 四页签截图完成`)
 }
+
+// ── 附加:记忆页滚动到底,验证 PM2「加载更早」入口(浅色)──
+await pop.evaluate(async (t) => {
+  await chrome.storage.local.set({ 'pddcs:theme': t })
+  localStorage.setItem('pddcs:theme', t)
+}, 'light')
+await pop.reload({ waitUntil: 'domcontentloaded' })
+await sleep(1500)
+await pop.locator('button[title="记忆"]').click()
+await sleep(600)
+await pop.evaluate(() => {
+  const el = document.querySelector('.pddcs-scroll')
+  if (el) el.scrollTop = el.scrollHeight
+})
+await sleep(400)
+await pop.screenshot({
+  path: `${ROOT}\\logs\\ui-0915-${TAG}-memory-paged-light.png`,
+  clip: { x: 0, y: 0, width: 460, height: 620 },
+})
+console.log('记忆页分页入口截图完成')
+
+// ── 附加:设置页滚动到"存储"卡(PM6a)──
+await pop.locator('button[title="设置"]').click()
+await sleep(600)
+await pop.evaluate(() => {
+  const el = document.querySelector('.pddcs-scroll')
+  if (el) el.scrollTop = el.scrollHeight
+})
+await sleep(400)
+await pop.screenshot({
+  path: `${ROOT}\\logs\\ui-0915-${TAG}-settings-storage-light.png`,
+  clip: { x: 0, y: 0, width: 460, height: 620 },
+})
+console.log('设置页存储卡截图完成')
 
 await ctx.close()
 try {

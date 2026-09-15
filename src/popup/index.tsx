@@ -9,9 +9,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
-import { fontFamily, fontSize, fontWeight, radius, size, spacing } from '../ui/design'
+import { controlH, fontFamily, fontSize, fontWeight, radius, size, spacing } from '../ui/design'
 import {
-  AiSparkIcon,
   BookOpenIcon,
   FolderIcon,
   GearIcon,
@@ -35,10 +34,10 @@ const RESET_CSS = `
 html, body { margin: 0; padding: 0; background: transparent !important; }
 * { box-sizing: border-box; }
 
-/* ── 按钮(工具风直角控件)───────────────────────────── */
+/* ── 按钮(工具风直角控件;高度固定为表单档,保证与同排输入框等高)───── */
 .pddcs-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  padding: 3px 12px; border-radius: 6px; border: 1px solid;
+  height: ${controlH.form}px; padding: 0 12px; border-radius: 6px; border: 1px solid;
   font-size: 12px; font-weight: 500; line-height: 1.5;
   cursor: pointer; white-space: nowrap; font-family: inherit;
   transition: background-color .12s ease, border-color .12s ease, opacity .12s ease;
@@ -144,24 +143,6 @@ function App() {
           borderRight: `1px solid ${tk.borderLight}`,
         }}
       >
-        {/* 品牌标 */}
-        <div
-          style={{
-            width: size.railBtn - 4,
-            height: size.railBtn - 4,
-            borderRadius: radius.lg - 4,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: tk.accent,
-            color: '#ffffff',
-            marginBottom: spacing.lg,
-          }}
-          title="拼多多客服快捷回复"
-        >
-          <AiSparkIcon size={17} />
-        </div>
-
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}

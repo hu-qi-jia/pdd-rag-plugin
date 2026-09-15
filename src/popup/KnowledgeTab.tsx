@@ -29,7 +29,7 @@ import {
   type NoticeMsg,
 } from '../ui/components'
 import { fontSize, fontWeight, spacing } from '../ui/design'
-import { BookOpenIcon, FileTextIcon, PlusIcon, UploadIcon } from '../ui/icons'
+import { FileTextIcon, PlusIcon, UploadIcon } from '../ui/icons'
 
 export function KnowledgeTab({
   tk,
@@ -273,7 +273,7 @@ export function KnowledgeTab({
 
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索标题或正文" />
 
-      <Notice tk={tk} msg={msg} />
+      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
       {shown.length === 0 && (
         <EmptyState tk={tk}>
@@ -330,19 +330,13 @@ export function KnowledgeTab({
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-                  <Badge
-                    tk={tk}
-                    tone="knowledge"
-                    icon={
-                      k.source === 'doc' ? (
-                        <FileTextIcon size={10} strokeWidth={2.2} />
-                      ) : (
-                        <BookOpenIcon size={10} strokeWidth={2.2} />
-                      )
-                    }
-                  >
-                    {k.source === 'doc' ? '文档' : '知识库'}
-                  </Badge>
+                  {/* 徽标只标文档块(2026-09-15 设计6:本页即知识库,手工条目徽标冗余);
+                      手工条目与文档块的区分交给徽标有无 */}
+                  {k.source === 'doc' && (
+                    <Badge tk={tk} tone="knowledge" icon={<FileTextIcon size={10} strokeWidth={2.2} />}>
+                      文档
+                    </Badge>
+                  )}
                   {disabled && (
                     <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>已停用</span>
                   )}
@@ -350,7 +344,7 @@ export function KnowledgeTab({
                     <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>向量生成中</span>
                   )}
                   {!disabled && k.hasEmbedding === -1 && (
-                    <span style={{ fontSize: fontSize.caption, color: tk.errorText }}>嵌入失败,重启扩展后重试</span>
+                    <span style={{ fontSize: fontSize.caption, color: tk.errorText }}>嵌入失败,后台将自动重试</span>
                   )}
                   <span style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: tk.textTertiary, fontVariantNumeric: 'tabular-nums' }}>
                     {formatTs(k.updatedAt)}

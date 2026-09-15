@@ -33,6 +33,8 @@ export interface ThemeTokens {
   successBg: string
   successText: string
   errorBg: string
+  /** 危险钮悬浮底色(比 errorBg 深一档;2026-09-15 设计6) */
+  errorHoverBg: string
   errorText: string
   inputBg: string
   inputBorder: string
@@ -63,6 +65,7 @@ export const lightTheme: ThemeTokens = {
   successBg: 'rgba(20,174,92,0.09)',
   successText: '#14ae5c',
   errorBg: '#fef1ee',
+  errorHoverBg: '#fde3dc',
   errorText: '#f24822',
   inputBg: '#ffffff',
   inputBorder: '#d4d4d4',
@@ -95,6 +98,7 @@ export const darkTheme: ThemeTokens = {
   successBg: 'rgba(10,207,131,0.14)',
   successText: '#0acf83',
   errorBg: 'rgba(255,114,98,0.14)',
+  errorHoverBg: 'rgba(255,114,98,0.22)',
   errorText: '#ff7262',
   inputBg: '#2c2c2c',
   inputBorder: '#3b3d40',

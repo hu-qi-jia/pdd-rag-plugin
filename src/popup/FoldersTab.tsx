@@ -552,7 +552,7 @@ export function FoldersTab({
           )}
           {g.hasEmbedding === -1 && (
             <span
-              title="嵌入失败,重启扩展后重试"
+              title="嵌入失败,后台将自动重试"
               style={{ fontSize: fontSize.caption, color: tk.errorText, flexShrink: 0 }}
             >
               嵌入失败
@@ -881,7 +881,7 @@ export function FoldersTab({
         </div>
       )}
 
-      <Notice tk={tk} msg={msg} />
+      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
       {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击左上角「新建文件夹」开始整理</EmptyState>}
       {tree.length > 0 && (

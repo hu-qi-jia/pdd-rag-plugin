@@ -71,6 +71,12 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   cursor: pointer; position: relative;
 }
 
+/* ── 开关焦点环:仅键盘聚焦时显现(Toggle 键盘可达,2026-09-15 设计6)── */
+.pddcs-switch:focus-visible {
+  outline: 2px solid var(--pddcs-accent);
+  outline-offset: 2px;
+}
+
 /* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
 .pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }
 .pddcs-row:hover .pddcs-row-ops,
@@ -142,6 +148,7 @@ function App() {
   // 令牌 → CSS 变量的桥(静态 CSS 无法直接读 React 令牌)
   const cssVars = {
     '--pddcs-scroll-thumb': tk.scrollThumb,
+    '--pddcs-accent': tk.accent,
   } as React.CSSProperties
 
   return (
@@ -182,6 +189,23 @@ function App() {
             onClick={() => setTab(id)}
             title={label}
           >
+            {/* 激活指示:2px 左侧短指示条,不画背景块(2026-09-15 设计5;
+                激活态原先仅颜色+描边粗细,几乎不可辨) */}
+            {tab === id && (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: -8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 2,
+                  height: 14,
+                  borderRadius: 1,
+                  backgroundColor: tk.text,
+                }}
+              />
+            )}
             <Icon size={18} strokeWidth={tab === id ? 2.4 : 1.8} />
           </button>
         ))}

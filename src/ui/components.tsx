@@ -5,6 +5,7 @@
  * 原则:颜色一律来自 ThemeTokens,几何一律来自 design.ts;页面不得自带样式实现。
  */
 import type React from 'react'
+import { useEffect } from 'react'
 import type { ThemeTokens } from './theme'
 import { fontSize, fontWeight, radius, spacing, semantic, motion, size } from './design'
 import { SearchIcon } from './icons'
@@ -43,6 +44,13 @@ export function Btn({
       : isGhost
         ? 'transparent'
         : tk.btnBg
+  // 悬浮底色(2026-09-15 设计6:四种变体全部有悬浮反馈):
+  // primary 再亮一档、danger 红底加深一档、ghost/default 面色提亮一档
+  const hoverBg = isPrimary
+    ? tk.btnPrimaryHover
+    : isDanger
+      ? tk.errorHoverBg
+      : tk.btnHoverBg
   return (
     <button
       type="button"
@@ -57,8 +65,7 @@ export function Btn({
       }}
       onMouseEnter={(e) => {
         if (disabled) return
-        if (isPrimary) e.currentTarget.style.backgroundColor = tk.btnPrimaryHover
-        else if (!isGhost && !isDanger) e.currentTarget.style.backgroundColor = tk.btnHoverBg
+        e.currentTarget.style.backgroundColor = hoverBg
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = bg
@@ -73,7 +80,24 @@ export function Btn({
 
 export type NoticeMsg = { ok: boolean; text: string } | null
 
-export function Notice({ tk, msg }: { tk: ThemeTokens; msg: NoticeMsg }) {
+/** 成功提示自动消失时长(2026-09-15 PM6:拖滑杆连弹"已保存"永不消失、推挤布局);失败提示常驻 */
+export const NOTICE_OK_AUTO_DISMISS_MS = 4000
+
+export function Notice({
+  tk,
+  msg,
+  onDismiss,
+}: {
+  tk: ThemeTokens
+  msg: NoticeMsg
+  /** 传入后成功提示到时回调一次(父级清 state);失败提示不自动消失 */
+  onDismiss?: () => void
+}) {
+  useEffect(() => {
+    if (!msg?.ok || !onDismiss) return
+    const t = window.setTimeout(onDismiss, NOTICE_OK_AUTO_DISMISS_MS)
+    return () => window.clearTimeout(t)
+  }, [msg, onDismiss])
   if (!msg) return null
   return (
     // 吸附在滚动区顶部:列表很长时提示不再被顶出视口(2026-09-15 用户反馈
@@ -276,7 +300,19 @@ export function Toggle({
       <span
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         title={label}
+        tabIndex={0}
+        className="pddcs-switch"
+        onKeyDown={(e) => {
+          // 键盘可达(2026-09-15 设计6):Enter/Space 切换,Space 阻断页面滚动;
+          // 不冒泡,避免外层 label 的 onClick 再次翻转
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            onChange(!checked)
+          }
+        }}
         style={{
           width: size.toggleWidth,
           height: size.toggleHeight,
@@ -285,6 +321,7 @@ export function Toggle({
           marginTop: 2,
           position: 'relative',
           transition: `background-color ${motion.normal}`,
+          cursor: 'pointer',
           // 选中态用 accent 而非 tk.text:黑白反转在深色主题下会变成"白轨道 + 白圆点",
           // 圆点直接消失(2026-09-15 用户反馈"暗色下是白色")
           backgroundColor: checked ? tk.accent : tk.inputBorder,

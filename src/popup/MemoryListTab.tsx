@@ -41,9 +41,8 @@ export function MemoryListTab({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
-  // 「设置标准回答」的行内即时反馈:请求中 / 本会话已设置成功的回复行
+  // 「设置标准回答」的行内即时反馈:请求中
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
-  const [goldenReplyIds, setGoldenReplyIds] = useState<ReadonlySet<string>>(new Set())
 
   const load = useCallback(async () => {
     try {
@@ -67,14 +66,13 @@ export function MemoryListTab({
   const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
   const now = Date.now()
 
-  /** 标记某条回复已成功设为标准回答(本次会话内保持成功态) */
-  const setGoldenDone = (replyId: string) => {
-    setGoldenReplyIds((prev) => {
-      const next = new Set(prev)
-      next.add(replyId)
-      return next
-    })
-  }
+  // 持久金标徽标(2026-09-15 PM1):从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId
+  // 回带 goldenId),不再是会话级 state —— 重开 popup、于文件夹页取消后都如实反映库内状态
+  const goldenReplyIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const it of items) for (const r of it.replies) if (r.goldenId) s.add(r.id)
+    return s
+  }, [items])
 
   /**
    * 设为标准回答。
@@ -117,7 +115,8 @@ export function MemoryListTab({
               text: `已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''},后台将自动向量化`,
             },
       )
-      setGoldenDone(replyId)
+      // 库内已写入 sourceReplyId → 重新拉取列表,徽标由数据派生持久生效
+      await load()
       await onDataChanged()
     } catch (err) {
       setMsg({ ok: false, text: `设置标准回答失败:${String(err)}` })
@@ -149,7 +148,7 @@ export function MemoryListTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
 
-      <Notice tk={tk} msg={msg} />
+      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
       {loading && <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>}
       {!loading && shown.length === 0 && (
@@ -284,7 +283,7 @@ export function MemoryListTab({
                     </div>
                     {goldenReplyIds.has(r.id) ? (
                       <span
-                        title="本次会话已将该回复设为标准回答"
+                        title="该回复已设为标准回答;可在文件夹页取消"
                         style={{
                           height: controlH.form,
                           display: 'inline-flex',

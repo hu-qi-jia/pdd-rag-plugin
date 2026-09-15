@@ -146,14 +146,14 @@ export function SettingsTab({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
         <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>
-        <Notice tk={tk} msg={msg} />
+        <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
       </div>
     )
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
-      <Notice tk={tk} msg={msg} />
+      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
       <Card tk={tk} title="检索与填充(改动即时生效)">
         <Toggle

@@ -1,12 +1,12 @@
 import type { ThemeMode } from './theme-context'
 
 /**
- * 设计令牌 — 对齐 Figma 官网(figma.com)配色体系。
+ * 设计令牌 — 对齐 Figma 编辑器工具界面配色(与 pddddd 控制台同一体系)。
  *
- * 原则(取自 Figma 设计语言):
- *  - 白画布 + 浅灰表面(#F5F5F5)+ 细边框(#E6E6E6),层级靠明度与字重;
- *  - 唯一强调色 Figma 蓝(#0D99FF),只用于主操作、焦点与品牌时刻;
- *  - 深色主题对齐 Figma dark UI(#1E1F21 画布 / #2C2C2C 表面),蓝提亮保证对比。
+ * 原则:
+ *  - 中性灰画布(#F5F5F5)+ 白色面板,1px 细边框(#E5E5E5),层级靠明度与字重;
+ *  - 黑白主色:主操作黑底白字(#161616),Figma 蓝(#0D99FF)只做焦点、品牌与状态;
+ *  - 深色主题反转主按钮(白底黑字),表面 #2C2C2C,蓝提亮保证对比。
  */
 export interface ThemeTokens {
   bg: string
@@ -35,35 +35,35 @@ export interface ThemeTokens {
   shadow: string
 }
 
-/** 浅色 — Figma 官网:画布纯白,表面 #F5F5F5,描边 #E6E6E6,主操作 Figma 蓝底白字 */
+/** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作黑底白字 */
 export const lightTheme: ThemeTokens = {
   bg: '#ffffff',
-  bgSecondary: '#f5f5f5',
-  bgCard: '#f5f5f5',
-  text: '#1e1f21',
-  textMuted: '#575b66',
-  textTertiary: '#8a8d91',
-  border: '#e6e6e6',
-  borderLight: '#f0f0f0',
-  separator: '#e6e6e6',
+  bgSecondary: '#fafafa',
+  bgCard: '#ffffff',
+  text: '#161616',
+  textMuted: '#5c5c5c',
+  textTertiary: '#8c8c8c',
+  border: '#e5e5e5',
+  borderLight: '#efefef',
+  separator: '#e5e5e5',
   accent: '#0d99ff',
   accentHover: '#0b87e0',
   btnBg: '#ffffff',
-  btnBorder: '#e6e6e6',
-  btnHoverBg: '#f5f5f5',
-  btnPrimaryBg: '#0d99ff',
-  btnPrimaryHover: '#0b87e0',
+  btnBorder: '#d4d4d4',
+  btnHoverBg: '#fafafa',
+  btnPrimaryBg: '#161616',
+  btnPrimaryHover: '#333333',
   btnPrimaryText: '#ffffff',
-  successBg: 'rgba(20,174,92,0.10)',
-  successText: '#0e8a50',
-  errorBg: 'rgba(242,72,34,0.10)',
-  errorText: '#d93511',
+  successBg: 'rgba(20,174,92,0.09)',
+  successText: '#14ae5c',
+  errorBg: '#fef1ee',
+  errorText: '#f24822',
   inputBg: '#ffffff',
-  inputBorder: '#e6e6e6',
-  shadow: '0 8px 24px rgba(30,31,33,0.10), 0 2px 6px rgba(30,31,33,0.05)',
+  inputBorder: '#d4d4d4',
+  shadow: '0 4px 16px rgba(0,0,0,0.08)',
 }
 
-/** 深色 — Figma dark UI:画布 #1E1F21,表面 #2C2C2C,蓝提亮 #4CB3FF */
+/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮反转为白底黑字(黑白主色逻辑不变) */
 export const darkTheme: ThemeTokens = {
   bg: '#1e1f21',
   bgSecondary: '#1a1b1d',
@@ -79,9 +79,9 @@ export const darkTheme: ThemeTokens = {
   btnBg: '#2c2c2c',
   btnBorder: '#3b3d40',
   btnHoverBg: '#383b3d',
-  btnPrimaryBg: '#0d99ff',
-  btnPrimaryHover: '#2fa9ff',
-  btnPrimaryText: '#ffffff',
+  btnPrimaryBg: '#e6e6e6',
+  btnPrimaryHover: '#ffffff',
+  btnPrimaryText: '#161616',
   successBg: 'rgba(10,207,131,0.14)',
   successText: '#0acf83',
   errorBg: 'rgba(255,114,98,0.14)',

@@ -108,7 +108,7 @@ export function Card({
   return (
     <div
       style={{
-        border: `1px solid ${tk.borderLight}`,
+        border: `1px solid ${tk.border}`,
         borderRadius: radius.lg,
         backgroundColor: tk.bgCard,
         padding: `${spacing.xl + 2}px ${spacing.xxl - 2}px`,
@@ -158,9 +158,9 @@ export function Badge({
         backgroundColor: bg,
         color,
         border: tone === 'neutral' ? `1px solid ${tk.border}` : '1px solid transparent',
-        borderRadius: radius.pill,
+        borderRadius: radius.sm,
         fontSize: fontSize.caption,
-        padding: `2px ${spacing.md + 1}px`,
+        padding: `1px ${spacing.md - 1}px`,
         fontWeight: fontWeight.semibold,
         whiteSpace: 'nowrap',
       }}
@@ -269,7 +269,7 @@ export function Toggle({
           marginTop: 2,
           position: 'relative',
           transition: `background-color ${motion.normal}`,
-          backgroundColor: checked ? tk.accent : tk.inputBorder,
+          backgroundColor: checked ? tk.text : tk.inputBorder,
         }}
       >
         <span

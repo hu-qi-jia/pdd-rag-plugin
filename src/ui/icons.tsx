@@ -10,6 +10,7 @@ export {
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   FolderPlus as FolderPlusIcon,
+  FolderInput as FolderInputIcon,
   List as ListIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,

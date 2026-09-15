@@ -1,9 +1,9 @@
 /**
- * Popup — Figma 官网风格正式面板
+ * Popup — Figma 编辑器工具风面板(对齐 pddddd 控制台设计语言)
  *
  * 布局:左侧 52px 图标导航栏 + 右侧内容区。
  * 四页签(设计文档 §7)与全部功能不变:记忆列表 / 回复文件夹 / 知识库 / 设置。
- * 视觉:Figma 设计令牌 —— 白画布浅灰表面、胶囊控件、唯一强调色 Figma 蓝。
+ * 视觉:工具风设计令牌 —— 白面板细边框、小圆角(6px 控件)、黑白主色。
  */
 
 import React, { useCallback, useEffect, useState } from 'react'
@@ -35,11 +35,11 @@ const RESET_CSS = `
 html, body { margin: 0; padding: 0; background: transparent !important; }
 * { box-sizing: border-box; }
 
-/* ── 胶囊按钮(ChatGPT 操作按钮)────────────────────────── */
+/* ── 按钮(工具风直角控件)───────────────────────────── */
 .pddcs-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  padding: 4px 12px; border-radius: 9999px; border: 1px solid;
-  font-size: 11.5px; font-weight: 500; line-height: 1.5;
+  padding: 3px 12px; border-radius: 6px; border: 1px solid;
+  font-size: 12px; font-weight: 500; line-height: 1.5;
   cursor: pointer; white-space: nowrap; font-family: inherit;
   transition: background-color .12s ease, border-color .12s ease, opacity .12s ease;
 }
@@ -47,12 +47,12 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
 
 /* ── 输入框(focus 时描边提亮,无重投影)────────────────── */
 .pddcs-input {
-  width: 100%; padding: 7px 12px; border-radius: 12px; border: 1px solid;
+  width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid;
   font-size: 12px; outline: none; font-family: inherit; line-height: 1.5;
   transition: border-color .12s ease;
 }
 
-/* ── 滚动条:细、悬浮才出现(ChatGPT 同款)──────────────── */
+/* ── 滚动条:细、悬浮才出现 ──────────────────────────── */
 .pddcs-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 .pddcs-scroll:hover { scrollbar-color: rgba(0,0,0,.14) transparent; }
 .pddcs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -64,10 +64,15 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
 
 /* ── 导航图标按钮:悬浮浅灰圆角块 ───────────────────────── */
 .pddcs-rail-btn {
-  width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
+  width: 36px; height: 36px; padding: 0; border: none; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; position: relative; transition: background-color .12s ease;
 }
+
+/* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
+.pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }
+.pddcs-row:hover .pddcs-row-ops,
+.pddcs-row:focus-within .pddcs-row-ops { opacity: 1; }
 `
 
 type TabId = 'memory' | 'folders' | 'knowledge' | 'settings'

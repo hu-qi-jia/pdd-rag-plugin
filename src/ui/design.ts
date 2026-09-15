@@ -1,18 +1,18 @@
 /**
  * 设计规范(Design Tokens)— 本扩展唯一视觉真源
  *
- * 参照 Figma 官网(figma.com)设计语言:
- *  - 白画布 + 浅灰表面,细边框分隔,层级靠明度差与字重;
- *  - 唯一强调色 Figma 蓝(#0D99FF),只出现在状态与主操作;
- *  - 胶囊控件、大圆角卡片、克制的层级字号;字体 Inter 优先(离线回退系统字体)。
+ * 参照 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言):
+ *  - 中性灰画布 + 白色面板,1px 细边框分隔,层级靠明度差与字重;
+ *  - 黑白主色:主操作黑底白字,Figma 蓝(#0D99FF)只做焦点、品牌与状态;
+ *  - 小圆角(4/6/8px)、小字号高密度、克制阴影。
  *
  * 任何页面/组件不得硬编码字号、圆角、间距、颜色,一律引用本文件与 theme.ts。
  * 配色令牌见 theme.ts(ThemeTokens),本文件负责几何与字型。
  */
 
-// ── 字体栈 — Figma 官网同款 Inter 优先;不联网加载字体,缺 Inter 时回退系统字体 ──
+// ── 字体栈 — Segoe UI / 雅黑优先(Windows 控制台同款);不联网加载字体 ──
 export const fontFamily =
-  '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif'
+  '"Segoe UI", "Microsoft YaHei", -apple-system, "PingFang SC", sans-serif'
 
 // ── 字号(px)— 三层信息层级 + 辅助 ──────────────────────────────────────────
 export const fontSize = {
@@ -37,17 +37,17 @@ export const fontWeight = {
   heading: 650,
 } as const
 
-// ── 圆角(px)— 胶囊控件优先,卡片大圆角 ────────────────────────────────────
+// ── 圆角(px)— 小圆角工具风(4/6/8),胶囊仅保留给开关与圆点 ────────────────
 export const radius = {
-  /** 微型元素:徽标内嵌图标块 */
-  sm: 8,
-  /** 输入框、提示条 */
-  md: 12,
-  /** 卡片 */
-  lg: 14,
+  /** 微型元素:徽标、图标按钮、行悬浮块 */
+  sm: 4,
+  /** 按钮、输入框、提示条 */
+  md: 6,
+  /** 卡片 / 分区 */
+  lg: 8,
   /** 弹窗 / popup 外框 */
-  xl: 16,
-  /** 胶囊按钮、徽标、开关 */
+  xl: 8,
+  /** 拨杆开关、圆形计数徽标、圆点 */
   pill: 9999,
 } as const
 
@@ -83,8 +83,8 @@ export const motion = {
 
 // ── 语义色(与主题无关的固定色,仅用于徽标等品牌时刻)─────────────────────
 export const semantic = {
-  golden: '#b45309',
-  goldenBg: 'rgba(245,158,11,0.15)',
-  knowledge: '#0e8a50',
-  knowledgeBg: 'rgba(20,174,92,0.12)',
+  golden: '#b8860b',
+  goldenBg: '#fdf6e3',
+  knowledge: '#14ae5c',
+  knowledgeBg: 'rgba(20,174,92,0.09)',
 } as const

@@ -20,7 +20,7 @@ import {
   mergeBuyerQuery,
   type UiAction,
 } from '../utils/pddUiLogic'
-import { fontFamily, fontSize, radius } from '../ui/design'
+import { fontFamily, fontSize, radius, semantic } from '../ui/design'
 import { lightTheme as tk } from '../ui/theme'
 
 export const config: PlasmoCSConfig = {
@@ -43,56 +43,56 @@ const CSS = `
 #${OVERLAY_ID} { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
   font-family: ${fontFamily}; }
 
-/* AI回复胶囊按钮 — Figma 官网控件风格(紧跟买家气泡右侧;纯文字、20px 高) */
-.pddcs-ai-btn { position: fixed; height: 20px; border-radius: 9999px; border: 1px solid ${tk.btnBorder};
+/* AI回复按钮 — 工具风小控件(紧跟买家气泡右侧;纯文字、20px 高、4px 圆角) */
+.pddcs-ai-btn { position: fixed; height: 20px; border-radius: ${radius.sm}px; border: 1px solid ${tk.btnBorder};
   cursor: pointer; pointer-events: auto; padding: 0 10px; display: inline-flex; align-items: center;
   background: ${tk.btnBg}; color: ${tk.textMuted}; font-size: ${fontSize.secondary}px; font-weight: 500; line-height: 1;
-  letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(30,31,33,0.06);
+  letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
-.pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: #d9d9d9; }
+.pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: ${tk.textTertiary}; }
 .pddcs-ai-btn:active { background: ${tk.border}; }
 .pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
 
-/* 候选弹窗 — Figma 浮层卡片风格 */
+/* 候选弹窗 — 工具风浮层卡片 */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: 62vh; overflow: auto;
   pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
-  box-shadow: 0 12px 40px rgba(30,31,33,0.16), 0 2px 8px rgba(30,31,33,0.08);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
   font-size: ${fontSize.body}px; color: ${tk.text}; }
 .pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
   border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.title}px; position: sticky; top: 0;
   background: ${tk.bg}; letter-spacing: -0.01em; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
-  width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center;
+  width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
   justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
 .pddcs-popup-close:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
 .pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
   transition: background-color .1s ease; }
 .pddcs-cand:hover { background: ${tk.btnHoverBg}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.pddcs-badge { display: inline-flex; align-items: center; border-radius: 9999px;
-  font-size: 10px; font-weight: 600; padding: 2px 8px; }
-.pddcs-badge.golden { background: rgba(245,158,11,0.15); color: #b45309; }
-.pddcs-badge.knowledge { background: rgba(20,174,92,0.12); color: #0e8a50; }
+.pddcs-badge { display: inline-flex; align-items: center; border-radius: ${radius.sm}px;
+  font-size: 10px; font-weight: 600; padding: 2px 7px; }
+.pddcs-badge.golden { background: ${semantic.goldenBg}; color: ${semantic.golden}; }
+.pddcs-badge.knowledge { background: ${semantic.knowledgeBg}; color: ${semantic.knowledge}; }
 .pddcs-badge.history { background: ${tk.bgCard}; color: ${tk.textMuted}; border: 1px solid ${tk.border}; }
 .pddcs-score { color: ${tk.textTertiary}; font-size: 10px; font-variant-numeric: tabular-nums; }
 .pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
 .pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
-.pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: 9999px;
-  cursor: pointer; font-size: 10.5px; padding: 2px 9px; color: ${tk.textMuted}; font-weight: 500;
+.pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: ${radius.sm}px;
+  cursor: pointer; font-size: 10.5px; padding: 2px 8px; color: ${tk.textMuted}; font-weight: 500;
   transition: background-color .1s ease, color .1s ease; }
-.pddcs-mini:hover { background: ${tk.border}; color: ${tk.text}; }
+.pddcs-mini:hover { background: ${tk.borderLight}; color: ${tk.text}; }
 .pddcs-cand-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: 11px; }
 
-/* 轻提示 — 胶囊式 toast(Figma 近黑) */
+/* 轻提示 — 近黑 toast */
 .pddcs-toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-  pointer-events: auto; background: rgba(30,31,33,.92); color: #fff; font-size: ${fontSize.body}px;
-  padding: 8px 16px; border-radius: 9999px; opacity: 0; transition: opacity .2s;
-  max-width: 60vw; z-index: 2147483001; box-shadow: 0 4px 16px rgba(30,31,33,0.20); }
+  pointer-events: auto; background: rgba(22,22,22,.92); color: #fff; font-size: ${fontSize.body}px;
+  padding: 8px 16px; border-radius: ${radius.md}px; opacity: 0; transition: opacity .2s;
+  max-width: 60vw; z-index: 2147483001; box-shadow: 0 4px 16px rgba(0,0,0,0.20); }
 .pddcs-toast.show { opacity: 1; }
 `
 

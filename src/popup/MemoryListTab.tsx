@@ -12,6 +12,7 @@ import type {
   MemoryListItem,
 } from '../types/messages'
 import { filterQaRecords, remainingDays } from '../utils/panelLogic'
+import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
 import {
   Btn,
   Card,
@@ -21,8 +22,8 @@ import {
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, fontWeight, spacing } from '../ui/design'
-import { CheckIcon } from '../ui/icons'
+import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
+import { CheckIcon, ChevronDownIcon } from '../ui/icons'
 
 export function MemoryListTab({
   tk,
@@ -101,10 +102,20 @@ export function MemoryListTab({
         setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
         return
       }
+      if (p.limitReached) {
+        setMsg({
+          ok: false,
+          text: `该问题已有 ${p.count} 条标准回答(上限 ${MAX_GOLDENS_PER_QUESTION} 条),请先在文件夹页取消一条`,
+        })
+        return
+      }
       setMsg(
         p.exists
-          ? { ok: true, text: '该问题的标准回答已存在,未重复创建' }
-          : { ok: true, text: '已设为标准回答,后台将自动向量化' },
+          ? { ok: true, text: '该回复已是该问题的标准回答,未重复创建' }
+          : {
+              ok: true,
+              text: `已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''},后台将自动向量化`,
+            },
       )
       setGoldenDone(replyId)
       await onDataChanged()
@@ -158,43 +169,94 @@ export function MemoryListTab({
       {shown.map((item) => {
         const days = remainingDays(item.questionTs, now, retentionDays)
         const expanded = !collapsedIds.has(item.id)
+        const toggle = () =>
+          setCollapsedIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(item.id)) next.delete(item.id)
+            else next.add(item.id)
+            return next
+          })
         return (
           <Card key={item.id} tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: 0 }}>
-            {/* 问题行 */}
-            <div
-              onClick={() =>
-                setCollapsedIds((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(item.id)) next.delete(item.id)
-                  else next.add(item.id)
-                  return next
-                })
-              }
-              style={{ cursor: 'pointer' }}
-            >
-              <div
+            {/* 问题行:左侧折叠按钮(整行也可点)+ 问题与元信息 */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.sm }}>
+              <button
+                type="button"
+                title={expanded ? '折叠该问题' : '展开该问题'}
+                aria-expanded={expanded}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggle()
+                }}
                 style={{
-                  fontSize: fontSize.body,
-                  fontWeight: fontWeight.semibold,
-                  lineHeight: 1.45,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  wordBreak: 'break-word',
+                  flexShrink: 0,
+                  width: controlH.inline,
+                  height: controlH.inline,
+                  marginTop: 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: radius.sm,
+                  backgroundColor: 'transparent',
+                  color: tk.textTertiary,
+                  cursor: 'pointer',
+                  transition: `background-color ${motion.fast}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = tk.btnHoverBg
+                  e.currentTarget.style.color = tk.text
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                  e.currentTarget.style.color = tk.textTertiary
                 }}
               >
-                {item.question}
-              </div>
-              <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
-                <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    transform: expanded ? 'none' : 'rotate(-90deg)',
+                    transition: `transform ${motion.fast}`,
+                  }}
+                >
+                  <ChevronDownIcon size={13} strokeWidth={2.2} />
+                </span>
+              </button>
+
+              <div onClick={toggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                <div
+                  style={{
+                    fontSize: fontSize.body,
+                    fontWeight: fontWeight.semibold,
+                    lineHeight: 1.45,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {item.question}
+                </div>
+                <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
+                  <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
+                </div>
               </div>
             </div>
 
             {/* 展开区:回复列表 */}
             {expanded && (
-              <div style={{ marginTop: spacing.md, display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div
+                style={{
+                  marginTop: spacing.md,
+                  marginLeft: controlH.inline + spacing.sm,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: spacing.md,
+                }}
+              >
                 {item.replies.length === 0 && (
                   <div style={{ fontSize: fontSize.secondary, color: tk.textTertiary }}>无回复(未结段)</div>
                 )}

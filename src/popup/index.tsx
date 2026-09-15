@@ -1,15 +1,15 @@
 /**
- * Popup — Codex 风格正式面板
+ * Popup — Figma 官网风格正式面板
  *
- * 布局:左侧 52px 图标导航栏(Codex app 同款)+ 右侧内容区。
+ * 布局:左侧 52px 图标导航栏 + 右侧内容区。
  * 四页签(设计文档 §7)与全部功能不变:记忆列表 / 回复文件夹 / 知识库 / 设置。
- * 视觉:ChatGPT 设计令牌 —— 表面靠明度分层、胶囊控件、单强调色。
+ * 视觉:Figma 设计令牌 —— 白画布浅灰表面、胶囊控件、唯一强调色 Figma 蓝。
  */
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
-import { fontSize, fontWeight, radius, size, spacing } from '../ui/design'
+import { fontFamily, fontSize, fontWeight, radius, size, spacing } from '../ui/design'
 import {
   AiSparkIcon,
   BookOpenIcon,
@@ -120,8 +120,7 @@ function App() {
         overflow: 'hidden',
         borderRadius: radius.xl,
         boxShadow: tk.shadow,
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Microsoft YaHei", sans-serif',
+        fontFamily,
         backgroundColor: tk.bg,
         color: tk.text,
       }}

@@ -1,12 +1,12 @@
 import type { ThemeMode } from './theme-context'
 
 /**
- * 设计令牌 — 对齐 ChatGPT / Codex 官方配色体系。
+ * 设计令牌 — 对齐 Figma 官网(figma.com)配色体系。
  *
- * 原则(取自 ChatGPT 设计系统):
- *  - 表面靠"明度差"分层而非硬边框(浅:#FFF→#F7F7F8→#ECECEC;深:#212121→#2F2F2F→#303030);
- *  - 近乎单色,唯一强调色 emerald(#10A37F / #19C37D)只用于状态与主操作;
- *  - 界面保持 <15% 视觉噪音,层级靠字重与字号,不靠容器描边。
+ * 原则(取自 Figma 设计语言):
+ *  - 白画布 + 浅灰表面(#F5F5F5)+ 细边框(#E6E6E6),层级靠明度与字重;
+ *  - 唯一强调色 Figma 蓝(#0D99FF),只用于主操作、焦点与品牌时刻;
+ *  - 深色主题对齐 Figma dark UI(#1E1F21 画布 / #2C2C2C 表面),蓝提亮保证对比。
  */
 export interface ThemeTokens {
   bg: string
@@ -35,59 +35,59 @@ export interface ThemeTokens {
   shadow: string
 }
 
-/** 浅色 — ChatGPT light:画布纯白,卡片 #F7F7F8,描边 #ECECEC,主操作黑底白字 */
+/** 浅色 — Figma 官网:画布纯白,表面 #F5F5F5,描边 #E6E6E6,主操作 Figma 蓝底白字 */
 export const lightTheme: ThemeTokens = {
   bg: '#ffffff',
-  bgSecondary: '#f9f9f9',
-  bgCard: '#f7f7f8',
-  text: '#0d0d0d',
-  textMuted: '#5d5d5d',
-  textTertiary: '#8e8e8e',
-  border: '#ececec',
+  bgSecondary: '#f5f5f5',
+  bgCard: '#f5f5f5',
+  text: '#1e1f21',
+  textMuted: '#575b66',
+  textTertiary: '#8a8d91',
+  border: '#e6e6e6',
   borderLight: '#f0f0f0',
-  separator: '#ececec',
-  accent: '#10a37f',
-  accentHover: '#0d8a6c',
+  separator: '#e6e6e6',
+  accent: '#0d99ff',
+  accentHover: '#0b87e0',
   btnBg: '#ffffff',
-  btnBorder: '#ececec',
-  btnHoverBg: '#f7f7f8',
-  btnPrimaryBg: '#0d0d0d',
-  btnPrimaryHover: '#2f2f2f',
+  btnBorder: '#e6e6e6',
+  btnHoverBg: '#f5f5f5',
+  btnPrimaryBg: '#0d99ff',
+  btnPrimaryHover: '#0b87e0',
   btnPrimaryText: '#ffffff',
-  successBg: 'rgba(16,163,127,0.10)',
-  successText: '#0d8a6c',
-  errorBg: 'rgba(237,78,76,0.10)',
-  errorText: '#d93a35',
+  successBg: 'rgba(20,174,92,0.10)',
+  successText: '#0e8a50',
+  errorBg: 'rgba(242,72,34,0.10)',
+  errorText: '#d93511',
   inputBg: '#ffffff',
-  inputBorder: '#ececec',
-  shadow: '0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05)',
+  inputBorder: '#e6e6e6',
+  shadow: '0 8px 24px rgba(30,31,33,0.10), 0 2px 6px rgba(30,31,33,0.05)',
 }
 
-/** 深色 — ChatGPT dark:画布 #212121,表面 #2F2F2F,浮层 #303030,主操作白底黑字 */
+/** 深色 — Figma dark UI:画布 #1E1F21,表面 #2C2C2C,蓝提亮 #4CB3FF */
 export const darkTheme: ThemeTokens = {
-  bg: '#212121',
-  bgSecondary: '#1a1a1a',
-  bgCard: '#2f2f2f',
-  text: '#ececec',
-  textMuted: '#b4b4b4',
-  textTertiary: '#8e8e8e',
-  border: '#3a3a3a',
+  bg: '#1e1f21',
+  bgSecondary: '#1a1b1d',
+  bgCard: '#2c2c2c',
+  text: '#e6e6e6',
+  textMuted: '#9b9da2',
+  textTertiary: '#6f7175',
+  border: '#3b3d40',
   borderLight: 'rgba(255,255,255,0.06)',
   separator: 'rgba(255,255,255,0.10)',
-  accent: '#19c37d',
-  accentHover: '#1ad586',
-  btnBg: '#303030',
-  btnBorder: '#3a3a3a',
-  btnHoverBg: '#3a3a3a',
-  btnPrimaryBg: '#ffffff',
-  btnPrimaryHover: '#e0e0e0',
-  btnPrimaryText: '#0d0d0d',
-  successBg: 'rgba(25,195,125,0.14)',
-  successText: '#19c37d',
-  errorBg: 'rgba(255,92,76,0.14)',
-  errorText: '#ff5c4c',
-  inputBg: '#2f2f2f',
-  inputBorder: '#3a3a3a',
+  accent: '#4cb3ff',
+  accentHover: '#6bc4ff',
+  btnBg: '#2c2c2c',
+  btnBorder: '#3b3d40',
+  btnHoverBg: '#383b3d',
+  btnPrimaryBg: '#0d99ff',
+  btnPrimaryHover: '#2fa9ff',
+  btnPrimaryText: '#ffffff',
+  successBg: 'rgba(10,207,131,0.14)',
+  successText: '#0acf83',
+  errorBg: 'rgba(255,114,98,0.14)',
+  errorText: '#ff7262',
+  inputBg: '#2c2c2c',
+  inputBorder: '#3b3d40',
   shadow: '0 12px 40px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.35)',
 }
 

@@ -1,14 +1,18 @@
 /**
  * 设计规范(Design Tokens)— 本扩展唯一视觉真源
  *
- * 参照 ChatGPT / Codex 设计语言:
- *  - 表面靠明度差分层,弱化硬边框;
- *  - 近单色,强调色只出现在状态与主操作;
- *  - 胶囊控件、大圆角卡片、克制的层级字号。
+ * 参照 Figma 官网(figma.com)设计语言:
+ *  - 白画布 + 浅灰表面,细边框分隔,层级靠明度差与字重;
+ *  - 唯一强调色 Figma 蓝(#0D99FF),只出现在状态与主操作;
+ *  - 胶囊控件、大圆角卡片、克制的层级字号;字体 Inter 优先(离线回退系统字体)。
  *
- * 任何页面/组件不得硬编码字号、圆角、间距,一律引用本文件。
+ * 任何页面/组件不得硬编码字号、圆角、间距、颜色,一律引用本文件与 theme.ts。
  * 配色令牌见 theme.ts(ThemeTokens),本文件负责几何与字型。
  */
+
+// ── 字体栈 — Figma 官网同款 Inter 优先;不联网加载字体,缺 Inter 时回退系统字体 ──
+export const fontFamily =
+  '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif'
 
 // ── 字号(px)— 三层信息层级 + 辅助 ──────────────────────────────────────────
 export const fontSize = {
@@ -81,6 +85,6 @@ export const motion = {
 export const semantic = {
   golden: '#b45309',
   goldenBg: 'rgba(245,158,11,0.15)',
-  knowledge: '#0d8a6c',
-  knowledgeBg: 'rgba(16,163,127,0.12)',
+  knowledge: '#0e8a50',
+  knowledgeBg: 'rgba(20,174,92,0.12)',
 } as const

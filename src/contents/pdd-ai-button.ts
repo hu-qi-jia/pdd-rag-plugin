@@ -2,7 +2,7 @@
  * PDD 聊天工作台 —— AI 回复按钮 + 候选弹窗 + 直填(ISOLATED,P2-4)
  *
  * 交互(设计文档 §6.3):
- *  - 每条可见买家文本气泡右侧紧跟「AI回复」胶囊按钮(ChatGPT 消息操作按钮风格)
+ *  - 每条可见买家文本气泡右侧紧跟「AI回复」胶囊按钮(Figma 官网控件风格)
  *  - 点击 → 合并该行向上连续买家文本为 query → SW GET_SUGGESTIONS
  *  - 状态机:无候选提示 / 单候选或直填开关开 → 直填 / 多候选弹窗 top-3
  *  - 弹窗:金标准徽标+置顶、得分、同内容×n、原始问题摘要、设为金标准、仅复制
@@ -20,6 +20,8 @@ import {
   mergeBuyerQuery,
   type UiAction,
 } from '../utils/pddUiLogic'
+import { fontFamily, fontSize, radius } from '../ui/design'
+import { lightTheme as tk } from '../ui/theme'
 
 export const config: PlasmoCSConfig = {
   matches: ['https://mms.pinduoduo.com/chat-merchant/*'],
@@ -39,62 +41,61 @@ const POPUP_W = 340
 
 const CSS = `
 #${OVERLAY_ID} { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    "Microsoft YaHei", sans-serif; }
+  font-family: ${fontFamily}; }
 
-/* AI回复胶囊按钮 — ChatGPT 消息操作按钮风格(紧跟买家气泡右侧) */
-.pddcs-ai-btn { position: fixed; height: 26px; border-radius: 9999px; border: 1px solid #ececec;
+/* AI回复胶囊按钮 — Figma 官网控件风格(紧跟买家气泡右侧) */
+.pddcs-ai-btn { position: fixed; height: 26px; border-radius: 9999px; border: 1px solid ${tk.btnBorder};
   cursor: pointer; pointer-events: auto; padding: 0 11px; display: inline-flex; align-items: center;
-  gap: 5px; background: #fff; color: #5d5d5d; font-size: 11.5px; font-weight: 500; line-height: 1;
-  letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  gap: 5px; background: ${tk.btnBg}; color: ${tk.textMuted}; font-size: ${fontSize.body}px; font-weight: 500; line-height: 1;
+  letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(30,31,33,0.06);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
-.pddcs-ai-btn:hover { background: #f7f7f8; color: #0d0d0d; border-color: #d9d9e3; }
-.pddcs-ai-btn:active { background: #ececec; }
-.pddcs-ai-btn svg { flex-shrink: 0; color: #10a37f; }
+.pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: #d9d9d9; }
+.pddcs-ai-btn:active { background: ${tk.border}; }
+.pddcs-ai-btn svg { flex-shrink: 0; color: ${tk.accent}; }
 .pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
 @keyframes pddcs-spin { to { transform: rotate(360deg); } }
 .pddcs-ai-btn.pddcs-loading svg { animation: pddcs-spin .8s linear infinite; }
 
-/* 候选弹窗 — ChatGPT 卡片风格 */
+/* 候选弹窗 — Figma 浮层卡片风格 */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: 62vh; overflow: auto;
-  pointer-events: auto; background: #fff; border: 1px solid #ececec; border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
-  font-size: 12.5px; color: #0d0d0d; }
+  pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
+  box-shadow: 0 12px 40px rgba(30,31,33,0.16), 0 2px 8px rgba(30,31,33,0.08);
+  font-size: ${fontSize.body}px; color: ${tk.text}; }
 .pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
-  border-bottom: 1px solid #f0f0f0; font-weight: 600; font-size: 13px; position: sticky; top: 0;
-  background: #fff; letter-spacing: -0.01em; }
+  border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.title}px; position: sticky; top: 0;
+  background: ${tk.bg}; letter-spacing: -0.01em; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
   width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center;
-  justify-content: center; color: #8e8e8e; font-size: 15px; transition: background-color .12s ease; }
-.pddcs-popup-close:hover { background: #f7f7f8; color: #0d0d0d; }
-.pddcs-cand { padding: 10px 14px; border-bottom: 1px solid #f5f5f5; cursor: pointer;
+  justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
+.pddcs-popup-close:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
+.pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
   transition: background-color .1s ease; }
-.pddcs-cand:hover { background: #f7f7f8; }
+.pddcs-cand:hover { background: ${tk.btnHoverBg}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .pddcs-badge { display: inline-flex; align-items: center; border-radius: 9999px;
   font-size: 10px; font-weight: 600; padding: 2px 8px; }
 .pddcs-badge.golden { background: rgba(245,158,11,0.15); color: #b45309; }
-.pddcs-badge.knowledge { background: rgba(16,163,127,0.12); color: #0d8a6c; }
-.pddcs-badge.history { background: #f7f7f8; color: #5d5d5d; border: 1px solid #ececec; }
-.pddcs-score { color: #8e8e8e; font-size: 10px; font-variant-numeric: tabular-nums; }
-.pddcs-fold { color: #8e8e8e; font-size: 10px; }
+.pddcs-badge.knowledge { background: rgba(20,174,92,0.12); color: #0e8a50; }
+.pddcs-badge.history { background: ${tk.bgCard}; color: ${tk.textMuted}; border: 1px solid ${tk.border}; }
+.pddcs-score { color: ${tk.textTertiary}; font-size: 10px; font-variant-numeric: tabular-nums; }
+.pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
 .pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
 .pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: 9999px;
-  cursor: pointer; font-size: 10.5px; padding: 2px 9px; color: #5d5d5d; font-weight: 500;
+  cursor: pointer; font-size: 10.5px; padding: 2px 9px; color: ${tk.textMuted}; font-weight: 500;
   transition: background-color .1s ease, color .1s ease; }
-.pddcs-mini:hover { background: #ececec; color: #0d0d0d; }
+.pddcs-mini:hover { background: ${tk.border}; color: ${tk.text}; }
 .pddcs-cand-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.pddcs-cand-src { margin-top: 5px; color: #8e8e8e; font-size: 11px;
+.pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pddcs-popup-foot { padding: 8px 14px; color: #8e8e8e; font-size: 11px; }
+.pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: 11px; }
 
-/* 轻提示 — 胶囊式 toast */
+/* 轻提示 — 胶囊式 toast(Figma 近黑) */
 .pddcs-toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-  pointer-events: auto; background: rgba(13,13,13,.92); color: #fff; font-size: 12.5px;
+  pointer-events: auto; background: rgba(30,31,33,.92); color: #fff; font-size: ${fontSize.body}px;
   padding: 8px 16px; border-radius: 9999px; opacity: 0; transition: opacity .2s;
-  max-width: 60vw; z-index: 2147483001; box-shadow: 0 4px 16px rgba(0,0,0,0.16); }
+  max-width: 60vw; z-index: 2147483001; box-shadow: 0 4px 16px rgba(30,31,33,0.20); }
 .pddcs-toast.show { opacity: 1; }
 `
 

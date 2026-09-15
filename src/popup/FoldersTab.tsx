@@ -456,15 +456,17 @@ export function FoldersTab({
 
   // ─── 标准回答行 ────────────────────────────────────────────────────────────────
 
-  const goldenRow = (g: PanelGolden): React.ReactNode => {
+  const goldenRow = (g: PanelGolden, depth = 0): React.ReactNode => {
     const editing = editingId === g.id
     const moving = movingId === g.id
+    /** 内容缩进:与所属文件夹的名字对齐(层级越深越右) */
+    const rowPadLeft = 28 + depth * 12
     if (editing) {
       return (
         <div
           key={g.id}
           style={{
-            padding: `${spacing.md}px 4px`,
+            padding: `${spacing.md}px ${spacing.xl - 2}px ${spacing.sm}px ${rowPadLeft}px`,
             borderBottom: `1px solid ${tk.borderLight}`,
             display: 'flex',
             flexDirection: 'column',
@@ -502,8 +504,15 @@ export function FoldersTab({
         key={g.id}
         className="pddcs-row"
         style={{
-          padding: `${spacing.md}px 4px ${spacing.sm + 2}px`,
+          padding: `${spacing.md}px ${spacing.xl - 2}px ${spacing.sm + 2}px ${rowPadLeft}px`,
           borderBottom: `1px solid ${tk.borderLight}`,
+          transition: `background-color ${motion.fast}`,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = tk.bgSecondary
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'transparent'
         }}
       >
         {/* 问题行:加粗单行 + 同问题条数 + 向量状态 */}
@@ -641,6 +650,11 @@ export function FoldersTab({
         return next
       })
 
+    const isRoot = depth === 0
+    const expanded = !isCollapsed || confirmFolderDelete === f.id
+    const empty = node.goldens.length === 0 && node.children.length === 0
+
+    /** 分区头:根夹为标题栏(常驻浅灰底 + 展开时底边分隔线),子夹为透明行 */
     const header = (
       <div
         className="pddcs-row"
@@ -649,29 +663,31 @@ export function FoldersTab({
           display: 'flex',
           alignItems: 'center',
           gap: spacing.sm,
-          height: depth > 0 ? 26 : 28,
-          padding: '0 4px',
-          borderRadius: radius.sm,
+          height: isRoot ? 32 : 28,
+          padding: isRoot ? '0 8px 0 10px' : '0 8px 0 4px',
+          backgroundColor: isRoot ? tk.bgSecondary : 'transparent',
+          borderBottom: isRoot && expanded ? `1px solid ${tk.borderLight}` : 'none',
           cursor: renamingId === f.id ? 'default' : 'pointer',
+          transition: `background-color ${motion.fast}`,
         }}
         onMouseEnter={(e) => {
           if (renamingId === f.id) return
-          e.currentTarget.style.backgroundColor = tk.bgSecondary
+          e.currentTarget.style.backgroundColor = isRoot ? tk.borderLight : tk.bgSecondary
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent'
+          e.currentTarget.style.backgroundColor = isRoot ? tk.bgSecondary : 'transparent'
         }}
       >
         <span
           style={{
             display: 'inline-flex',
             color: tk.textTertiary,
-            transform: isCollapsed ? 'rotate(-90deg)' : 'none',
+            transform: expanded ? 'none' : 'rotate(-90deg)',
             transition: `transform ${motion.fast}`,
             flexShrink: 0,
           }}
         >
-          <ChevronDownIcon size={12} strokeWidth={2.2} />
+          <ChevronDownIcon size={isRoot ? 13 : 12} strokeWidth={2.2} />
         </span>
         {renamingId === f.id ? (
           <div style={{ flex: 1, display: 'flex', gap: spacing.sm }}>
@@ -698,20 +714,24 @@ export function FoldersTab({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: spacing.xs + 2,
-                fontSize: fontSize.body,
-                fontWeight: depth > 0 ? fontWeight.medium : fontWeight.semibold,
-                color: isUnc ? tk.textMuted : tk.text,
+                fontSize: isRoot ? fontSize.body : fontSize.secondary,
+                fontWeight: isRoot ? fontWeight.semibold : fontWeight.medium,
+                color: isUnc ? tk.textMuted : isRoot ? tk.text : tk.textMuted,
                 minWidth: 0,
                 ...clamp1,
               }}
             >
-              <FolderIcon size={depth > 0 ? 13 : 14} strokeWidth={2} style={{ flexShrink: 0 }} />
+              <FolderIcon
+                size={isRoot ? 14 : 13}
+                strokeWidth={2}
+                style={{ flexShrink: 0, color: isUnc ? tk.textTertiary : tk.textTertiary }}
+              />
               {f.name}
             </span>
             {countPill(count)}
             {opsWrap(
               <>
-                {depth === 0 &&
+                {isRoot &&
                   iconBtn('在此文件夹下新建子文件夹', <FolderPlusIcon size={13} strokeWidth={2} />, () => {
                     setCreateParent(f.id)
                     setNewName('')
@@ -740,39 +760,72 @@ export function FoldersTab({
     const body =
       isCollapsed && confirmFolderDelete !== f.id ? null : (
         <>
-          {createParent === f.id &&
-            inlineForm(
-              '子文件夹名称',
-              newName,
-              setNewName,
-              () => void submitCreate(),
-              () => setCreateParent(null),
-              '创建',
-            )}
-          {confirmFolderDelete === f.id &&
-            confirmRow(
-              '删除该文件夹?其下标准回答将移入「未分类」。',
-              () => void deleteFolder(f.id),
-              () => setConfirmFolderDelete(null),
-            )}
-          {node.goldens.map((g) => goldenRow(g))}
+          {(createParent === f.id || confirmFolderDelete === f.id) && (
+            <div style={{ padding: `6px ${spacing.xl - 2}px 6px ${isRoot ? spacing.xl - 2 : spacing.xl + 2}px` }}>
+              {createParent === f.id &&
+                inlineForm(
+                  '子文件夹名称',
+                  newName,
+                  setNewName,
+                  () => void submitCreate(),
+                  () => setCreateParent(null),
+                  '创建',
+                )}
+              {confirmFolderDelete === f.id &&
+                confirmRow(
+                  '删除该文件夹?其下标准回答将移入「未分类」。',
+                  () => void deleteFolder(f.id),
+                  () => setConfirmFolderDelete(null),
+                )}
+            </div>
+          )}
+          {/* 文件夹优先于内容(资源管理器直觉):子夹排在标准回答之前 */}
           {node.children.map((c) => (
             <div
               key={c.folder.id}
               style={{
-                margin: `${spacing.xs}px 0 0 10px`,
-                paddingLeft: 10,
+                marginLeft: spacing.xl - 2,
+                paddingLeft: spacing.sm,
                 borderLeft: `1px solid ${tk.border}`,
               }}
             >
               {folderSection(c, depth + 1)}
             </div>
           ))}
+          {node.goldens.map((g) => goldenRow(g, depth))}
+          {empty && (
+            <div
+              style={{
+                padding: `10px ${spacing.xl - 2}px 12px ${(isRoot ? 26 : 34) + depth * 0}px`,
+                fontSize: fontSize.caption,
+                color: tk.textTertiary,
+              }}
+            >
+              暂无标准回答
+            </div>
+          )}
         </>
       )
 
+    if (!isRoot) {
+      return (
+        <div>
+          {header}
+          {body}
+        </div>
+      )
+    }
+
+    // 根文件夹 = 一张分区容器:边框 + 圆角把「文件夹」与其内容框在一起
     return (
-      <div>
+      <div
+        style={{
+          border: `1px ${isUnc ? 'dashed' : 'solid'} ${isUnc ? tk.border : tk.border}`,
+          borderRadius: radius.lg,
+          backgroundColor: tk.bg,
+          overflow: 'hidden',
+        }}
+      >
         {header}
         {body}
       </div>
@@ -794,7 +847,7 @@ export function FoldersTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
-      {/* 工具栏:新建根文件夹(靠右,内联新建时让位给表单) */}
+      {/* 工具栏:新建根文件夹(左对齐,与知识库按钮行同款;新建时原位变表单) */}
       {createParent === 'root' ? (
         inlineForm(
           '根文件夹名称',
@@ -805,7 +858,7 @@ export function FoldersTab({
           '创建',
         )
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: spacing.sm }}>
           <button
             type="button"
             onClick={() => {
@@ -817,7 +870,7 @@ export function FoldersTab({
               alignItems: 'center',
               gap: 4,
               height: controlH.form,
-              padding: '0 10px',
+              padding: '0 12px',
               border: `1px solid ${tk.btnBorder}`,
               borderRadius: radius.md,
               backgroundColor: tk.btnBg,
@@ -841,26 +894,17 @@ export function FoldersTab({
 
       <Notice tk={tk} msg={msg} />
 
-      {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击右上角「新建根文件夹」开始整理</EmptyState>}
+      {tree.length === 0 && <EmptyState tk={tk}>暂无文件夹,点击左上角「新建根文件夹」开始整理</EmptyState>}
       {tree.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
           {tree.map((n) => (
-            <div
-              key={n.folder.id}
-              style={{
-                padding: `${spacing.xs}px 0 ${spacing.sm}px`,
-                borderBottom:
-                  n !== tree[tree.length - 1] ? `1px solid ${tk.borderLight}` : 'none',
-              }}
-            >
-              {folderSection(n, 0)}
-            </div>
+            <div key={n.folder.id}>{folderSection(n, 0)}</div>
           ))}
         </div>
       )}
 
       <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-        在聊天页候选弹窗或记忆列表中可将优质回复沉淀为标准回答;检索命中时标准回答置顶并放宽阈值。
+        在聊天页候选弹窗或记忆列表中可将优质回复沉淀为标准回答;同一问题最多 3 条,检索命中时置顶并放宽阈值。
       </div>
     </div>
   )

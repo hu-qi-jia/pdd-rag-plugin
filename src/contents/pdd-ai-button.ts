@@ -21,7 +21,14 @@ import {
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
-import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
+import {
+  DEFAULT_HOTKEY,
+  DEFAULT_SETTINGS,
+  MAX_GOLDENS_PER_QUESTION,
+  SETTINGS_STORAGE_KEY,
+  type PddSettings,
+} from '../types/memory'
+import { formatHotkey, isModifierOnly, matchesHotkey } from '../utils/hotkey'
 import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
 import { lightTheme as tk } from '../ui/theme'
 
@@ -60,7 +67,7 @@ const CSS = `
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
 
 /* 候选弹窗 — 工具风浮层卡片 */
-.pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: 62vh; overflow: auto;
+.pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px)); overflow: auto;
   pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
   font-size: ${fontSize.body}px; color: ${tk.text}; }
@@ -358,10 +365,13 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
 // ─── 候选弹窗 ─────────────────────────────────────────────────────────────────
 
 let popupEl: HTMLDivElement | null = null
+/** 由快捷键唤起的推荐回复面板:再按 Enter 填充第一条(点外部/Esc 关闭即解除) */
+let armedPanel: { items: Suggestion[] } | null = null
 
 function closePopup(): void {
   popupEl?.remove()
   popupEl = null
+  armedPanel = null
 }
 
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
@@ -391,10 +401,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   const top = document.createElement('div')
   top.className = 'pddcs-cand-top'
   top.appendChild(badge(s.kind))
-  const score = document.createElement('span')
-  score.className = 'pddcs-score'
-  score.textContent = s.score.toFixed(2)
-  top.appendChild(score)
+  // 得分数字对客服没有决策价值,不再展示(2026-09-15 用户要求);同内容折叠数保留
   if ((s.foldCount ?? 1) > 1) {
     const fold = document.createElement('span')
     fold.className = 'pddcs-fold'
@@ -518,7 +525,7 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): voi
 
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'
-  head.textContent = `AI 候选(${items.length})`
+  head.textContent = `推荐回复(${items.length})`
   const close = document.createElement('button')
   close.className = 'pddcs-popup-close'
   close.textContent = '×'
@@ -536,14 +543,23 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): voi
 
   overlay.appendChild(el)
 
-  // 定位:按钮右侧优先,放不下换左侧,越界回缩
+  // 定位:水平方向按钮右侧优先,放不下换左侧,越界回缩;
+  // 垂直方向必须按弹窗**实高**夹在视口内(旧逻辑写死 window.innerHeight - 120,
+  // 靠近屏幕下方的气泡会让面板溢出屏幕,只能看到一部分)
   const a = anchor.getBoundingClientRect()
   let x = a.right + 8
   if (x + POPUP_W > window.innerWidth - 8) x = a.left - POPUP_W - 8
   if (x < 8) x = Math.max(8, Math.min(window.innerWidth - POPUP_W - 8, a.left))
-  const y = Math.max(8, Math.min(a.top - 4, window.innerHeight - 120))
   el.style.left = `${Math.round(x)}px`
+  el.style.visibility = 'hidden'
+  overlay.appendChild(el)
+  // 实高向上取整:offsetHeight 是取整后的整数,会丢掉亚像素(如 336.125 → 336),
+  // 差的 0.1px 恰好让面板底边压线溢出;getBoundingClientRect 保留小数
+  const h = Math.ceil(el.getBoundingClientRect().height)
+  const maxTop = Math.max(8, window.innerHeight - h - 8)
+  const y = Math.max(8, Math.min(a.top - 4, maxTop))
   el.style.top = `${Math.round(y)}px`
+  el.style.visibility = ''
   popupEl = el
 }
 
@@ -570,6 +586,127 @@ document.addEventListener(
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') closePopup()
 })
+
+// ─── 快捷键(默认 Ctrl+Enter,可在设置中自定义)─────────────────────────────────
+// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → 再按 Enter 填充第一条;
+// 「自动回复」开:检索 → 直接把第一条填入输入框。全程不自动发送。
+
+let hotkeySettings: PddSettings = { ...DEFAULT_SETTINGS }
+
+async function refreshHotkeySettings(): Promise<void> {
+  try {
+    const resp = (await chrome.runtime.sendMessage({ type: 'GET_STATS' })) as {
+      payload?: { settings?: Partial<PddSettings> }
+    }
+    const s = resp?.payload?.settings
+    if (s) hotkeySettings = { ...DEFAULT_SETTINGS, ...s } as PddSettings
+  } catch {
+    /* 拿不到就先用默认值 */
+  }
+}
+// 设置在 popup 里改动 → 实时生效
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return
+  const change = changes[SETTINGS_STORAGE_KEY]
+  if (!change || typeof change.newValue !== 'object' || change.newValue === null) return
+  hotkeySettings = { ...hotkeySettings, ...(change.newValue as Partial<PddSettings>) } as PddSettings
+})
+
+/** 最近一条可见买家消息行:快捷键按"用户最新消息"检索 */
+function latestBuyerRow(): Element | null {
+  const list = document.querySelector(LIST_SEL)
+  const cont = list?.getBoundingClientRect()
+  if (!cont || cont.width <= 0) return null
+  let latest: Element | null = null
+  for (const li of document.querySelectorAll(ROW_SEL)) {
+    if (buyerRowText(li) === null) continue
+    const r = li.getBoundingClientRect()
+    if (r.height <= 0) continue
+    if (r.bottom <= cont.top + 1 || r.top >= cont.bottom - 1) continue
+    latest = li // 行按时间序排列,取最后一条可见的
+  }
+  return latest
+}
+
+async function onHotkey(): Promise<void> {
+  if (armedPanel) closePopup() // 再按一次快捷键 = 重新检索
+  const latest = latestBuyerRow()
+  if (!latest) {
+    toast('未找到可见的买家消息')
+    return
+  }
+  const query = buildQuery(latest)
+  if (!query) {
+    toast('未取到买家消息文本')
+    return
+  }
+  const { suggestions, settings, error } = await fetchSuggestions(query)
+  if (error) {
+    toast(`检索失败:${error}`)
+    return
+  }
+  if (suggestions.length === 0) {
+    toast('未找到匹配的历史回复')
+    return
+  }
+
+  // 「自动回复」开 → 直接填充第一条(不弹面板)
+  if (settings.directFillEnabled) {
+    const first = suggestions[0]
+    if (fillInput(first.text)) {
+      const kindLabel = first.kind === 'golden' ? '标准回答' : first.kind === 'knowledge' ? '知识库' : '历史回忆'
+      toast(`已填充:${kindLabel} · 请手动发送`)
+    } else {
+      toast('未找到输入框,请手动粘贴')
+    }
+    return
+  }
+
+  // 关 → 弹推荐回复面板,再按 Enter 填充第一条
+  const anchor =
+    (rowBtns.get(latest) as HTMLElement | undefined) ??
+    (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
+    (latest as HTMLElement)
+  openPopup(anchor, suggestions, query)
+  armedPanel = { items: suggestions }
+  const foot = popupEl?.querySelector('.pddcs-popup-foot')
+  if (foot) foot.textContent = '点击候选填入输入框;发送请手动点击 · 按 Enter 填充第一条'
+}
+
+document.addEventListener(
+  'keydown',
+  (ev) => {
+    if (ev.key === 'Escape') {
+      closePopup()
+      return
+    }
+    // 面板已由快捷键唤起:单独按 Enter = 填充第一条推荐回复
+    if (
+      armedPanel &&
+      matchesHotkey(ev, { ctrl: false, alt: false, shift: false, key: 'Enter' })
+    ) {
+      ev.preventDefault()
+      ev.stopPropagation()
+      const first = armedPanel.items[0]
+      if (fillInput(first.text)) {
+        toast('已填充:第一条推荐回复 · 请手动发送')
+        closePopup()
+      } else {
+        toast('未找到输入框,请手动粘贴')
+      }
+      return
+    }
+    // 快捷键唤起(默认 Ctrl+Enter)
+    if (matchesHotkey(ev, hotkeySettings.autoReplyHotkey)) {
+      ev.preventDefault()
+      ev.stopPropagation()
+      void onHotkey()
+    }
+  },
+  true, // capture:抢在平台自身快捷键处理之前
+)
+
+void refreshHotkeySettings()
 
 // popup 面板"填充"按钮 → SW 转发:同样只填官方输入框,绝不发送
 chrome.runtime.onMessage.addListener(

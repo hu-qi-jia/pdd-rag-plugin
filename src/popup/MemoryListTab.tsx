@@ -21,7 +21,8 @@ import {
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { fontSize, fontWeight, spacing } from '../ui/design'
+import { controlH, fontSize, fontWeight, spacing } from '../ui/design'
+import { CheckIcon } from '../ui/icons'
 
 export function MemoryListTab({
   tk,
@@ -39,6 +40,9 @@ export function MemoryListTab({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
+  // 「设置标准回答」的行内即时反馈:请求中 / 本会话已设置成功的回复行
+  const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
+  const [goldenReplyIds, setGoldenReplyIds] = useState<ReadonlySet<string>>(new Set())
 
   const load = useCallback(async () => {
     try {
@@ -62,7 +66,26 @@ export function MemoryListTab({
   const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
   const now = Date.now()
 
+  /** 标记某条回复已成功设为标准回答(本次会话内保持成功态) */
+  const setGoldenDone = (replyId: string) => {
+    setGoldenReplyIds((prev) => {
+      const next = new Set(prev)
+      next.add(replyId)
+      return next
+    })
+  }
+
+  /**
+   * 设为标准回答。
+   * 2026-09-15 用户反馈「点击无效、没有反应」真因:写入其实成功(goldenCount +1),
+   * 但反馈只有列表顶部一条 Notice,列表一长就在视口外;且头部统计没有刷新、
+   * 列表本身也不会变化 → 界面看上去毫无动静。现补三重可见反馈:
+   *   ① 按钮原位变「设置中…」→「已设为标准回答」(最贴近点击点的反馈);
+   *   ② 头部统计立即刷新(标准回答 N);
+   *   ③ Notice(已改为吸附在滚动区顶部)。
+   */
   const setGolden = async (item: MemoryListItem, replyId: string, text: string) => {
+    setBusyReplyId(replyId)
     try {
       const resp = await sendMessage<AddGoldenResponse>({
         type: 'ADD_GOLDEN',
@@ -74,11 +97,21 @@ export function MemoryListTab({
         },
       })
       const p = resp.payload
-      if (p.error) setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
-      else if (p.exists) setMsg({ ok: true, text: '该问题的标准回答已存在,未重复创建' })
-      else setMsg({ ok: true, text: '已设为标准回答,后台将自动向量化' })
+      if (p.error) {
+        setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
+        return
+      }
+      setMsg(
+        p.exists
+          ? { ok: true, text: '该问题的标准回答已存在,未重复创建' }
+          : { ok: true, text: '已设为标准回答,后台将自动向量化' },
+      )
+      setGoldenDone(replyId)
+      await onDataChanged()
     } catch (err) {
       setMsg({ ok: false, text: `设置标准回答失败:${String(err)}` })
+    } finally {
+      setBusyReplyId(null)
     }
   }
 
@@ -188,9 +221,35 @@ export function MemoryListTab({
                     >
                       {r.text}
                     </div>
-                    <Btn tk={tk} variant="primary" onClick={() => void setGolden(item, r.id, r.text)} title="将此问题与回复设为标准回答">
-                      设置标准回答
-                    </Btn>
+                    {goldenReplyIds.has(r.id) ? (
+                      <span
+                        title="本次会话已将该回复设为标准回答"
+                        style={{
+                          height: controlH.form,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          flexShrink: 0,
+                          fontSize: fontSize.caption,
+                          fontWeight: fontWeight.medium,
+                          color: tk.successText,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <CheckIcon size={12} strokeWidth={2.4} />
+                        已设为标准回答
+                      </span>
+                    ) : (
+                      <Btn
+                        tk={tk}
+                        variant="primary"
+                        disabled={busyReplyId === r.id}
+                        onClick={() => void setGolden(item, r.id, r.text)}
+                        title="将此问题与回复设为标准回答"
+                      >
+                        {busyReplyId === r.id ? '设置中…' : '设置标准回答'}
+                      </Btn>
+                    )}
                   </div>
                 ))}
                 {/* 删除单条(内联二次确认) */}

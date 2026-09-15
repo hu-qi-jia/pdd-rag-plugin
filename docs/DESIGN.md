@@ -1,6 +1,10 @@
 # 设计规范(Design System)
 
-> 版本 2.6.6 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.7 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> v2.6.7 增补:设置页控件重设计 —— 开关改「文字居左、开关居右」行式(36×20 轨道,滑块位移/按压拉伸
+> 由 RESET_CSS 按 aria-checked/:active 驱动,选中 accent、未选中专用轨道令牌 switchTrack);
+> 滑杆换自定义填充轨道(4px 圆轨按值 accent 硬切填充 + 14px 白圆描边拇指钮,悬浮/按住放大);
+> 各项说明文案精简为一行口径(开/关行为式)
 > v2.6.6 增补:「自动回复」开关语义修正(关 = 点击「AI回复」/快捷键都弹推荐回复面板,
 > 移除原"单候选免面板静默直填"——用户反馈开关关就不该自动填)、
 > 记忆卡片「设置标准回答」移到底部操作行(单回复卡片,紧挨「删除」右侧;多回复仍逐回复携带)、
@@ -118,8 +122,8 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 | `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口;**成功提示 4s 自动消失**(v2.6.3,`onDismiss` 回调父级清 state;失败提示常驻供读错因) |
 | `EmptyState` | 空状态(居中、两行文案) |
 | `SearchInput` | 带放大镜的搜索输入框 |
-| `Toggle` | 拨杆开关(选中态 **accent**;v2.4 修正:原黑白反转在深色下变"白轨道+白圆点",圆点直接消失);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + `.pddcs-switch:focus-visible` accent 焦点环) |
-| `Slider` | 数值滑杆(accent 色、tabular-nums 数值) |
+| `Toggle` | 拨杆开关,**行式布局:文字居左、开关居右**(v2.6.7 用户要求;36×20 轨道 + 16 滑块)。选中态 accent(悬浮 accentHover),未选中走专用令牌 `switchTrack`(悬浮 `switchTrackHover`,比 inputBorder 深一档)。**滑块位移与按压拉伸(顺拖动方向 +2px)全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动**,React 只声明结构(knob 无内联 left,内联会压过 :active);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + focus-visible accent 焦点环) |
+| `Slider` | 数值滑杆(v2.6.7 重设计):4px 圆轨**按值填充**(accent 到当前值硬切,渐变由组件按 (value-min)/(max-min) 内联注入)+ 14px 白圆 accent 描边拇指钮(RESET_CSS `.pddcs-slider`,悬浮放大 1.12、按住 1.22);数值 tabular-nums 右对齐 |
 | `SectionLabel` | 小节标签 |
 | `inputStyle` | 表单元素统一样式原语(独立成行的输入框/文本域) |
 | `controlStyle` | 与按钮同排的输入框样式原语(显式高度,保证等高) |

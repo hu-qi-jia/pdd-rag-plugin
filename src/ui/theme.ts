@@ -6,7 +6,11 @@ import type { ThemeMode } from './theme-context'
  * 原则:
  *  - 中性灰画布(#F5F5F5)+ 白色面板,1px 细边框(#E5E5E5),层级靠明度与字重;
  *  - 黑白主色:主操作黑底白字(#161616),Figma 蓝(#0D99FF)只做焦点、品牌与状态;
- *  - 深色主题反转主按钮(白底黑字),表面 #2C2C2C,蓝提亮保证对比。
+ *  - 按钮亮暗规范(2026-09-15 用户指定,参照示例图):两种主题同构 ——
+ *    default = 面色底 + 边框,悬浮提亮一档;primary = 主色底白字,悬浮再提亮一档。
+ *    浅色主色为近黑(#161616);深色主色为面色系提亮一档的**中性深灰(#45484D)**,
+ *    不再使用 Figma 蓝(蓝只保留给焦点/开关/滑杆等状态),保证亮暗切换时按钮
+ *    遵循同一映射规则,不出现"黑色↔蓝色"式的跳色。
  */
 export interface ThemeTokens {
   bg: string
@@ -66,7 +70,7 @@ export const lightTheme: ThemeTokens = {
   scrollThumb: 'rgba(0,0,0,0.16)',
 }
 
-/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮 Figma 蓝底白字(黑白反转只保留给文本/图标) */
+/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮中性深灰白字(面色系提亮一档,悬浮再提亮) */
 export const darkTheme: ThemeTokens = {
   bg: '#1e1f21',
   bgSecondary: '#1a1b1d',
@@ -82,10 +86,11 @@ export const darkTheme: ThemeTokens = {
   btnBg: '#2c2c2c',
   btnBorder: '#3b3d40',
   btnHoverBg: '#383b3d',
-  // v2.5 重设计:深色下主按钮由"近白底黑字"改为 **Figma 蓝底白字** ——
-  // 近白主钮在深色界面上过亮(用户反馈"暗色模式下为白色"),蓝主钮与开关/滑杆同一强调色
-  btnPrimaryBg: '#0d99ff',
-  btnPrimaryHover: '#33a9ff',
+  // v2.6 按钮亮暗规范:深色主按钮 = 面色系(#2C2C2C)提亮一档的中性深灰 + 白字,
+  // 悬浮再提亮一档。历史沿革:近白底黑字过亮(2026-09-15"暗色模式下为白色")
+  // → Figma 蓝底白字(与界面中性色系脱节,2026-09-15 示例图定稿改灰)
+  btnPrimaryBg: '#45484d',
+  btnPrimaryHover: '#53565b',
   btnPrimaryText: '#ffffff',
   successBg: 'rgba(10,207,131,0.14)',
   successText: '#0acf83',

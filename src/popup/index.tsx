@@ -63,13 +63,13 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   background: var(--pddcs-scroll-thumb); background-clip: content-box;
 }
 
-/* ── 导航图标按钮:悬浮浅灰圆角块(悬浮色随主题令牌注入)── */
+/* ── 导航图标按钮:任何状态下都只有图标本身,无背景块(2026-09-15 用户要求)── */
 .pddcs-rail-btn {
   width: 36px; height: 36px; padding: 0; border: none; border-radius: 6px;
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; position: relative; transition: background-color .12s ease;
+  cursor: pointer; position: relative;
 }
-.pddcs-rail-btn:hover { background-color: var(--pddcs-rail-hover); }
 
 /* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
 .pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }
@@ -134,15 +134,14 @@ function App() {
   }, [refreshStats])
 
   const railBtn = (active: boolean): React.CSSProperties => ({
-    // 不写背景/边框:默认态只保留图标(2026-09-15 用户要求,激活态用图标颜色与粗细表达);
-    // 悬浮底色交给 .pddcs-rail-btn:hover 的 CSS 变量(内联会压住 :hover)
+    // 图标状态只靠颜色与描边粗细表达,无任何背景块(2026-09-15 用户要求:
+    // "仅展示图标即可,图标后不需要有背景" —— 含悬浮态)
     color: active ? tk.text : tk.textMuted,
   })
 
   // 令牌 → CSS 变量的桥(静态 CSS 无法直接读 React 令牌)
   const cssVars = {
     '--pddcs-scroll-thumb': tk.scrollThumb,
-    '--pddcs-rail-hover': tk.btnHoverBg,
   } as React.CSSProperties
 
   return (

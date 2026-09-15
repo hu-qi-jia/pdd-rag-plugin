@@ -195,9 +195,8 @@ await page.evaluate(() => {
 })
 await sleep(900)
 const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
-const hkCount = await page.evaluate(() => document.querySelector('.pddcs-popup-count')?.textContent ?? '')
 const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
-check('Ctrl+Enter 唤起「推荐回复」面板(标题 + 数量徽)', hkHead.includes('推荐回复') && hkCount === '3', `${hkHead} / count=${hkCount}`)
+check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
 check('面板脚注提示 Enter 填充第一条', hkFoot.includes('按 Enter 填充第一条'), hkFoot)
 
 // 面板不溢出视口:顶部 ≥ 8 且底部 ≤ 视口高 - 8

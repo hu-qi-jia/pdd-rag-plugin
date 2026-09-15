@@ -344,27 +344,6 @@ function miniBtn(label: string): HTMLButtonElement {
   return b
 }
 
-/** 键帽(脚注里的 Enter 提示) */
-function kbd(label: string): HTMLElement {
-  const k = document.createElement('kbd')
-  k.className = 'pddcs-kbd'
-  k.textContent = label
-  return k
-}
-
-/** 面板脚注:普通面板纯文字;快捷键面板把 Enter 渲染成键帽
- *  (文本节点保留空格,textContent 连接后仍是「按 Enter 填充第一条」) */
-function renderPanelFoot(foot: HTMLElement, armed: boolean): void {
-  foot.textContent = ''
-  if (armed) {
-    foot.append('按 ')
-    foot.appendChild(kbd('Enter'))
-    foot.append(' 填充第一条 · 点击候选也可填入')
-  } else {
-    foot.append('点击候选填入输入框 · 发送请手动点击')
-  }
-}
-
 function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   const row = document.createElement('div')
   row.className = 'pddcs-cand'
@@ -454,7 +433,6 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
       ? '取消后该回复不再作为标准回答(历史问答记录不受影响)'
       : `将当前问题 + 该回复设为标准回答(每个问题最多 ${MAX_GOLDENS_PER_QUESTION} 条)`
     if (isGolden) goldBtn.classList.add('pddcs-mini-danger')
-    else goldBtn.classList.add('pddcs-mini-accent')
     goldBtn.addEventListener('click', (ev) => {
       ev.stopPropagation()
       void (isGolden ? cancelGolden(goldBtn) : addGolden(goldBtn))
@@ -483,8 +461,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   src.title = s.sourceQuestion
   row.appendChild(src)
 
-  /** 行点击与「填入」悬浮钮共用:只写输入框,绝不发送 */
-  const fillFromRow = (): void => {
+  row.addEventListener('click', () => {
     if (fillInput(s.text)) {
       const kindLabel = s.kind === 'golden' ? '标准回答' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
       toast(`已填充:${kindLabel} · 请手动发送`)
@@ -492,63 +469,34 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
     } else {
       toast('未找到输入框,请手动粘贴')
     }
-  }
-  row.addEventListener('click', fillFromRow)
-
-  // 悬浮「填入」主钮:把"整行可点"变成可见 affordance(第十四轮重设计)
-  const fill = document.createElement('button')
-  fill.className = 'pddcs-fill'
-  fill.textContent = '填入'
-  fill.title = '填入输入框(不自动发送)'
-  fill.addEventListener('click', (ev) => {
-    ev.stopPropagation()
-    fillFromRow()
   })
-  row.appendChild(fill)
   return row
 }
 
-/** armed = 快捷键唤起:脚注直接按"Enter 键帽"终态构建(视口夹取按实高测量,
- *  若挂载后再改脚注内容,键帽比纯文字高 3px,面板会下溢视口) */
-function openPopup(anchor: HTMLElement, items: Suggestion[], query: string, armed = false): void {
+function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): void {
   closePopup()
   const overlay = ensureOverlay()
   const el = document.createElement('div')
   el.className = 'pddcs-popup'
 
-  // 头部:标题 + 数量徽 + 检索依据(让客服确认"按哪句话搜的";第十四轮重设计)
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'
-  const titleRow = document.createElement('div')
-  titleRow.className = 'pddcs-popup-title-row'
-  const title = document.createElement('span')
-  title.className = 'pddcs-popup-title'
-  title.textContent = '推荐回复'
-  const count = document.createElement('span')
-  count.className = 'pddcs-popup-count'
-  count.textContent = String(items.length)
+  head.textContent = `推荐回复(${items.length})`
   const close = document.createElement('button')
   close.className = 'pddcs-popup-close'
   close.textContent = '×'
   close.title = '关闭'
   close.addEventListener('click', closePopup)
-  titleRow.append(title, count, close)
-  head.appendChild(titleRow)
-  const queryLine = document.createElement('div')
-  queryLine.className = 'pddcs-popup-query'
-  queryLine.textContent = query
-  queryLine.title = query
-  head.appendChild(queryLine)
+  head.appendChild(close)
   el.appendChild(head)
 
   for (const s of items) el.appendChild(candidateRow(s, query))
 
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
-  renderPanelFoot(foot, armed)
+  foot.textContent = '点击候选填入输入框;发送请手动点击'
   el.appendChild(foot)
 
-  // 单次挂载(原先连续两次 appendChild,第二次只是把节点搬走,属冗余)
   overlay.appendChild(el)
 
   // 定位:水平方向按钮右侧优先,放不下换左侧,越界回缩;
@@ -560,10 +508,7 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string, arme
   if (x < 8) x = Math.max(8, Math.min(window.innerWidth - POPUP_W - 8, a.left))
   el.style.left = `${Math.round(x)}px`
   el.style.visibility = 'hidden'
-  // 入场动效(pddcs-pop-in)是 transform 动画:getBoundingClientRect 会读到
-  // 初始帧 scale(.97)/translateY(6px) 的盒子,实高被低估 → 视口夹取偏松溢出。
-  // 测量前先禁用动画,量完恢复(恢复即从头播放入场,用户无感)。
-  el.style.animation = 'none'
+  overlay.appendChild(el)
   // 实高向上取整:offsetHeight 是取整后的整数,会丢掉亚像素(如 336.125 → 336),
   // 差的 0.1px 恰好让面板底边压线溢出;getBoundingClientRect 保留小数
   const h = Math.ceil(el.getBoundingClientRect().height)
@@ -571,7 +516,6 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string, arme
   const y = Math.max(8, Math.min(a.top - 4, maxTop))
   el.style.top = `${Math.round(y)}px`
   el.style.visibility = ''
-  el.style.animation = '' // 移除测量期的禁用 → 入场动画此刻从头播放
   popupEl = el
 }
 
@@ -690,13 +634,15 @@ async function onHotkey(): Promise<void> {
     return
   }
 
-  // 关 → 弹推荐回复面板,再按 Enter 填充第一条(armed 终态直接参与首次测量)
+  // 关 → 弹推荐回复面板,再按 Enter 填充第一条
   const anchor =
     (rowBtns.get(latest) as HTMLElement | undefined) ??
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
     (latest as HTMLElement)
-  openPopup(anchor, suggestions, query, true) // 内部 closePopup 会清 armedPanel,故挂载后再赋值
+  openPopup(anchor, suggestions, query)
   armedPanel = { items: suggestions }
+  const foot = popupEl?.querySelector('.pddcs-popup-foot')
+  if (foot) foot.textContent = '点击候选填入输入框;发送请手动点击 · 按 Enter 填充第一条'
 }
 
 document.addEventListener(

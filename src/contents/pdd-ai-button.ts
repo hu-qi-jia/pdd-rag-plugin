@@ -8,6 +8,8 @@
  *    (条数 = 检索侧类别配额:标准回答全部 + 历史最近 2 + 知识库 1;
  *     快捷键唤起的面板与此完全同构,共用 openPopup)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
+ *  - 主题:覆盖层跟随 popup 的主题设置(storage pddcs:theme + onChanged 实时切换,
+ *    2026-09-15 设计1;样式生成纯逻辑见 utils/overlayTheme.ts)
  *
  * 边界(不逾越):
  *  - 只填充官方输入框 textarea#replyTextarea(原生 value setter + input 事件,
@@ -31,8 +33,15 @@ import {
   type PddSettings,
 } from '../types/memory'
 import { formatHotkey, isModifierOnly, matchesHotkey } from '../utils/hotkey'
-import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
-import { lightTheme as tk } from '../ui/theme'
+import {
+  THEME_STORAGE_KEY,
+  POPUP_W,
+  buildOverlayCss,
+  parseThemeMode,
+  type OverlayThemeMode,
+} from '../utils/overlayTheme'
+import { controlH, spacing } from '../ui/design'
+import { getThemeTokens } from '../ui/theme'
 
 export const config: PlasmoCSConfig = {
   matches: ['https://mms.pinduoduo.com/chat-merchant/*'],
@@ -46,72 +55,22 @@ const INPUT_SEL = '#replyTextarea'
 const OVERLAY_ID = 'pddcs-overlay'
 const STYLE_ID = 'pddcs-style'
 const MAX_QUERY_CHARS = 800
-const POPUP_W = 340
 
-// ─── 覆盖层与样式 ─────────────────────────────────────────────────────────────
+// ─── 覆盖层与样式(主题跟随 popup 设置,2026-09-15 设计1)───────────────────────
 
-const CSS = `
-#${OVERLAY_ID} { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
-  font-family: ${fontFamily}; }
+/** 当前主题;样式整体由 buildOverlayCss 按令牌生成,切换即重建 */
+let currentTheme: OverlayThemeMode = 'light'
 
-/* AI回复按钮 — 与 popup 的 .pddcs-btn 同档工具风控件
-   (26px 高 / 6px 圆角 / 12.5px 字号:2026-09-15 用户反馈原 20px 偏小,与整体设计脱节)
-   box-sizing 显式声明:本样式注入平台页面,不享受 popup 的全局 border-box 重置 */
-.pddcs-ai-btn { position: fixed; box-sizing: border-box; height: ${controlH.form}px;
-  border-radius: ${radius.md}px; border: 1px solid ${tk.btnBorder};
-  cursor: pointer; pointer-events: auto; padding: 0 ${spacing.xl}px; display: inline-flex; align-items: center;
-  background: ${tk.btnBg}; color: ${tk.text}; font-size: ${fontSize.body}px; font-weight: 500; line-height: 1;
-  letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
-.pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: ${tk.textTertiary}; }
-.pddcs-ai-btn:active { background: ${tk.border}; }
-.pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
-.pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
-
-/* 候选弹窗 — 工具风浮层卡片 */
-.pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px)); overflow: auto;
-  pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
-  font-size: ${fontSize.body}px; color: ${tk.text}; }
-.pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
-  border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.title}px; position: sticky; top: 0;
-  background: ${tk.bg}; letter-spacing: -0.01em; }
-.pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
-  width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
-  justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
-.pddcs-popup-close:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
-.pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
-  transition: background-color .1s ease; }
-.pddcs-cand:hover { background: ${tk.btnHoverBg}; }
-.pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.pddcs-badge { display: inline-flex; align-items: center; border-radius: ${radius.sm}px;
-  font-size: 10px; font-weight: 600; padding: 2px 7px; }
-.pddcs-badge.golden { background: ${semantic.goldenBg}; color: ${semantic.golden}; }
-.pddcs-badge.knowledge { background: ${semantic.knowledgeBg}; color: ${semantic.knowledge}; }
-.pddcs-badge.history { background: ${tk.bgCard}; color: ${tk.textMuted}; border: 1px solid ${tk.border}; }
-.pddcs-score { color: ${tk.textTertiary}; font-size: 10px; font-variant-numeric: tabular-nums; }
-.pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
-.pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
-.pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: ${radius.sm}px;
-  cursor: pointer; font-size: 10.5px; padding: 2px 8px; color: ${tk.textMuted}; font-weight: 500;
-  transition: background-color .1s ease, color .1s ease; }
-.pddcs-mini:hover { background: ${tk.borderLight}; color: ${tk.text}; }
-/* 危险型迷你钮(取消标准回答):悬浮转红,与图标钮的危险态同语言 */
-.pddcs-mini-danger { color: ${tk.errorText}; }
-.pddcs-mini-danger:hover { background: ${tk.errorBg}; color: ${tk.errorText}; }
-.pddcs-cand-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: 11px; }
-
-/* 轻提示 — 近黑 toast */
-.pddcs-toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-  pointer-events: auto; background: rgba(22,22,22,.92); color: #fff; font-size: ${fontSize.body}px;
-  padding: 8px 16px; border-radius: ${radius.md}px; opacity: 0; transition: opacity .2s;
-  max-width: 60vw; z-index: 2147483001; box-shadow: 0 4px 16px rgba(0,0,0,0.20); }
-.pddcs-toast.show { opacity: 1; }
-`
+function applyOverlayTheme(theme: OverlayThemeMode): void {
+  currentTheme = theme
+  let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null
+  if (!style) {
+    style = document.createElement('style')
+    style.id = STYLE_ID
+    document.head.appendChild(style)
+  }
+  style.textContent = buildOverlayCss(getThemeTokens(theme))
+}
 
 /** Lucide "sparkles" 图标已按用户要求移除(2026-09-15):按钮为纯文字胶囊 */
 const AI_BTN_W = 72 // "AI回复" 纯文字胶囊预估宽度(首帧尚未排版时定位用)
@@ -124,12 +83,7 @@ function ensureOverlay(): HTMLDivElement {
     overlay.id = OVERLAY_ID
     document.body.appendChild(overlay)
   }
-  if (!document.getElementById(STYLE_ID)) {
-    const style = document.createElement('style')
-    style.id = STYLE_ID
-    style.textContent = CSS
-    document.head.appendChild(style)
-  }
+  if (!document.getElementById(STYLE_ID)) applyOverlayTheme(currentTheme)
   return overlay
 }
 
@@ -612,6 +566,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
   const change = changes[SETTINGS_STORAGE_KEY]
   if (!change || typeof change.newValue !== 'object' || change.newValue === null) return
   hotkeySettings = { ...hotkeySettings, ...(change.newValue as Partial<PddSettings>) } as PddSettings
+})
+
+// 主题跟随(2026-09-15 设计1):启动读 popup 主题设置(pddcs:theme),运行期改动实时重建覆盖层样式
+void (async () => {
+  try {
+    const stored = await chrome.storage.local.get([THEME_STORAGE_KEY])
+    applyOverlayTheme(parseThemeMode(stored?.[THEME_STORAGE_KEY]))
+  } catch {
+    /* 读不到保持浅色默认 */
+  }
+})()
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return
+  const change = changes[THEME_STORAGE_KEY]
+  if (!change) return
+  applyOverlayTheme(parseThemeMode(change.newValue))
 })
 
 /** 最近一条可见买家消息行:快捷键按"用户最新消息"检索 */

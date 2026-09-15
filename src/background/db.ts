@@ -27,6 +27,9 @@ import {
   UNCATEGORIZED_FOLDER_ID,
   UNCATEGORIZED_FOLDER_NAME,
 } from "../types/memory";
+// 检索缓存失效钩子(工程5b):改变"已嵌三源"集合的写路径必须调用。
+// 循环依赖安全:本模块只在方法体内(运行时)使用它,模块求值期不触碰。
+import { invalidateRetrievalCache } from "./retrievalCache";
 
 export class PddDatabase extends Dexie {
   qaRecords!: Table<QaRecord, string>;
@@ -177,13 +180,25 @@ export class PddDatabase extends Dexie {
     return this.qaRecords.get(id);
   }
 
-  /** 最近问答列表(面板记忆列表基础;P3 完善分页/筛选) */
-  async listQaRecords(limit = 50): Promise<QaRecord[]> {
-    return this.qaRecords
-      .where("sessionKey")
-      .notEqual(SELF_TEST_SESSION_KEY)
-      .sortBy("questionTs")
-      .then((rows) => rows.reverse().slice(0, limit));
+  /**
+   * 最近问答分页(面板记忆列表;PM2:按 questionTs 倒序显式翻页)。
+   * total 为排除自检数据后的全量数,与头部统计同口径;hasMore 由调用方按
+   * offset + rows.length < total 推得。
+   */
+  async listQaRecordsPage(
+    offset: number,
+    limit: number,
+  ): Promise<{ rows: QaRecord[]; total: number }> {
+    const base = this.qaRecords
+      .where("questionTs")
+      .between(Dexie.minKey, Dexie.maxKey)
+      .reverse()
+      .filter((r) => r.sessionKey !== SELF_TEST_SESSION_KEY);
+    const [rows, total] = await Promise.all([
+      base.clone().offset(offset).limit(limit).toArray(),
+      base.count(),
+    ]);
+    return { rows, total };
   }
 
   /** 会话内最近一条问答(分段机:客服回复在无未结问题段时挂到它下面) */
@@ -201,6 +216,7 @@ export class PddDatabase extends Dexie {
       await this.replies.where("qaId").equals(qaId).delete();
       await this.qaRecords.delete(qaId);
     });
+    invalidateRetrievalCache();
   }
 
   /** 清空自检示例数据;返回删除的问答条数 */
@@ -214,7 +230,22 @@ export class PddDatabase extends Dexie {
       await this.replies.where("qaId").anyOf(qaIds).delete();
       await this.qaRecords.bulkDelete(qaIds);
     });
+    invalidateRetrievalCache();
     return qaIds.length;
+  }
+
+  /**
+   * 清空全部问答记忆(PM6a 设置页"清空问答数据";含自检数据)。
+   * 金标准/知识库/文件夹为长期资产,不受影响。返回删除的问答条数。
+   */
+  async clearQaMemory(): Promise<number> {
+    const total = await this.qaRecords.count();
+    await this.transaction("rw", this.qaRecords, this.replies, async () => {
+      await this.replies.clear();
+      await this.qaRecords.clear();
+    });
+    invalidateRetrievalCache();
+    return total;
   }
 
   // ─── 客服回复(replies) ────────────────────────────────────────────────────────
@@ -266,6 +297,7 @@ export class PddDatabase extends Dexie {
       hasEmbedding: 1,
       updatedAt: Date.now(),
     });
+    invalidateRetrievalCache();
   }
 
   async updateGoldenEmbedding(
@@ -281,6 +313,7 @@ export class PddDatabase extends Dexie {
       hasEmbedding: 1,
       updatedAt: Date.now(),
     });
+    invalidateRetrievalCache();
   }
 
   async updateKnowledgeEmbedding(
@@ -296,6 +329,7 @@ export class PddDatabase extends Dexie {
       hasEmbedding: 1,
       updatedAt: Date.now(),
     });
+    invalidateRetrievalCache();
   }
 
   async markEmbeddingFailed(
@@ -407,6 +441,7 @@ export class PddDatabase extends Dexie {
 
   async deleteGolden(id: string): Promise<void> {
     await this.goldens.delete(id);
+    invalidateRetrievalCache();
   }
 
   async getGoldensByFolder(folderId: string | null): Promise<GoldenRecord[]> {
@@ -440,10 +475,13 @@ export class PddDatabase extends Dexie {
 
   async updateKnowledge(id: string, patch: Partial<KnowledgeRecord>): Promise<void> {
     await this.knowledge.update(id, { ...patch, updatedAt: Date.now() });
+    // enabled 开关改变"已嵌且启用"集合,必须失效(工程5b)
+    invalidateRetrievalCache();
   }
 
   async deleteKnowledge(id: string): Promise<void> {
     await this.knowledge.delete(id);
+    invalidateRetrievalCache();
   }
 
   /** 某文档的全部块(整篇替换/展示计数) */
@@ -456,6 +494,7 @@ export class PddDatabase extends Dexie {
     const ids = await this.knowledge.where("docId").equals(docId).primaryKeys();
     if (ids.length === 0) return 0;
     await this.knowledge.bulkDelete(ids);
+    invalidateRetrievalCache();
     return ids.length;
   }
 
@@ -481,6 +520,26 @@ export class PddDatabase extends Dexie {
     });
   }
 
+  /**
+   * 遗留子文件夹一键拍平(PM7;UI 已只建一级文件夹,存量子夹给出清入口):
+   * 子夹内金标准上移到父根夹(父夹失联则归「未分类」),随后删除子夹。返回拍平数。
+   * folderId 不参与检索缓存,无需失效。
+   */
+  async flattenSubfolders(): Promise<number> {
+    const all = await this.folders.toArray();
+    const known = new Set(all.map((f) => f.id));
+    const subs = all.filter((f) => f.parentId !== null);
+    if (subs.length === 0) return 0;
+    await this.transaction("rw", this.folders, this.goldens, async () => {
+      for (const sub of subs) {
+        const target = sub.parentId !== null && known.has(sub.parentId) ? sub.parentId : null;
+        await this.goldens.where("folderId").equals(sub.id).modify({ folderId: target });
+        await this.folders.delete(sub.id);
+      }
+    });
+    return subs.length;
+  }
+
   // ─── 保留期清理(TTL) ───────────────────────────────────────────────────────────
 
   /**
@@ -500,6 +559,7 @@ export class PddDatabase extends Dexie {
       await this.replies.where("qaId").anyOf(expiredIds).delete();
       await this.qaRecords.bulkDelete(expiredIds);
     });
+    invalidateRetrievalCache();
     return expiredIds.length;
   }
 }

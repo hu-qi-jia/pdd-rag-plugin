@@ -35,6 +35,10 @@ export function MemoryListTab({
   onDataChanged: () => Promise<void> | void
 }) {
   const [items, setItems] = useState<MemoryListItem[]>([])
+  // 分页状态(PM2):total 为排除自检后的全量数,hasMore 由后台按 offset+页大小<total 推得
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [keyword, setKeyword] = useState('')
   // 默认全部展开(问题+回复直接可见);记录用户手动折叠的条目
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
@@ -44,20 +48,49 @@ export function MemoryListTab({
   // 「设置标准回答」的行内即时反馈:请求中
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
 
+  const applyPage = useCallback(
+    (p: GetMemoryListResponse['payload'], append: boolean) => {
+      setItems((prev) => (append ? [...prev, ...p.items] : p.items))
+      setTotal(p.total)
+      setHasMore(p.hasMore)
+    },
+    [],
+  )
+
   const load = useCallback(async () => {
     try {
       const resp = await sendMessage<GetMemoryListResponse>({ type: 'GET_MEMORY_LIST' })
       if (resp.payload.error) {
         setMsg({ ok: false, text: `读取失败:${resp.payload.error}` })
       } else {
-        setItems(resp.payload.items)
+        applyPage(resp.payload, false)
       }
     } catch (err) {
       setMsg({ ok: false, text: `读取失败:${String(err)}` })
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [applyPage])
+
+  /** 「加载更早」:offset = 已加载条数,追加下一页(PM2 显式翻页入口) */
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true)
+    try {
+      const resp = await sendMessage<GetMemoryListResponse>({
+        type: 'GET_MEMORY_LIST',
+        payload: { offset: items.length },
+      })
+      if (resp.payload.error) {
+        setMsg({ ok: false, text: `读取失败:${resp.payload.error}` })
+      } else {
+        applyPage(resp.payload, true)
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `读取失败:${String(err)}` })
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [applyPage, items.length])
 
   useEffect(() => {
     void load()
@@ -335,6 +368,27 @@ export function MemoryListTab({
           </Card>
         )
       })}
+
+      {/* 分页入口(PM2):显式"加载更早"取代静默截断;载完显示全量口径 */}
+      {!loading && hasMore && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: spacing.xs }}>
+          <Btn tk={tk} variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? '读取中…' : `加载更早(已显示 ${items.length}/${total} 条)`}
+          </Btn>
+        </div>
+      )}
+      {!loading && !hasMore && items.length > 0 && (
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: fontSize.caption,
+            color: tk.textTertiary,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          已显示全部 {total} 条
+        </div>
+      )}
     </div>
   )
 }

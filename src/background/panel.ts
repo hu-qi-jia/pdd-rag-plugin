@@ -5,9 +5,11 @@
 import { db } from "./db";
 import { UNCATEGORIZED_FOLDER_ID } from "../types/memory";
 import type {
+  ClearMemoryDataRequest,
   CreateFolderRequest,
   DeleteFolderRequest,
   DeleteQaRequest,
+  FlattenFoldersRequest,
   GetPanelDataRequest,
   GetPanelDataResponse,
   GetMemoryListRequest,
@@ -16,15 +18,22 @@ import type {
   RenameFolderRequest,
 } from "../types/messages";
 
-/** 记忆列表上限(360px 面板流式展示;翻页留待需要时再做) */
+/** 记忆列表单页条数(PM2:默认 100,底部"加载更早"显式翻页,不再静默截断) */
 const MEMORY_LIST_LIMIT = 100;
 
-/** 记忆列表:问答 + 挂载回复一次拉全(按时间升序排列回复);回复回带 goldenId(PM1) */
+/** 记忆列表分页:问答 + 挂载回复一次拉全(按时间升序排列回复);回复回带 goldenId(PM1) */
 export async function getMemoryList(
-  _message: GetMemoryListRequest,
-): Promise<{ items: MemoryListItem[] }> {
-  const [qas, goldens] = await Promise.all([
-    db.listQaRecords(MEMORY_LIST_LIMIT),
+  message: GetMemoryListRequest,
+): Promise<{ items: MemoryListItem[]; total: number; hasMore: boolean }> {
+  const raw = (message.payload ?? {}) as { offset?: number; limit?: number };
+  const offset = Math.max(0, Math.floor(Number(raw.offset) || 0));
+  const limit = Math.min(
+    200,
+    Math.max(1, Math.floor(Number(raw.limit) || MEMORY_LIST_LIMIT)),
+  );
+
+  const [{ rows: qas, total }, goldens] = await Promise.all([
+    db.listQaRecordsPage(offset, limit),
     db.goldens.toArray(),
   ]);
   const replies = await db.getRepliesByQaIds(qas.map((q) => q.id));
@@ -51,7 +60,7 @@ export async function getMemoryList(
     replyCount: q.replyCount,
     replies: (byQa.get(q.id) ?? []).sort((a, b) => a.ts - b.ts),
   }));
-  return { items };
+  return { items, total, hasMore: offset + items.length < total };
 }
 
 /** 删除单条问答(连同其全部回复) */
@@ -63,6 +72,18 @@ export async function deleteQa(
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+/** 清空问答记忆(PM6a:qa+replies 全清;金标准/知识库/文件夹保留) */
+export async function clearMemoryData(
+  _message: ClearMemoryDataRequest,
+): Promise<{ success: boolean; deletedQa: number; error?: string }> {
+  try {
+    const deletedQa = await db.clearQaMemory();
+    return { success: true, deletedQa };
+  } catch (err) {
+    return { success: false, deletedQa: 0, error: String(err) };
   }
 }
 
@@ -162,5 +183,17 @@ export async function deleteFolder(
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+/** 遗留子文件夹一键拍平(PM7):金标准上移父夹,删除子夹 */
+export async function flattenFolders(
+  _message: FlattenFoldersRequest,
+): Promise<{ success: boolean; flattened: number; error?: string }> {
+  try {
+    const flattened = await db.flattenSubfolders();
+    return { success: true, flattened };
+  } catch (err) {
+    return { success: false, flattened: 0, error: String(err) };
   }
 }

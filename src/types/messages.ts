@@ -183,11 +183,20 @@ export interface MemoryListItem {
 
 export interface GetMemoryListRequest {
   type: 'GET_MEMORY_LIST'
+  /** 分页(PM2):offset 起始条数(缺省 0);limit 单页条数(缺省 100) */
+  payload?: { offset?: number; limit?: number }
 }
 
 export interface GetMemoryListResponse {
   type: 'GET_MEMORY_LIST_RESPONSE'
-  payload: { items: MemoryListItem[]; error?: string }
+  payload: {
+    items: MemoryListItem[]
+    /** 排除自检数据后的问答总数(与头部统计同口径) */
+    total: number
+    /** 是否还有更早记录 */
+    hasMore: boolean
+    error?: string
+  }
 }
 
 export interface DeleteQaRequest {
@@ -198,6 +207,16 @@ export interface DeleteQaRequest {
 export interface DeleteQaResponse {
   type: 'DELETE_QA_RESPONSE'
   payload: { success: boolean; error?: string }
+}
+
+/** 清空问答记忆(PM6a:qa+replies;金标准/知识库/文件夹保留) */
+export interface ClearMemoryDataRequest {
+  type: 'CLEAR_MEMORY_DATA'
+}
+
+export interface ClearMemoryDataResponse {
+  type: 'CLEAR_MEMORY_DATA_RESPONSE'
+  payload: { success: boolean; deletedQa: number; error?: string }
 }
 
 // ─── P3 面板:金标准 / 文件夹(popup → SW)────────────────────────────────────
@@ -294,6 +313,16 @@ export interface DeleteFolderRequest {
 export interface DeleteFolderResponse {
   type: 'DELETE_FOLDER_RESPONSE'
   payload: { success: boolean; error?: string }
+}
+
+/** 遗留子文件夹一键拍平(PM7):金标准上移父夹,删除子夹 */
+export interface FlattenFoldersRequest {
+  type: 'FLATTEN_FOLDERS'
+}
+
+export interface FlattenFoldersResponse {
+  type: 'FLATTEN_FOLDERS_RESPONSE'
+  payload: { success: boolean; flattened: number; error?: string }
 }
 
 // ─── P4-KB 知识库 CRUD(popup → SW)───────────────────────────────────────────
@@ -428,12 +457,14 @@ export type ExtensionMessage =
   | AddGoldenRequest
   | GetMemoryListRequest
   | DeleteQaRequest
+  | ClearMemoryDataRequest
   | GetPanelDataRequest
   | UpdateGoldenRequest
   | DeleteGoldenRequest
   | CreateFolderRequest
   | RenameFolderRequest
   | DeleteFolderRequest
+  | FlattenFoldersRequest
   | CreateKbRequest
   | UpdateKbRequest
   | DeleteKbRequest
@@ -452,12 +483,14 @@ export type ExtensionMessageResponse =
   | AddGoldenResponse
   | GetMemoryListResponse
   | DeleteQaResponse
+  | ClearMemoryDataResponse
   | GetPanelDataResponse
   | UpdateGoldenResponse
   | DeleteGoldenResponse
   | CreateFolderResponse
   | RenameFolderResponse
   | DeleteFolderResponse
+  | FlattenFoldersResponse
   | CreateKbResponse
   | UpdateKbResponse
   | DeleteKbResponse

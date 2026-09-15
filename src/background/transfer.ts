@@ -77,13 +77,13 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
   }
 
   try {
+    // ── 读取阶段(计划逻辑只依赖导入前的库内状态)─────────────────────────────
     // 1) 文件夹(金标准的挂载目标先就位)
     const existingFolderIds = new Set((await db.listFolders()).map((f) => f.id));
     const folderPlan = planFolderImports(
       asArray(env.folders),
       existingFolderIds,
     );
-    if (folderPlan.toAdd.length > 0) await db.folders.bulkAdd(folderPlan.toAdd);
 
     // 2) 金标准((问题+答案) 幂等 + 每问题上限;悬空 folderId 归"未分类")
     const goldenCtx = goldenImportContext(await db.goldens.toArray());
@@ -99,37 +99,54 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     for (const g of goldenPlan.toAdd) {
       if (g.folderId !== null && !knownFolderIds.has(g.folderId)) g.folderId = null;
     }
-    if (goldenPlan.toAdd.length > 0) await db.goldens.bulkAdd(goldenPlan.toAdd);
-    for (const g of goldenPlan.toAdd) queueEmbedding("golden", g.id, g.question);
 
     // 2.5) 知识库(标题 hash 幂等;enabled 原样保留,向量一律重嵌)
     const existingKbHashes = new Set(
       (await db.knowledge.toArray()).map((k) => k.questionHash),
     );
     const kbPlan = planKnowledgeImports(asArray(env.knowledge), existingKbHashes);
-    if (kbPlan.toAdd.length > 0) await db.knowledge.bulkAdd(kbPlan.toAdd);
-    for (const k of kbPlan.toAdd) queueEmbedding("knowledge", k.id, kbAnchorText(k));
 
     // 3) 记忆搬库(可选部分;问答重嵌排队)
     let addedQa = 0;
     let skippedQa = 0;
     let addedReplies = 0;
     let skippedReplies = 0;
+    let memPlan: ReturnType<typeof planMemoryImports> | null = null;
     if (Array.isArray(env.qaRecords) || Array.isArray(env.replies)) {
       const [existingQaIds, existingReplyIds] = await Promise.all([
         db.qaRecords.toCollection().primaryKeys(),
         db.replies.toCollection().primaryKeys(),
       ]);
-      const memPlan = planMemoryImports(
+      memPlan = planMemoryImports(
         asArray(env.qaRecords),
         asArray(env.replies),
         new Set(existingQaIds as string[]),
         new Set(existingReplyIds as string[]),
       );
-      if (memPlan.toAddQa.length > 0) await db.qaRecords.bulkAdd(memPlan.toAddQa);
-      if (memPlan.toAddReplies.length > 0) {
-        await db.replies.bulkAdd(memPlan.toAddReplies);
-      }
+    }
+
+    // ── 写库阶段(2026-09-15 审计:多个 bulkAdd 串行无事务,中途失败会留下
+    // 半成品库;现整体包进一个 Dexie 事务,任一步失败全部回滚)──────────────────
+    await db.transaction(
+      "rw",
+      [db.folders, db.goldens, db.knowledge, db.qaRecords, db.replies],
+      async () => {
+        if (folderPlan.toAdd.length > 0) await db.folders.bulkAdd(folderPlan.toAdd);
+        if (goldenPlan.toAdd.length > 0) await db.goldens.bulkAdd(goldenPlan.toAdd);
+        if (kbPlan.toAdd.length > 0) await db.knowledge.bulkAdd(kbPlan.toAdd);
+        if (memPlan) {
+          if (memPlan.toAddQa.length > 0) await db.qaRecords.bulkAdd(memPlan.toAddQa);
+          if (memPlan.toAddReplies.length > 0) {
+            await db.replies.bulkAdd(memPlan.toAddReplies);
+          }
+        }
+      },
+    );
+
+    // 重嵌排队在事务提交后进行(回滚时不留幽灵队列)
+    for (const g of goldenPlan.toAdd) queueEmbedding("golden", g.id, g.question);
+    for (const k of kbPlan.toAdd) queueEmbedding("knowledge", k.id, kbAnchorText(k));
+    if (memPlan) {
       for (const q of memPlan.toAddQa) queueEmbedding("qa", q.id, q.question);
       addedQa = memPlan.toAddQa.length;
       skippedQa = memPlan.skippedQa;

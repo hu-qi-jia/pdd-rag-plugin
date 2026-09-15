@@ -1,6 +1,10 @@
 # 设计规范(Design System)
 
-> 版本 2.6.2 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.3 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> v2.6.3 增补:覆盖层跟随主题(聊天页面板/按钮读 `pddcs:theme` 实时重建,不再固定浅色)、
+> 导航激活 2px 左指示条(非背景块)、Toggle 键盘可达(tabIndex + Enter/Space + 焦点环)、
+> Btn 四种 variant 全部有悬浮底色(新增 `errorHoverBg` 令牌)、知识库手工条目去徽标(仅文档块保留「文档」)、
+> Notice 成功提示 4s 自动消失(失败常驻)、记忆页「已设为标准回答」徽标持久化(库级 goldenId 回带)
 > v2.6.2 增补:一致性三处对齐 —— ①「新建文件夹」升为主按钮(黑底白字,与页内主路径一致);
 > ②知识库卡片次级操作(复制/编辑/停用/删除)收进行悬浮层(与文件夹页同款 `.pddcs-row-ops`,删除确认时常驻);
 > ③危险按钮统一软底色(errorBg 底 + errorText 字,替换"纯 errorText 底 + 白字"的两处旧形态:确认删除行内钮、BtnMini danger)
@@ -97,13 +101,13 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 
 | 组件 | 说明 |
 |------|------|
-| `Btn` | 直角按钮(6px),4 种 variant:default / primary(黑底白字) / danger / ghost |
+| `Btn` | 直角按钮(6px),4 种 variant:default / primary(黑底白字) / danger / ghost;**四种 variant 全部有悬浮底色**(v2.6.3:primary 提亮一档、danger 加深一档 `errorHoverBg`、ghost/default 面色提亮一档) |
 | `Card` | 卡片容器(白底 + 1px #E5E5E5 边框 + 8px 圆角),可选标题 |
-| `Badge` | 徽标,3 种 tone:golden / knowledge / neutral;4px 小方标 |
-| `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口 |
+| `Badge` | 徽标,3 种 tone:golden / knowledge / neutral;4px 小方标;知识库页手工条目**不挂徽标**(v2.6.3:本页即知识库,徽标只用于标记文档块) |
+| `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口;**成功提示 4s 自动消失**(v2.6.3,`onDismiss` 回调父级清 state;失败提示常驻供读错因) |
 | `EmptyState` | 空状态(居中、两行文案) |
 | `SearchInput` | 带放大镜的搜索输入框 |
-| `Toggle` | 拨杆开关(选中态 **accent**;v2.4 修正:原黑白反转在深色下变"白轨道+白圆点",圆点直接消失) |
+| `Toggle` | 拨杆开关(选中态 **accent**;v2.4 修正:原黑白反转在深色下变"白轨道+白圆点",圆点直接消失);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + `.pddcs-switch:focus-visible` accent 焦点环) |
 | `Slider` | 数值滑杆(accent 色、tabular-nums 数值) |
 | `SectionLabel` | 小节标签 |
 | `inputStyle` | 表单元素统一样式原语(独立成行的输入框/文本域) |
@@ -115,8 +119,11 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 
 ## 六、聊天页覆盖层(`contents/pdd-ai-button.ts`)
 
-CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/theme`(lightTheme)插值导入**,
-与 popup 同源;固定浅色(宿主页面不可控,浅色最稳)。
+CSS 由纯函数 `utils/overlayTheme.ts#buildOverlayCss(tk)` 按主题令牌生成
+(**颜色/字体/圆角/字号全部从 `ui/design` + `ui/theme` 插值**,与 popup 同源)。
+**跟随 popup 主题设置**(v2.6.3,替换原"固定浅色"):启动读 `chrome.storage` 的 `pddcs:theme`,
+`storage.onChanged` 实时整体重建 `<style>`;toast 保持深底白字不随主题切换。
+存储值容错解析(`parseThemeMode`:非法/缺失回退浅色)。
 
 - `.pddcs-ai-btn`:AI回复按钮 —— 与 popup 的 `.pddcs-btn` **同档工具风控件**
   (26px 高 / 6px 圆角 / 12.5px 字号 / 白底细描边 / 悬浮浅灰;纯文字无图标,2026-09-15 用户定)。
@@ -151,7 +158,9 @@ CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/
 **记忆列表卡片**(同一工具语言):卡片头**问题与元信息居左**,折叠钮移到**行尾**
 (chevron,折叠时旋转 -90°,带 `aria-expanded`;整行仍可点击折叠,v2.6.1 用户要求);
 展开区与问题文本同左基线(不再为折叠钮留缩进);
-回复行常驻「设置标准回答」主钮,成功后就地变绿色对勾「已设为标准回答」。
+回复行常驻「设置标准回答」主钮;已提升的回复显示绿色对勾「已设为标准回答」——
+**徽标持久化**(v2.6.3):`GET_MEMORY_LIST` 按 `goldens.sourceReplyId` 回带 `goldenId`,
+前端从数据派生,重开 popup、取消后都如实反映库内状态(原会话级 state 重开即丢)。
 
 ## 七-A、顶部概览按页签分散(v2.4)
 
@@ -223,11 +232,14 @@ CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/
 - `.pddcs-scroll`:悬浮才出现的细滚动条。
 - `.pddcs-rail-btn`:导航图标按钮 —— **任何状态下都只有图标本身,无背景块**
   (v2.6 用户要求,含悬浮态;2026-09-15 v2.5 起默认态已去背景块),
-  激活态用图标颜色(`text` vs `textMuted`)与描边粗细(2.4 vs 1.8)表达;
+  激活态用图标颜色(`text` vs `textMuted`)、描边粗细(2.4 vs 1.8)与 **2px 左侧短指示条**
+  (v2.6.3:贴导航栏左缘、高 14、`tk.text` 色;原激活态几乎不可辨,又不接受背景块)表达;
   导航栏顶部**不放品牌标**。
+- `.pddcs-switch`:Toggle 开关的键盘焦点环 —— `.pddcs-switch:focus-visible` 画 2px accent
+  外描边(v2.6.3;仅键盘聚焦显现,鼠标点击不出环)。
 - `.pddcs-row(-ops)`:行悬浮操作显现规则(见 §五)。
 - **令牌 → CSS 变量桥**:静态 CSS(RESET_CSS)读不到 React 令牌,凡随主题变化的静态规则一律走
-  CSS 变量:`--pddcs-scroll-thumb`(滚动条滑块)。
+  CSS 变量:`--pddcs-scroll-thumb`(滚动条滑块)、`--pddcs-accent`(焦点环)。
   注意**内联样式优先级高于类选择器**:不要给依赖 `:hover` 的元素内联写死对应属性,
   否则 `:hover` 永远不生效。
 - 外框:`overflow:hidden; border-radius:8px`,body 背景透明。

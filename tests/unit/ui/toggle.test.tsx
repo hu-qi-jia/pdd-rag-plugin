@@ -44,6 +44,12 @@ describe('Toggle:布局与滑块契约(2026-09-15 用户要求开关右置)', ()
     expect(knob).toBeTruthy()
     expect(knob.style.left).toBe('')
   })
+
+  it('标签加粗(semibold,2026-09-15 第十七轮用户要求)', () => {
+    renderToggle(vi.fn())
+    const label = Array.from(container.querySelectorAll('span')).find((el) => el.textContent === '自动捕获')
+    expect(label?.style.fontWeight).toBe('600')
+  })
 })
 
 describe('Toggle:键盘可达', () => {

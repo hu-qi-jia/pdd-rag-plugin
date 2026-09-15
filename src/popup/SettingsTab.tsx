@@ -16,7 +16,7 @@ import type {
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, type NoticeMsg } from '../ui/components'
-import { fontSize, fontWeight, spacing } from '../ui/design'
+import { controlH, fontSize, fontWeight, spacing } from '../ui/design'
 import { DownloadIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../utils/hotkey'
 
@@ -387,39 +387,48 @@ function HotkeyRow({
   }, [recording, onChange])
 
   return (
-    // 控件一行(标签 + kbd + 修改),说明文字整行换行展示(2026-09-15 用户反馈:
-    // popup 宽度有限,四段挤一行会把「快捷键」标签压成竖排)
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: 6 }}>
-      <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium, flexShrink: 0 }}>快捷键</span>
-      <kbd
-        style={{
-          padding: '2px 8px',
-          borderRadius: 6,
-          border: `1px solid ${tk.border}`,
-          backgroundColor: tk.bgSecondary,
-          color: tk.text,
-          fontSize: fontSize.caption,
-          fontFamily: 'ui-monospace, Consolas, monospace',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-        }}
-      >
-        {formatHotkey(hotkey)}
-      </kbd>
+    // 两行结构(2026-09-15 第十七轮重排):行1 = 标签 + kbd + 「修改」推至行右,
+    // kbd 显式取 controlH.form 与按钮严格等高(等高铁律);行2 = 说明/录入提示。
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+        <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.semibold, flexShrink: 0 }}>快捷键</span>
+        <kbd
+          style={{
+            height: controlH.form,
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '0 10px',
+            borderRadius: 6,
+            border: `1px solid ${tk.border}`,
+            backgroundColor: tk.bgSecondary,
+            color: tk.text,
+            fontSize: fontSize.caption,
+            fontFamily: 'ui-monospace, Consolas, monospace',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          {formatHotkey(hotkey)}
+        </kbd>
+        {!recording && (
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <Btn tk={tk} title="按下新的组合键即可替换当前快捷键" onClick={() => setRecording(true)}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <PencilIcon size={12} strokeWidth={2} />修改
+              </span>
+            </Btn>
+          </div>
+        )}
+      </div>
       {recording ? (
-        <span style={{ flexBasis: '100%', fontSize: fontSize.caption, color: tk.accent }}>
+        <span style={{ fontSize: fontSize.caption, color: tk.accent, lineHeight: 1.5 }}>
           请按下新的快捷键(Esc 取消;需带 Ctrl/Alt/Shift)
         </span>
       ) : (
-        <Btn tk={tk} title="按下新的组合键即可替换当前快捷键" onClick={() => setRecording(true)}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <PencilIcon size={12} strokeWidth={2} />修改
-          </span>
-        </Btn>
+        <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
+          在聊天页按此键唤起推荐回复
+        </span>
       )}
-      <span style={{ flexBasis: '100%', fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
-        在聊天页按此键唤起推荐回复
-      </span>
     </div>
   )
 }

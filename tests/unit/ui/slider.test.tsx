@@ -46,6 +46,12 @@ describe('Slider:自定义滑轨', () => {
     expect(container.textContent).toContain('0.50')
   })
 
+  it('标签加粗(semibold,2026-09-15 第十七轮用户要求)', () => {
+    renderSlider(vi.fn())
+    const label = Array.from(container.querySelectorAll('span')).find((el) => el.textContent === '历史相似度阈值')
+    expect(label?.style.fontWeight).toBe('600')
+  })
+
   it('轨道按值填充:背景渐变在 (value-min)/(max-min) 处硬切', () => {
     renderSlider(vi.fn(), 0.6) // (0.6-0.3)/(0.9-0.3) = 50%
     const input = container.querySelector('input[type="range"]') as HTMLInputElement

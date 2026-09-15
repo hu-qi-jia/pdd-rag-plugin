@@ -337,7 +337,7 @@ export function Toggle({
       }}
     >
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: fontSize.body, fontWeight: fontWeight.medium }}>
+        <span style={{ display: 'block', fontSize: fontSize.body, fontWeight: fontWeight.semibold }}>
           {label}
         </span>
         <span
@@ -413,7 +413,7 @@ export function Slider({
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontSize.body }}>
-        <span>{label}</span>
+        <span style={{ fontWeight: fontWeight.semibold }}>{label}</span>
         <span
           style={{
             color: tk.textMuted,

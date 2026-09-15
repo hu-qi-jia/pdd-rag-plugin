@@ -369,3 +369,52 @@ describe('知识库源 knowledge', () => {
     expect(out[0].foldCount).toBe(2)
   })
 })
+
+// ─── 类别保障(2026-09-15:面板必须展示 标准答案/历史/知识库)────────────────────
+
+describe('assembleSuggestions:类别保障', () => {
+  it('知识库与标准答案同文本 → 仍只显示一条(同文本不重复占位,维持折叠语义)', () => {
+    const ranked = [
+      { source: mkSource('g1', 'golden', '退货政策'), cosine: 0.95, rrfScore: 0.05 },
+      { source: mkSource('k1', 'knowledge', '退货政策说明'), cosine: 0.9, rrfScore: 0.04 },
+    ]
+    const out = assembleSuggestions(ranked, {
+      getReplies: () => [],
+      getGoldenAnswer: (id) => (id === 'g1' ? '支持7天无理由退换' : ''),
+      getKbContent: (id) => (id === 'k1' ? '支持7天无理由退换' : ''),
+      goldenPriority: true,
+      now: 1000,
+    })
+    expect(out).toHaveLength(1)
+    expect(out[0].kind).toBe('golden')
+  })
+
+  it('截断把某类削掉时,补回该类代表且保持优先级次序(标准答案>历史>知识库)', () => {
+    const manyGoldens = Array.from({ length: 5 }, (_, i) => ({
+      source: mkSource(`g${i}`, 'golden', `金标准问题${i}`, i),
+      cosine: 0.95,
+      rrfScore: 0.1 - i * 0.01,
+    }))
+    const out = assembleSuggestions(
+      [
+        ...manyGoldens,
+        { source: mkSource('h9', 'history', '历史问题'), cosine: 0.6, rrfScore: 0.01 },
+        { source: mkSource('k9', 'knowledge', '知识条目标题'), cosine: 0.55, rrfScore: 0.008 },
+      ],
+      {
+        getReplies: () => [{ qaId: 'h9', id: 'r9', text: '历史答复内容', ts: 1 }],
+        getGoldenAnswer: (id) => (id.startsWith('g') ? `答复-${id}` : ''),
+        getKbContent: (id) => (id === 'k9' ? '知识库正文内容' : ''),
+        goldenPriority: true,
+        now: 1000,
+        maxSuggestions: 3,
+      },
+    )
+    const kinds = out.map((x) => x.kind)
+    expect(kinds).toContain('golden')
+    expect(kinds).toContain('history')
+    expect(kinds).toContain('knowledge')
+    // 优先级次序保持:标准答案在前,历史次之,知识库最后
+    expect(kinds.indexOf('history')).toBeLessThan(kinds.indexOf('knowledge'))
+  })
+})

@@ -297,8 +297,25 @@ export function assembleSuggestions(
   )
 
   const max = opts.maxSuggestions ?? 10
-  return groupGoldenAnswersByRecency(basic)
-    .slice(0, max)
+  const ordered = groupGoldenAnswersByRecency(basic)
+  const picked = ordered.slice(0, max)
+
+  // 类别保障(2026-09-15 用户要求:面板必须展示 标准答案/历史/知识库,优先级同名次)。
+  // 截断会削掉尾部的低优先级类别;这里从折叠前的候选池取该类别**文本未展示过**的最优代表补位
+  // (同文本的不补 —— 那是"同内容折叠"的既定语义,重复占位只会制造噪音)。
+  const shownTexts = new Set(picked.map((c) => hashText(c.text)))
+  for (const kind of ['golden', 'history', 'knowledge'] as const) {
+    if (picked.some((c) => c.kind === kind)) continue
+    const best = [...candidates]
+      .filter((c) => c.kind === kind && !shownTexts.has(hashText(c.text)))
+      .sort((a, b) => b.score - a.score || b.ts - a.ts)[0]
+    if (!best) continue
+    let at = picked.findIndex((c) => foldWinnerRank(c.kind) > foldWinnerRank(kind))
+    if (at === -1) at = picked.length
+    picked.splice(at, 0, best) // 允许略微超过 max:保证三类可见比严格条数更重要
+  }
+
+  return picked
     .map((c) => ({
       kind: c.kind,
       text: c.text,

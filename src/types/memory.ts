@@ -128,6 +128,23 @@ export interface ErrorLog {
   context?: Record<string, unknown>
 }
 
+// ─── 快捷键 ───────────────────────────────────────────────────────────────────
+
+/** 推荐回复快捷键(主键取 KeyboardEvent.key,如 Enter / a / ArrowDown) */
+export interface HotkeyConfig {
+  ctrl: boolean
+  alt: boolean
+  shift: boolean
+  key: string
+}
+
+export const DEFAULT_HOTKEY: HotkeyConfig = {
+  ctrl: true,
+  alt: false,
+  shift: false,
+  key: 'Enter',
+}
+
 // ─── 设置(chrome.storage.local) ────────────────────────────────────────────────
 
 export interface PddSettings {
@@ -141,6 +158,8 @@ export interface PddSettings {
   retentionDays: number
   /** 候选排序"金标准优先"开关,默认开 */
   goldenPriorityEnabled: boolean
+  /** 「自动回复」快捷键(默认 Ctrl+Enter):关=弹推荐回复面板再按 Enter 填第一条;开=直接填第一条 */
+  autoReplyHotkey: HotkeyConfig
 }
 
 export const DEFAULT_SETTINGS: PddSettings = {
@@ -149,6 +168,7 @@ export const DEFAULT_SETTINGS: PddSettings = {
   goldenThreshold: 0.4,
   retentionDays: 90,
   goldenPriorityEnabled: true,
+  autoReplyHotkey: DEFAULT_HOTKEY,
 }
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'

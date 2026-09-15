@@ -43,19 +43,16 @@ const CSS = `
 #${OVERLAY_ID} { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
   font-family: ${fontFamily}; }
 
-/* AI回复胶囊按钮 — Figma 官网控件风格(紧跟买家气泡右侧) */
-.pddcs-ai-btn { position: fixed; height: 26px; border-radius: 9999px; border: 1px solid ${tk.btnBorder};
-  cursor: pointer; pointer-events: auto; padding: 0 11px; display: inline-flex; align-items: center;
-  gap: 5px; background: ${tk.btnBg}; color: ${tk.textMuted}; font-size: ${fontSize.body}px; font-weight: 500; line-height: 1;
+/* AI回复胶囊按钮 — Figma 官网控件风格(紧跟买家气泡右侧;纯文字、20px 高) */
+.pddcs-ai-btn { position: fixed; height: 20px; border-radius: 9999px; border: 1px solid ${tk.btnBorder};
+  cursor: pointer; pointer-events: auto; padding: 0 10px; display: inline-flex; align-items: center;
+  background: ${tk.btnBg}; color: ${tk.textMuted}; font-size: ${fontSize.secondary}px; font-weight: 500; line-height: 1;
   letter-spacing: -0.01em; box-shadow: 0 1px 3px rgba(30,31,33,0.06);
   transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
 .pddcs-ai-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; border-color: #d9d9d9; }
 .pddcs-ai-btn:active { background: ${tk.border}; }
-.pddcs-ai-btn svg { flex-shrink: 0; color: ${tk.accent}; }
 .pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
-@keyframes pddcs-spin { to { transform: rotate(360deg); } }
-.pddcs-ai-btn.pddcs-loading svg { animation: pddcs-spin .8s linear infinite; }
 
 /* 候选弹窗 — Figma 浮层卡片风格 */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: 62vh; overflow: auto;
@@ -99,14 +96,8 @@ const CSS = `
 .pddcs-toast.show { opacity: 1; }
 `
 
-/** Lucide "sparkles" 同款图标(2px 描边圆角线帽,与 ChatGPT 一致) */
-const SPARK_SVG =
-  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>' +
-  '<path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>'
-
-const AI_BTN_W = 80 // "AI回复" 胶囊预估宽度(定位用)
+/** Lucide "sparkles" 图标已按用户要求移除(2026-09-15):按钮为纯文字胶囊 */
+const AI_BTN_W = 70 // "AI回复" 纯文字胶囊预估宽度(定位用)
 
 function ensureOverlay(): HTMLDivElement {
   let overlay = document.getElementById(OVERLAY_ID) as HTMLDivElement | null
@@ -229,7 +220,7 @@ function scanButtons(): void {
       btn = document.createElement('button')
       btn.className = 'pddcs-ai-btn'
       btn.title = 'AI 检索历史回复'
-      btn.innerHTML = `${SPARK_SVG}<span class="pddcs-ai-btn-label">AI回复</span>`
+      btn.innerHTML = `<span class="pddcs-ai-btn-label">AI回复</span>`
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation()
         void onButtonClick(li, btn!)
@@ -242,14 +233,14 @@ function scanButtons(): void {
     const bubble = li.querySelector('.buyer-item .msg-content-box')
     const anchor = (bubble as HTMLElement | null)?.getBoundingClientRect() ?? rect
     const bw = btn.offsetWidth || AI_BTN_W
-    // x:气泡右侧;放不下则贴气泡左侧
-    const x = anchor.right + 8 + bw <= window.innerWidth - 8
-      ? anchor.right + 8
-      : Math.max(4, anchor.left - bw - 8)
-    // y:气泡垂直居中,夹在消息容器可视区内
+    // x:气泡右侧 12px(用户反馈贴太近会压到气泡);放不下则贴气泡左侧
+    const x = anchor.right + 12 + bw <= window.innerWidth - 8
+      ? anchor.right + 12
+      : Math.max(4, anchor.left - bw - 12)
+    // y:气泡垂直居中(按钮高 20 → 偏移 10),夹在消息容器可视区内
     const y = Math.min(
-      Math.max(anchor.top + anchor.height / 2 - 13, cont.top + 2),
-      cont.bottom - 28,
+      Math.max(anchor.top + anchor.height / 2 - 10, cont.top + 2),
+      cont.bottom - 22,
     )
     btn.style.left = `${Math.round(x)}px`
     btn.style.top = `${Math.round(y)}px`
@@ -299,11 +290,9 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
 
   const label = btn.querySelector('.pddcs-ai-btn-label') as HTMLElement | null
   btn.disabled = true
-  btn.classList.add('pddcs-loading')
   if (label) label.textContent = '检索中'
   const { suggestions, settings, error } = await fetchSuggestions(query)
   btn.disabled = false
-  btn.classList.remove('pddcs-loading')
   if (label) label.textContent = 'AI回复'
 
   if (error) {

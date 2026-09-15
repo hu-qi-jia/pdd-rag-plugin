@@ -2,8 +2,8 @@
  * 混合检索纯逻辑(设计文档 §6.2)—— 不触碰 chrome/Dexie/offscreen。
  *
  * 管线:候选池(按来源类型阈值过滤原始余弦)→ 双路排名(向量×时间衰减 /
- * BM25)→ RRF 融合 → 展开回复/知识正文候选 → 同内容折叠 → 层级置顶
- * (金标准 > 知识库 > 历史,可关)。
+ * BM25)→ RRF 融合 → 展开回复/知识正文候选 → 同内容折叠 → 类别配额装配
+ * (标准回答全部 / 历史最近 2 / 知识库 1,金标准层级置顶可关)。
  *
  * 设计要点:
  *  - 检索锚 = 问题文本(买家问题 vs 历史/金标准问题);回复正文不向量化;
@@ -188,7 +188,15 @@ export function rankCandidates(
 }
 
 /**
- * 候选组装:过阈源展开为回复候选 → 同内容折叠(hashText)→ 金标准置顶排序 → 截断。
+ * 推荐回复面板类别配额(2026-09-15 用户指定,推荐回复与快捷键面板共用):
+ *  - 标准回答:全部展示(同一问题本身有 MAX_GOLDENS_PER_QUESTION=3 上限);
+ *  - 历史:取**最近** 2 条(按回复时间倒序,而非按相关度);
+ *  - 知识库:取 1 条(相关度最高)。
+ */
+export const PANEL_QUOTA = { history: 2, knowledge: 1 } as const
+
+/**
+ * 候选组装:过阈源展开为回复候选 → 同内容折叠(hashText)→ 按类别配额装配。
  * getReplies / getGoldenAnswer / getKbContent 由调用方注入(DAO 或测试桩;
  * getKbContent 缺省视为知识库为空)。
  * 组内胜者:金标准 > 知识库 > 历史;同 kind 取父问题余弦最高,平分取最新回复时间。
@@ -201,7 +209,6 @@ export function assembleSuggestions(
     getKbContent?: (id: string) => string
     goldenPriority: boolean
     now: number
-    maxSuggestions?: number
   },
 ): Suggestion[] {
   interface Cand extends Suggestion {
@@ -296,24 +303,28 @@ export function assembleSuggestions(
       b.ts - a.ts,
   )
 
-  const max = opts.maxSuggestions ?? 10
+  // ── 类别配额装配(2026-09-15 用户指定,替代原"maxSuggestions 截断 + 类别保障"):
+  // 标准回答全部展示;历史取最近 2 条(回复时间倒序,与相关度无关);
+  // 知识库取 1 条(相关度最高)。配额在折叠后的胜者池上选取,
+  // 某类别候选存在就必然占位,无需再做事后补位。
   const ordered = groupGoldenAnswersByRecency(basic)
-  const picked = ordered.slice(0, max)
+  const goldenPicked = ordered.filter((c) => c.kind === 'golden')
+  const historyPicked = ordered
+    .filter((c) => c.kind === 'history')
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, PANEL_QUOTA.history)
+  const knowledgePicked = ordered
+    .filter((c) => c.kind === 'knowledge')
+    .sort((a, b) => b.score - a.score || b.ts - a.ts)
+    .slice(0, PANEL_QUOTA.knowledge)
+  const byQuota = [...goldenPicked, ...historyPicked, ...knowledgePicked]
 
-  // 类别保障(2026-09-15 用户要求:面板必须展示 标准答案/历史/知识库,优先级同名次)。
-  // 截断会削掉尾部的低优先级类别;这里从折叠前的候选池取该类别**文本未展示过**的最优代表补位
-  // (同文本的不补 —— 那是"同内容折叠"的既定语义,重复占位只会制造噪音)。
-  const shownTexts = new Set(picked.map((c) => hashText(c.text)))
-  for (const kind of ['golden', 'history', 'knowledge'] as const) {
-    if (picked.some((c) => c.kind === kind)) continue
-    const best = [...candidates]
-      .filter((c) => c.kind === kind && !shownTexts.has(hashText(c.text)))
-      .sort((a, b) => b.score - a.score || b.ts - a.ts)[0]
-    if (!best) continue
-    let at = picked.findIndex((c) => foldWinnerRank(c.kind) > foldWinnerRank(kind))
-    if (at === -1) at = picked.length
-    picked.splice(at, 0, best) // 允许略微超过 max:保证三类可见比严格条数更重要
-  }
+  // goldenPriority 关闭时不按层级置顶,在配额选出的候选上按融合分混排
+  const picked = opts.goldenPriority
+    ? byQuota
+    : [...byQuota].sort(
+        (a, b) => b.rrfScore - a.rrfScore || b.score - a.score || b.ts - a.ts,
+      )
 
   return picked
     .map((c) => ({

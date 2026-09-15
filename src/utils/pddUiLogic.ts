@@ -1,6 +1,8 @@
 // P2-4 content UI 纯逻辑(chrome/DOM 无关,可单测)。
 // UI 行为状态机见设计文档 §6.3:直填开关开 → 永远直填最高分;
-// 关 → 单候选直填,多候选弹窗 top-3,无候选仅提示。
+// 关 → 单候选直填,多候选弹推荐回复面板,无候选仅提示。
+// 面板条数由检索侧类别配额决定(标准回答全部 + 历史最近 2 + 知识库 1,
+// 见 retrieval.ts#PANEL_QUOTA),此处不再截断。
 
 import type { Suggestion } from "../types/messages";
 
@@ -8,9 +10,6 @@ export type UiAction =
   | { action: "none" }
   | { action: "fill"; fillIndex: number }
   | { action: "popup"; items: Suggestion[] };
-
-/** 弹窗展示的候选数上限(设计 §6.3) */
-export const POPUP_MAX = 3;
 
 /**
  * 连续买家行文本合并为检索 query:按时间序换行拼接,剔除空行,
@@ -34,5 +33,5 @@ export function decideUiAction(
   if (directFillEnabled || suggestions.length === 1) {
     return { action: "fill", fillIndex: 0 };
   }
-  return { action: "popup", items: suggestions.slice(0, POPUP_MAX) };
+  return { action: "popup", items: suggestions };
 }

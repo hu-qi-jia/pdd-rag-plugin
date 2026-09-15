@@ -39,9 +39,10 @@ describe('decideUiAction:直填/弹窗状态机', () => {
   it('开关关 + 单候选 → 直接填充', () => {
     expect(decideUiAction([sug('a')], false)).toEqual({ action: 'fill', fillIndex: 0 })
   })
-  it('开关关 + 多候选 → 弹窗 top-3', () => {
-    const r = decideUiAction([sug('a'), sug('b'), sug('c'), sug('d')], false)
+  it('开关关 + 多候选 → 弹窗展示全部候选(条数由检索侧配额决定,此处不截断)', () => {
+    const items = [sug('a'), sug('b'), sug('c'), sug('d')]
+    const r = decideUiAction(items, false)
     expect(r.action).toBe('popup')
-    if (r.action === 'popup') expect(r.items).toHaveLength(3)
+    if (r.action === 'popup') expect(r.items).toEqual(items)
   })
 })

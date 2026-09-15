@@ -1,6 +1,7 @@
 # 设计规范(Design System)
 
-> 版本 2.1 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.2 · 2026-09-15 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> v2.2 增补:控件等高铁律与 `controlH` 令牌、`Notice` 吸附顶部、聊天页按钮与气泡的真实外缘锚定
 > 代码真源:`src/ui/design.ts`(几何与字型)+ `src/ui/theme.ts`(配色)
 > 组件资产:`src/ui/components.tsx`(popup 复用);聊天页覆盖层 CSS 由 `pdd-ai-button.ts` 从同一令牌导入插值
 
@@ -57,7 +58,17 @@
 | `spacing.xs→xxl` | 4 / 6 / 8 / 10 / 12 / 16 | 4 的倍数栅格 |
 | `size.popupWidth / popupHeight` | 400 / 560 | popup 固定外框(内容区滚动) |
 | `size.railWidth / railBtn` | 52 / 36 | 图标导航栏 / 导航按钮 |
+| `controlH.inline / form` | **24 / 26** | 行内小控件 / 表单与工具栏控件(见下) |
 | `motion.fast / normal` | 0.12s / 0.15s ease | 悬停 / 开关过渡 |
+
+**控件等高铁律**(2026-09-15 补):同一行内的输入框与按钮必须取同一档高度,
+且用**显式 `height`** 而不是靠 `padding + line-height` 撑 —— 后者会随字号/行高漂移,
+出现几像素的高低位错(实测:新建子文件夹输入框 35px vs「创建/取消」28px)。
+- `controlH.inline = 24`:行悬浮图标钮、行内小按钮(填充/确认/取消)、迁移下拉。
+- `controlH.form = 26`:`.pddcs-btn`、工具栏按钮、内联表单(新建/重命名)的输入框与按钮。
+- 与按钮同排的输入框走 `components.tsx#controlStyle(tk, controlH.form)`。
+- 聊天页覆盖层不享 popup 的全局 `box-sizing: border-box` 重置,注入样式须自带。
+
 
 ## 五、组件资产(`ui/components.tsx`)
 
@@ -66,13 +77,14 @@
 | `Btn` | 直角按钮(6px),4 种 variant:default / primary(黑底白字) / danger / ghost |
 | `Card` | 卡片容器(白底 + 1px #E5E5E5 边框 + 8px 圆角),可选标题 |
 | `Badge` | 徽标,3 种 tone:golden / knowledge / neutral;4px 小方标 |
-| `Notice` | 结果提示条(成功绿 / 错误红) |
+| `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口 |
 | `EmptyState` | 空状态(居中、两行文案) |
 | `SearchInput` | 带放大镜的搜索输入框 |
 | `Toggle` | 拨杆开关(选中态黑色,pddddd 同款) |
 | `Slider` | 数值滑杆(accent 色、tabular-nums 数值) |
 | `SectionLabel` | 小节标签 |
-| `inputStyle` | 表单元素统一样式原语 |
+| `inputStyle` | 表单元素统一样式原语(独立成行的输入框/文本域) |
+| `controlStyle` | 与按钮同排的输入框样式原语(显式高度,保证等高) |
 | `.pddcs-row-ops` | 行悬浮操作容器(全局 CSS):默认透明,`:hover` / `:focus-within` 显现 |
 
 图标:统一走 `ui/icons.tsx`(lucide-react 封装,24px 画布 / 2px 描边 / 圆角线帽);禁止使用 emoji 充当图标。
@@ -83,9 +95,19 @@
 CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/theme`(lightTheme)插值导入**,
 与 popup 同源;固定浅色(宿主页面不可控,浅色最稳)。
 
-- `.pddcs-ai-btn`:AI回复按钮(20px 高、纯文字、4px 圆角、距买家气泡 12px)。
+- `.pddcs-ai-btn`:AI回复按钮 —— 与 popup 的 `.pddcs-btn` **同档工具风控件**
+  (26px 高 / 6px 圆角 / 12.5px 字号 / 白底细描边 / 悬浮浅灰;纯文字无图标,2026-09-15 用户定)。
+  `box-sizing: border-box` 显式声明;位置为气泡真实右缘外 12px。
 - `.pddcs-popup`:候选弹窗(8px 圆角 + 浮层阴影 + 4px 方徽标/迷你按钮)。
 - `.pddcs-toast`:近黑(#161616 @ .92)轻提示,6px 圆角。
+
+**气泡锚点算法**(2026-09-15 修复「按钮压住气泡」):真机结构
+`li.onemsg > .buyer-item > div[currentuid] > .msg-content > p.msg-content-box`,
+气泡底色与内边距在上层容器上,`<p>` 的 rect 右缘短掉气泡 padding(实测约 10px)——
+按 `<p>` 右缘 +12px 定位,视觉间距只剩约 1px。
+现自文本块向上吸收「有不透明背景色 且 宽度贴近文本块(容差 48px)」的最外层祖先作锚,
+宽度守卫排除整行容器的底色;兜底取文本块直属容器。算法落在
+`src/utils/pddBubbleAnchor.ts`(含单测),内容脚本只做 WeakMap 缓存。
 
 ## 七、文件夹模块布局(2026-09-15 重构)
 
@@ -97,6 +119,7 @@ CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/
 - **标准回答行**:分隔线行(非卡片)。问题加粗单行、回复灰色两行、向量状态为行内小字;
   操作分两层——「填充」黑色主钮常驻,复制/编辑/迁移/删除为悬浮显现的 24px 图标钮(删除悬浮红)。
 - **内联交互**:重命名在分区头原位表单化;删除走内联确认行(常驻可见,不依赖悬浮)。
+  内联表单的输入框与「创建/保存/取消」严格等高(`controlH.form = 26`)。
 
 ## 八、文案规范
 
@@ -109,9 +132,11 @@ CSS 为模板字符串,**颜色/字体/圆角/字号全部从 `ui/design` + `ui/
 
 ## 九、popup 全局样式(注入于 `popup/index.tsx`)
 
-- `.pddcs-btn`:直角基础样式(6px 圆角、边框、过渡)。
+- `.pddcs-btn`:直角基础样式(6px 圆角、边框、过渡);**高度固定 `controlH.form`(26px)**,
+  保证与同排输入框/工具栏按钮等高。
 - `.pddcs-input`:输入框基础样式(6px 圆角,focus 由内联 border 提亮)。
 - `.pddcs-scroll`:悬浮才出现的细滚动条。
-- `.pddcs-rail-btn`:导航图标按钮(6px 圆角悬浮灰块)。
+- `.pddcs-rail-btn`:导航图标按钮(6px 圆角悬浮灰块);导航栏顶部**不放品牌标**(2026-09-15 用户要求删除)。
 - `.pddcs-row(-ops)`:行悬浮操作显现规则(见 §五)。
 - 外框:`overflow:hidden; border-radius:8px`,body 背景透明。
+- `* { box-sizing: border-box }`:popup 全局重置,表单控件显式高度才能生效。

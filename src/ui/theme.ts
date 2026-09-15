@@ -66,7 +66,7 @@ export const lightTheme: ThemeTokens = {
   scrollThumb: 'rgba(0,0,0,0.16)',
 }
 
-/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮反转为白底黑字(黑白主色逻辑不变) */
+/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮 Figma 蓝底白字(黑白反转只保留给文本/图标) */
 export const darkTheme: ThemeTokens = {
   bg: '#1e1f21',
   bgSecondary: '#1a1b1d',
@@ -82,9 +82,11 @@ export const darkTheme: ThemeTokens = {
   btnBg: '#2c2c2c',
   btnBorder: '#3b3d40',
   btnHoverBg: '#383b3d',
-  btnPrimaryBg: '#e6e6e6',
-  btnPrimaryHover: '#ffffff',
-  btnPrimaryText: '#161616',
+  // v2.5 重设计:深色下主按钮由"近白底黑字"改为 **Figma 蓝底白字** ——
+  // 近白主钮在深色界面上过亮(用户反馈"暗色模式下为白色"),蓝主钮与开关/滑杆同一强调色
+  btnPrimaryBg: '#0d99ff',
+  btnPrimaryHover: '#33a9ff',
+  btnPrimaryText: '#ffffff',
   successBg: 'rgba(10,207,131,0.14)',
   successText: '#0acf83',
   errorBg: 'rgba(255,114,98,0.14)',

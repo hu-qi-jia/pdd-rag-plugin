@@ -134,11 +134,9 @@ function App() {
   }, [refreshStats])
 
   const railBtn = (active: boolean): React.CSSProperties => ({
-    // 未激活不写 backgroundColor:交给 .pddcs-rail-btn:hover 的 CSS 变量处理
-    // (内联样式优先级高于类选择器,写了 transparent 悬浮就再也不会有反馈)
-    ...(active ? { backgroundColor: tk.btnBg } : {}),
+    // 不写背景/边框:默认态只保留图标(2026-09-15 用户要求,激活态用图标颜色与粗细表达);
+    // 悬浮底色交给 .pddcs-rail-btn:hover 的 CSS 变量(内联会压住 :hover)
     color: active ? tk.text : tk.textMuted,
-    border: active ? `1px solid ${tk.btnBorder}` : '1px solid transparent',
   })
 
   // 令牌 → CSS 变量的桥(静态 CSS 无法直接读 React 令牌)
@@ -185,7 +183,7 @@ function App() {
             onClick={() => setTab(id)}
             title={label}
           >
-            <Icon size={17} strokeWidth={tab === id ? 2.2 : 1.8} />
+            <Icon size={18} strokeWidth={tab === id ? 2.4 : 1.8} />
           </button>
         ))}
 

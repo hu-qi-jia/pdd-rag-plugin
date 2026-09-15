@@ -459,8 +459,8 @@ export function FoldersTab({
   const goldenRow = (g: PanelGolden, depth = 0): React.ReactNode => {
     const editing = editingId === g.id
     const moving = movingId === g.id
-    /** 内容缩进:与所属文件夹的名字对齐(层级越深越右) */
-    const rowPadLeft = 28 + depth * 12
+    /** 问答卡片居左(2026-09-15 用户要求):与容器内其他内容同一基线,子级每层 +12 */
+    const rowPadLeft = 12 + depth * 12
     if (editing) {
       return (
         <div
@@ -796,7 +796,7 @@ export function FoldersTab({
           {empty && (
             <div
               style={{
-                padding: `10px ${spacing.xl - 2}px 12px ${(isRoot ? 26 : 34) + depth * 0}px`,
+                padding: `10px ${spacing.xl - 2}px 12px 12px`,
                 fontSize: fontSize.caption,
                 color: tk.textTertiary,
               }}

@@ -13,10 +13,11 @@ import type {
   ImportDataResponse,
   UpdateSettingsResponse,
 } from '../types/messages'
-import type { PddSettings } from '../types/memory'
+import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, type NoticeMsg } from '../ui/components'
-import { fontSize, spacing } from '../ui/design'
-import { DownloadIcon, UploadIcon } from '../ui/icons'
+import { fontSize, fontWeight, spacing } from '../ui/design'
+import { DownloadIcon, PencilIcon, UploadIcon } from '../ui/icons'
+import { formatHotkey, isModifierOnly } from '../utils/hotkey'
 
 export function SettingsTab({
   tk,
@@ -157,10 +158,15 @@ export function SettingsTab({
       <Card tk={tk} title="检索与填充(改动即时生效)">
         <Toggle
           tk={tk}
-          label="直接填充"
-          desc="开启后点击「AI回复」直接填充最高分候选,不再弹窗"
+          label="自动回复"
+          desc="开启后按快捷键直接填充第一条推荐回复;关闭后按快捷键弹出推荐回复面板,再按 Enter 填充第一条"
           checked={draft.directFillEnabled}
           onChange={(v) => void persist({ ...draft, directFillEnabled: v })}
+        />
+        <HotkeyRow
+          tk={tk}
+          hotkey={draft.autoReplyHotkey}
+          onChange={(hk) => void persist({ ...draft, autoReplyHotkey: hk })}
         />
         <Toggle
           tk={tk}
@@ -243,6 +249,79 @@ export function SettingsTab({
           请勿用于自动群发等违反平台规则的场景。
         </div>
       </Card>
+    </div>
+  )
+}
+
+
+// ─── 快捷键行:展示 + 按键录入 ────────────────────────────────────────────────────
+
+function HotkeyRow({
+  tk,
+  hotkey,
+  onChange,
+}: {
+  tk: ThemeTokens
+  hotkey: HotkeyConfig
+  onChange: (hk: HotkeyConfig) => void
+}) {
+  const [recording, setRecording] = useState(false)
+
+  // 录入态:捕获下一次按键(修饰键单独按下先等待主键;Esc 取消)
+  useEffect(() => {
+    if (!recording) return
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        setRecording(false)
+        return
+      }
+      if (isModifierOnly(e.key)) return
+      if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
+        // 纯主键(无修饰键)容易与日常输入冲突,不允许录入
+        setRecording(false)
+        return
+      }
+      const hk: HotkeyConfig = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, key: e.key }
+      setRecording(false)
+      onChange(hk)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [recording, onChange])
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+      <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.medium }}>快捷键</span>
+      <kbd
+        style={{
+          padding: '2px 8px',
+          borderRadius: 6,
+          border: `1px solid ${tk.border}`,
+          backgroundColor: tk.bgSecondary,
+          color: tk.text,
+          fontSize: fontSize.caption,
+          fontFamily: 'ui-monospace, Consolas, monospace',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatHotkey(hotkey)}
+      </kbd>
+      {recording ? (
+        <span style={{ fontSize: fontSize.caption, color: tk.accent }}>
+          请按下新的快捷键(Esc 取消;需带 Ctrl/Alt/Shift)
+        </span>
+      ) : (
+        <Btn tk={tk} title="按下新的组合键即可替换当前快捷键" onClick={() => setRecording(true)}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <PencilIcon size={12} strokeWidth={2} />修改
+          </span>
+        </Btn>
+      )}
+      <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
+        在聊天页按此键唤起推荐回复
+      </span>
     </div>
   )
 }

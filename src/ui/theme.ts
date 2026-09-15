@@ -33,6 +33,8 @@ export interface ThemeTokens {
   inputBg: string
   inputBorder: string
   shadow: string
+  /** 滚动条滑块(悬浮显现);暗色下必须是浅色,否则在深底上不可见 */
+  scrollThumb: string
 }
 
 /** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作黑底白字 */
@@ -61,6 +63,7 @@ export const lightTheme: ThemeTokens = {
   inputBg: '#ffffff',
   inputBorder: '#d4d4d4',
   shadow: '0 4px 16px rgba(0,0,0,0.08)',
+  scrollThumb: 'rgba(0,0,0,0.16)',
 }
 
 /** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮反转为白底黑字(黑白主色逻辑不变) */
@@ -89,6 +92,7 @@ export const darkTheme: ThemeTokens = {
   inputBg: '#2c2c2c',
   inputBorder: '#3b3d40',
   shadow: '0 12px 40px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.35)',
+  scrollThumb: 'rgba(255,255,255,0.24)',
 }
 
 export function getThemeTokens(theme: ThemeMode): ThemeTokens {

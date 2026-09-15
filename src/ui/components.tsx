@@ -281,7 +281,9 @@ export function Toggle({
           marginTop: 2,
           position: 'relative',
           transition: `background-color ${motion.normal}`,
-          backgroundColor: checked ? tk.text : tk.inputBorder,
+          // 选中态用 accent 而非 tk.text:黑白反转在深色主题下会变成"白轨道 + 白圆点",
+          // 圆点直接消失(2026-09-15 用户反馈"暗色下是白色")
+          backgroundColor: checked ? tk.accent : tk.inputBorder,
         }}
       >
         <span
@@ -293,7 +295,7 @@ export function Toggle({
             height: size.toggleKnob,
             borderRadius: '50%',
             backgroundColor: '#ffffff',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.28)',
             transition: `left ${motion.normal}`,
           }}
         />

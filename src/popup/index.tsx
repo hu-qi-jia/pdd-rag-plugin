@@ -51,22 +51,25 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   transition: border-color .12s ease;
 }
 
-/* ── 滚动条:细、悬浮才出现 ──────────────────────────── */
+/* ── 滚动条:细、悬浮才出现(滑块色随主题令牌注入,暗色下必须走浅色)── */
 .pddcs-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.pddcs-scroll:hover { scrollbar-color: rgba(0,0,0,.14) transparent; }
+.pddcs-scroll:hover { scrollbar-color: var(--pddcs-scroll-thumb) transparent; }
 .pddcs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .pddcs-scroll::-webkit-scrollbar-thumb {
   background: transparent; border-radius: 9999px; border: 2px solid transparent;
   background-clip: content-box; min-height: 36px;
 }
-.pddcs-scroll:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,.16); background-clip: content-box; }
+.pddcs-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--pddcs-scroll-thumb); background-clip: content-box;
+}
 
-/* ── 导航图标按钮:悬浮浅灰圆角块 ───────────────────────── */
+/* ── 导航图标按钮:悬浮浅灰圆角块(悬浮色随主题令牌注入)── */
 .pddcs-rail-btn {
   width: 36px; height: 36px; padding: 0; border: none; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; position: relative; transition: background-color .12s ease;
 }
+.pddcs-rail-btn:hover { background-color: var(--pddcs-rail-hover); }
 
 /* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
 .pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }
@@ -75,6 +78,27 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
 `
 
 type TabId = 'memory' | 'folders' | 'knowledge' | 'settings'
+
+type StatsPayload = GetStatsResponse['payload']
+
+/**
+ * 顶部概览按页签**分散展示**(2026-09-15 用户要求):
+ * 原来四个计数全堆在头部,与当前页面无关;现在只显示本页相关的,
+ * 设置页不展示(设置本身就是"配置项",不需要计数)。
+ */
+function tabSummary(id: TabId, stats: StatsPayload | null): string {
+  if (!stats) return '读取中…'
+  switch (id) {
+    case 'memory':
+      return `问答 ${stats.qaCount} · 回复 ${stats.replyCount}`
+    case 'folders':
+      return `文件夹 ${stats.folderCount} · 标准回答 ${stats.goldenCount}`
+    case 'knowledge':
+      return `知识 ${stats.knowledgeCount}`
+    case 'settings':
+      return ''
+  }
+}
 
 const TABS: { id: TabId; label: string; Icon: typeof MessageSquareIcon }[] = [
   { id: 'memory', label: '记忆', Icon: MessageSquareIcon },
@@ -110,10 +134,18 @@ function App() {
   }, [refreshStats])
 
   const railBtn = (active: boolean): React.CSSProperties => ({
-    backgroundColor: active ? tk.btnBg : 'transparent',
+    // 未激活不写 backgroundColor:交给 .pddcs-rail-btn:hover 的 CSS 变量处理
+    // (内联样式优先级高于类选择器,写了 transparent 悬浮就再也不会有反馈)
+    ...(active ? { backgroundColor: tk.btnBg } : {}),
     color: active ? tk.text : tk.textMuted,
     border: active ? `1px solid ${tk.btnBorder}` : '1px solid transparent',
   })
+
+  // 令牌 → CSS 变量的桥(静态 CSS 无法直接读 React 令牌)
+  const cssVars = {
+    '--pddcs-scroll-thumb': tk.scrollThumb,
+    '--pddcs-rail-hover': tk.btnHoverBg,
+  } as React.CSSProperties
 
   return (
     <div
@@ -127,6 +159,7 @@ function App() {
         fontFamily,
         backgroundColor: tk.bg,
         color: tk.text,
+        ...cssVars,
       }}
     >
       {/* ── 左侧图标导航栏(Codex app 式)────────────────────── */}
@@ -176,10 +209,16 @@ function App() {
           <div style={{ fontSize: fontSize.heading, fontWeight: fontWeight.heading, letterSpacing: '-0.01em' }}>
             {TABS.find((t) => t.id === tab)?.label}
           </div>
-          <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-            {stats
-              ? `问答 ${stats.qaCount} · 回复 ${stats.replyCount} · 标准回答 ${stats.goldenCount} · 知识 ${stats.knowledgeCount}`
-              : '读取中…'}
+          <div
+            style={{
+              fontSize: fontSize.caption,
+              color: tk.textTertiary,
+              marginTop: 2,
+              minHeight: 15,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {tabSummary(tab, stats)}
           </div>
         </header>
 

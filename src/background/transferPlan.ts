@@ -241,7 +241,7 @@ export interface FolderImportPlan {
 }
 
 /**
- * 文件夹导入计划:按 id 幂等;预置"未分类"恒跳过;
+ * 文件夹导入计划:按 id 幂等;预置"默认文件夹"恒跳过;
  * 悬空 parentId(不在已有集与导入包内)→ 置为根层。
  */
 export function planFolderImports(

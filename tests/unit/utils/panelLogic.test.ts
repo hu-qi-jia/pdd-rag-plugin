@@ -93,8 +93,8 @@ describe('buildFolderTree 两层文件夹树', () => {
     expect(tree[0].children[1].goldens.map((g) => g.id)).toEqual(['g3'])
   })
 
-  it('folderId 为 null 或指向不存在夹的金标准 → 归入未分类节点', () => {
-    const folders = [folder(UNCATEGORIZED_FOLDER_ID, null, 0, '未分类'), folder('f1', null, 1)]
+  it('folderId 为 null 或指向不存在夹的金标准 → 归入默认文件夹节点', () => {
+    const folders = [folder(UNCATEGORIZED_FOLDER_ID, null, 0, '默认文件夹'), folder('f1', null, 1)]
     const goldens = [golden('g1', null), golden('g2', 'ghost-folder'), golden('g3', 'f1')]
 
     const tree = buildFolderTree(folders, goldens)
@@ -109,7 +109,7 @@ describe('buildFolderTree 两层文件夹树', () => {
     expect(tree.map((n) => n.folder.id).sort()).toEqual(['f1', 'orphan'])
   })
 
-  it('未分类夹缺失时合成兜底节点收纳孤儿金标准', () => {
+  it('默认文件夹夹缺失时合成兜底节点收纳孤儿金标准', () => {
     const tree = buildFolderTree([folder('f1', null, 1)], [golden('g1', null)])
     const unc = tree.find((n) => n.folder.id === UNCATEGORIZED_FOLDER_ID) as FolderNode
     expect(unc.goldens.map((g) => g.id)).toEqual(['g1'])

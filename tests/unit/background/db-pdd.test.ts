@@ -100,12 +100,27 @@ describe('PddCSDB 基础 schema', () => {
     expect(stored?.embeddingModel).toBe('Xenova/bge-small-zh-v1.5')
   })
 
-  it('预置"未分类"文件夹仅创建一次(幂等)', async () => {
+  it('预置"默认文件夹"仅创建一次(幂等)', async () => {
     await testDb.ensurePresetFolders()
     await testDb.ensurePresetFolders()
     const folder = await testDb.folders.get(UNCATEGORIZED_FOLDER_ID)
-    expect(folder?.name).toBe('未分类')
+    expect(folder?.name).toBe('默认文件夹')
     expect(folder?.parentId).toBeNull()
+    expect(await testDb.folders.count()).toBe(1)
+  })
+
+  it('存量旧名"未分类"启动时迁移为"默认文件夹"(第十八轮改名)', async () => {
+    // 模拟旧版本库:预置行还叫「未分类」(该夹 UI 不可改名,旧名只可能来自旧版本)
+    await testDb.folders.put({
+      id: UNCATEGORIZED_FOLDER_ID,
+      parentId: null,
+      name: '未分类',
+      position: 0,
+      createdAt: 1,
+    })
+    await testDb.ensurePresetFolders()
+    const folder = await testDb.folders.get(UNCATEGORIZED_FOLDER_ID)
+    expect(folder?.name).toBe('默认文件夹')
     expect(await testDb.folders.count()).toBe(1)
   })
 })

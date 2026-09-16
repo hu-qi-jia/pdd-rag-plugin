@@ -5,7 +5,7 @@
  *   - 最小消息路由:PING_EMBED(嵌入链路自检)/ GET_STATS(库统计)/
  *     SELF_TEST_WRITE(示例问答入库验证)
  *   - 每日 TTL 清理(chrome.alarms)与 SW 启动时补嵌
- *   - 预置"未分类"文件夹;清理旧项目遗留的 AIMemoryDB 空库
+ *   - 预置"默认文件夹"文件夹;清理旧项目遗留的 AIMemoryDB 空库
  *   - P1 起扩展:PDD 捕获链路由、分段状态机等
  */
 

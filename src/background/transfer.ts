@@ -85,7 +85,7 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
       existingFolderIds,
     );
 
-    // 2) 金标准((问题+答案) 幂等 + 每问题上限;悬空 folderId 归"未分类")
+    // 2) 金标准((问题+答案) 幂等 + 每问题上限;悬空 folderId 归"默认文件夹")
     const goldenCtx = goldenImportContext(await db.goldens.toArray());
     const goldenPlan = planGoldenImports(
       asArray(env.goldens),

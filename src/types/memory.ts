@@ -80,7 +80,7 @@ export interface GoldenRecord {
 
 /** 回复文件夹(folders):金标准的分类树,两层(parentId 为 null 即在根层) */
 export interface FolderRecord {
-  /** 主键;预置"未分类"使用固定 id UNCATEGORIZED_FOLDER_ID */
+  /** 主键;预置"默认文件夹"使用固定 id UNCATEGORIZED_FOLDER_ID */
   id: string
   /** 父文件夹 id;null=根层(一层可挂根层) */
   parentId: string | null
@@ -117,7 +117,8 @@ export interface KnowledgeRecord {
 }
 
 export const UNCATEGORIZED_FOLDER_ID = 'uncategorized'
-export const UNCATEGORIZED_FOLDER_NAME = '未分类'
+/** 预置默认夹显示名(2026-09-15 第十八轮由「未分类」改名;id 不变,存量由 ensurePresetFolders 迁移) */
+export const UNCATEGORIZED_FOLDER_NAME = '默认文件夹'
 
 /** 自检(示例)数据专用会话标识:统计时排除、一键清理 */
 export const SELF_TEST_SESSION_KEY = '__pddcs_selftest__'

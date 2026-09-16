@@ -1,6 +1,6 @@
 // 文件夹重命名入口单测(2026-09-15 用户反馈"父文件夹不能改名"):
 // 功能本就有(悬浮铅笔钮 / 双击文件夹名),但入口纯悬浮显现不可发现 ——
-// 现改为常驻可见(不再挂 pddcs-row-ops 悬浮显隐),未分类除外。
+// 现改为常驻可见(不再挂 pddcs-row-ops 悬浮显隐),默认文件夹除外。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -67,13 +67,13 @@ describe('FoldersTab:文件夹重命名入口', () => {
     }
   })
 
-  it('点重命名钮 → 原位出现改名输入框(预填当前名),未分类无此入口', async () => {
+  it('点重命名钮 → 原位出现改名输入框(预填当前名),默认文件夹无此入口', async () => {
     await renderWith([
       folder('f1', '售后'),
-      { id: 'uncategorized', parentId: null, name: '未分类', position: 99 },
+      { id: 'uncategorized', parentId: null, name: '默认文件夹', position: 99 },
     ])
     const pens = btns('重命名')
-    expect(pens).toHaveLength(1) // 未分类不给改名钮
+    expect(pens).toHaveLength(1) // 默认文件夹不给改名钮
     await act(async () => {
       pens[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })

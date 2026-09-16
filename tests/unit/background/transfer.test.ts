@@ -213,7 +213,7 @@ describe('planGoldenImports', () => {
 // ─── planFolderImports ─────────────────────────────────────────────────────────
 
 describe('planFolderImports', () => {
-  it('已存在 id 与预置未分类恒跳过', () => {
+  it('已存在 id 与预置默认文件夹恒跳过', () => {
     const incoming = [folder(UNCATEGORIZED_FOLDER_ID, null), folder('f1', null), folder('f2', null)]
     const plan = planFolderImports(incoming, new Set(['f1']))
     expect(plan.toAdd.map((f) => f.id)).toEqual(['f2'])

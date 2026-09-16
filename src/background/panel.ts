@@ -178,7 +178,7 @@ export async function deleteFolder(
     return { success: false, error: "预置文件夹不可删除" };
   }
   try {
-    // 其下金标准移出(folderId→null,展示时归"未分类"),不删数据
+    // 其下金标准移出(folderId→null,展示时归"默认文件夹"),不删数据
     await db.deleteFolder(message.payload.id);
     return { success: true };
   } catch (err) {

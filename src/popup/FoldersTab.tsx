@@ -7,7 +7,7 @@
  * 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
  * 行操作分层:填充(常驻主钮)/ 复制 / 编辑 / 迁移 / 删除(悬浮显现的图标钮);
  * 文件夹操作:重命名 / 删除(内联确认行,常驻可见)。
- * 数据流与全部功能不变:未分类不可改名删除且置底;删除文件夹仅移出标准回答。
+ * 数据流与全部功能不变:默认文件夹不可改名删除且置底;删除文件夹仅移出标准回答。
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
@@ -173,7 +173,7 @@ export function FoldersTab({
         payload: { id },
       })
       if (resp.payload.success) {
-        setMsg({ ok: true, text: '文件夹已删除,其下标准回答已移入「未分类」' })
+        setMsg({ ok: true, text: '文件夹已删除,其下标准回答已移入「默认文件夹」' })
         await refresh()
       } else {
         setMsg({ ok: false, text: `删除失败:${resp.payload.error ?? '未知错误'}` })
@@ -763,14 +763,14 @@ export function FoldersTab({
             </span>
             {countPill(count)}
             {/* 常驻可见(2026-09-15 用户反馈"父文件夹不能改名":功能本就有,
-                但纯悬浮显现不可发现);未分类不给改名/删除 */}
+                但纯悬浮显现不可发现);默认文件夹不给改名/删除 */}
             {opsWrap(
               <>
                 {!isUnc && (
                   <>
                     {iconBtn('重命名(或双击文件夹名)', <PencilIcon size={13} strokeWidth={2} />, startRename)}
                     {iconBtn(
-                      '删除文件夹(其下标准回答移入「未分类」)',
+                      '删除文件夹(其下标准回答移入「默认文件夹」)',
                       <TrashIcon size={13} strokeWidth={2} />,
                       () => setConfirmFolderDelete(f.id),
                       true,
@@ -791,7 +791,7 @@ export function FoldersTab({
           {confirmFolderDelete === f.id && (
             <div style={{ padding: `6px ${spacing.xl}px 6px ${rowIndent(depth)}px` }}>
               {confirmRow(
-                '删除该文件夹?其下标准回答将移入「未分类」。',
+                '删除该文件夹?其下标准回答将移入「默认文件夹」。',
                 () => void deleteFolder(f.id),
                 () => setConfirmFolderDelete(null),
               )}
@@ -850,7 +850,7 @@ export function FoldersTab({
   }
 
   const fullTree = buildFolderTree(folders, goldens)
-  // 未分类置底,其余保持创建顺序
+  // 默认文件夹置底,其余保持创建顺序
   const tree = [
     ...fullTree.filter((n) => n.folder.id !== UNCATEGORIZED_FOLDER_ID),
     ...fullTree.filter((n) => n.folder.id === UNCATEGORIZED_FOLDER_ID),

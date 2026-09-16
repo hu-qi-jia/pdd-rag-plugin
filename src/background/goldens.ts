@@ -57,7 +57,7 @@ export async function addGoldenFromSuggestion(
   const id = `gd-${now}-${Math.random().toString(36).slice(2, 8)}`;
   await db.addGolden({
     id,
-    // 默认入预置"未分类"夹(设计文档 §6.3);展示层另有 null→未分类兜底
+    // 默认入预置"默认文件夹"夹(设计文档 §6.3);展示层另有 null→默认文件夹兜底
     folderId: UNCATEGORIZED_FOLDER_ID,
     question,
     answer,

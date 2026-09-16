@@ -234,7 +234,7 @@ describe('flattenFolders:遗留子文件夹一键拍平(2026-09-15 PM7)', () => 
     expect((await db.goldens.get('g-root2'))?.folderId).toBe('fd-root2')
   })
 
-  it('父夹已失联的遗留子夹:金标准归「未分类」(folderId=null),子夹删除', async () => {
+  it('父夹已失联的遗留子夹:金标准归「默认文件夹」(folderId=null),子夹删除', async () => {
     const { flattenFolders, db } = await freshFlatten()
     await addFolder(db, { id: 'fd-orphan', parentId: 'fd-gone' })
     await db.goldens.add(makeGolden({ id: 'g-1', folderId: 'fd-orphan' }))

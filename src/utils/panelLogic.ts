@@ -35,8 +35,8 @@ const byPosition = (a: FolderNode, b: FolderNode): number =>
 /**
  * 构建两层文件夹树(根层 + 一层子夹)。
  * 兜底规则:
- *  - 金标准 folderId 为 null 或指向不存在的夹 → 归入"未分类"节点;
- *  - "未分类"夹缺失(理论上 ensurePresetFolders 保证存在)→ 合成兜底节点;
+ *  - 金标准 folderId 为 null 或指向不存在的夹 → 归入"默认文件夹"节点;
+ *  - "默认文件夹"夹缺失(理论上 ensurePresetFolders 保证存在)→ 合成兜底节点;
  *  - 子夹 parentId 悬空 → 当根层展示。
  */
 export function buildFolderTree(folders: PanelFolder[], goldens: PanelGolden[]): FolderNode[] {
@@ -73,7 +73,7 @@ export function buildFolderTree(folders: PanelFolder[], goldens: PanelGolden[]):
     ;(target ?? nodes.get(UNCATEGORIZED_FOLDER_ID)!).goldens.push(g)
   }
 
-  // 合成兜底节点(库中实际无"未分类"夹)仅在确有孤儿金标准要收纳时才入根层
+  // 合成兜底节点(库中实际无"默认文件夹"夹)仅在确有孤儿金标准要收纳时才入根层
   const uncNode = nodes.get(UNCATEGORIZED_FOLDER_ID)!
   if (uncIsSynthetic && uncNode.goldens.length > 0) roots.push(uncNode)
 

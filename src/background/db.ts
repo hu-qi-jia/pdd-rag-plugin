@@ -73,8 +73,10 @@ export class PddDatabase extends Dexie {
   // ─── 初始化/预置 ──────────────────────────────────────────────────────────────
 
   /**
-   * 确保预置"未分类"文件夹存在(固定 id,导入/编辑幂等)。
+   * 确保预置"默认文件夹"存在(固定 id,导入/编辑幂等)。
    * 所有新提升的金标准默认入此夹。
+   * 第十八轮改名迁移:旧版本预置名「未分类」→「默认文件夹」(该夹 UI 禁止改名,
+   * 旧名只可能来自旧版本预置,按固定 id 幂等覆盖安全)。
    */
   async ensurePresetFolders(): Promise<void> {
     const existing = await this.folders.get(UNCATEGORIZED_FOLDER_ID);
@@ -86,6 +88,10 @@ export class PddDatabase extends Dexie {
         position: 0,
         createdAt: Date.now(),
       });
+      return;
+    }
+    if (existing.name !== UNCATEGORIZED_FOLDER_NAME) {
+      await this.folders.update(UNCATEGORIZED_FOLDER_ID, { name: UNCATEGORIZED_FOLDER_NAME });
     }
   }
 
@@ -522,7 +528,7 @@ export class PddDatabase extends Dexie {
 
   /**
    * 遗留子文件夹一键拍平(PM7;UI 已只建一级文件夹,存量子夹给出清入口):
-   * 子夹内金标准上移到父根夹(父夹失联则归「未分类」),随后删除子夹。返回拍平数。
+   * 子夹内金标准上移到父根夹(父夹失联则归「默认文件夹」),随后删除子夹。返回拍平数。
    * folderId 不参与检索缓存,无需失效。
    */
   async flattenSubfolders(): Promise<number> {

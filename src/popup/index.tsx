@@ -117,11 +117,6 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
   box-shadow: 0 1px 3px rgba(0,0,0,0.28);
 }
 .pddcs-slider::-moz-range-track { height: 4px; border-radius: 9999px; background: transparent; }
-
-/* ── 行悬浮操作:默认透明,悬浮/聚焦时显现(pddddd doc-ops 同款)── */
-.pddcs-row-ops { opacity: 0; transition: opacity .12s ease; }
-.pddcs-row:hover .pddcs-row-ops,
-.pddcs-row:focus-within .pddcs-row-ops { opacity: 1; }
 `
 
 type TabId = 'memory' | 'folders' | 'knowledge' | 'settings'

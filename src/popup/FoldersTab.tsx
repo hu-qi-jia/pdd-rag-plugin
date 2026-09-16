@@ -5,8 +5,9 @@
  * 仅支持一级文件夹(v2.6.1 用户要求,子文件夹创建入口已移除;历史遗留的子夹数据仍照常展示可删)。
  * 层级表达只用三件事:统一缩进节奏(12 + 16×深度)、字重/字号、标题栏底色 ——
  * 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
- * 行操作(v2.6.29):原「填充」常驻主钮已删,四个图标钮(迁移/复制/编辑/删除)
- * 左移至原填充位置(仍为悬浮显现;填充能力保留在聊天页面板与知识库页)。
+ * 行操作(v2.6.29 左移 / v2.6.31 常驻):原「填充」常驻主钮已删,四个图标钮(迁移/复制/编辑/删除)
+ * 占原填充位、**默认可见**(不再悬浮才显),且**图标左缘与上方正文左缘对齐**(负 margin 抵消钮盒内留白);
+ * 填充能力保留在聊天页面板与知识库页。
  * 文件夹操作:重命名 / 删除(内联确认行,常驻可见)。
  * 数据流与全部功能不变:默认文件夹不可改名删除且置底;删除文件夹仅移出标准回答。
  */
@@ -37,6 +38,19 @@ import {
   PencilIcon,
   TrashIcon,
 } from '../ui/icons'
+
+/**
+ * 图标钮内的图标渲染尺寸,以及由此产生的**盒内留白**(v2.6.31):
+ * 24px(`controlH.inline`)方钮里居中放 13px 图标 → 左右各 `(24 − 13) / 2 = 5.5px`。
+ * 操作组靠左时必须用 `-ICON_BTN_INSET` 抵消,否则**图标**会比上方正文多缩进 5.5px
+ * (用户第四十四轮反馈"按钮左侧和上方文字左侧对齐":钮盒本就对齐,视觉错位来自这段留白)。
+ * 铁律:图标尺寸改这里,不要在各处写 `size={13}`。
+ */
+export const ICON_SIZE = 13
+const ICON_BTN_INSET = (controlH.inline - ICON_SIZE) / 2
+
+/** 操作组对齐档:靠右(标题栏)/ 靠左·钮盒贴正文(文字钮、下拉)/ 靠左·图标贴正文(图标钮组) */
+type OpsAlign = 'right' | 'text' | 'icon'
 
 const clamp2: React.CSSProperties = {
   display: '-webkit-box',
@@ -329,19 +343,17 @@ export function FoldersTab({
   )
 
   /**
-   * 操作钮容器:悬浮才显现;confirm 时常驻。
-   * `alignLeft`(v2.6.29):标准回答行删掉「填充」主钮后,操作组要靠左占原填充位;
-   * 文件夹标题栏的操作组仍靠右(`marginLeft: auto`)。
+   * 操作钮容器:整组**常驻可见**(v2.6.31 用户"默认展示吧,不要鼠标悬浮再展示",悬浮显隐机制退役)。
+   * `align` 三档(v2.6.29 引入左对齐,v2.6.31 细分):
+   *   - `right`(默认):文件夹标题栏,`marginLeft: auto` 顶到行尾;
+   *   - `text` :靠左,钮盒直接贴正文左缘(文字钮 `BtnMini` 与迁移下拉 —— 钮自身有内边距,不再补偿);
+   *   - `icon` :靠左的**图标钮组**,再减 `ICON_BTN_INSET`,把**图标**拉到正文左缘(v2.6.31 用户"按钮左侧和上方文字左侧对齐")。
    */
-  const opsWrap = (
-    children: React.ReactNode,
-    { alwaysVisible = false, alignLeft = false }: { alwaysVisible?: boolean; alignLeft?: boolean } = {},
-  ): React.ReactNode => (
+  const opsWrap = (children: React.ReactNode, align: OpsAlign = 'right'): React.ReactNode => (
     <div
-      className={alwaysVisible ? undefined : 'pddcs-row-ops'}
       onClick={(e) => e.stopPropagation()}
       style={{
-        marginLeft: alignLeft ? 0 : 'auto',
+        marginLeft: align === 'right' ? 'auto' : align === 'icon' ? -ICON_BTN_INSET : 0,
         display: 'flex',
         alignItems: 'center',
         gap: 2,
@@ -516,7 +528,6 @@ export function FoldersTab({
     return (
       <div
         key={g.id}
-        className="pddcs-row"
         style={{
           padding: `${spacing.md}px ${spacing.xl}px ${spacing.sm + 2}px ${rowPadLeft}px`,
           borderBottom: `1px solid ${tk.borderLight}`,
@@ -582,7 +593,8 @@ export function FoldersTab({
         >
           {g.answer}
         </div>
-        {/* 操作行(v2.6.29):原「填充」主钮已删,四个图标钮左移至原填充位置(仍悬浮显现) */}
+        {/* 操作行(v2.6.29 左移 / v2.6.31 常驻):原「填充」主钮已删,四个图标钮占原位且默认可见;
+            负 margin 让**图标**左缘与上方正文左缘对齐 */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {confirmGoldenDelete === g.id ? (
             opsWrap(
@@ -592,7 +604,7 @@ export function FoldersTab({
                 </BtnMini>
                 <BtnMini tk={tk} onClick={() => setConfirmGoldenDelete(null)}>取消</BtnMini>
               </>,
-              { alwaysVisible: true, alignLeft: true },
+              'text',
             )
           ) : moving ? (
             opsWrap(
@@ -618,20 +630,20 @@ export function FoldersTab({
                   {flatFolderOptions(tree)}
                 </select>
               </>,
-              { alwaysVisible: true, alignLeft: true },
+              'text',
             )
           ) : (
             opsWrap(
               <>
-                {iconBtn('迁移到其他文件夹', <FolderInputIcon size={13} strokeWidth={2} />, () => {
+                {iconBtn('迁移到其他文件夹', <FolderInputIcon size={ICON_SIZE} strokeWidth={2} />, () => {
                   setMovingId(g.id)
                   setConfirmGoldenDelete(null)
                 })}
-                {iconBtn('复制', <CopyIcon size={13} strokeWidth={2} />, () => void copyGolden(g))}
-                {iconBtn('编辑', <PencilIcon size={13} strokeWidth={2} />, () => startEdit(g))}
+                {iconBtn('复制', <CopyIcon size={ICON_SIZE} strokeWidth={2} />, () => void copyGolden(g))}
+                {iconBtn('编辑', <PencilIcon size={ICON_SIZE} strokeWidth={2} />, () => startEdit(g))}
                 {iconBtn(
                   '删除(历史记录不受影响)',
-                  <TrashIcon size={13} strokeWidth={2} />,
+                  <TrashIcon size={ICON_SIZE} strokeWidth={2} />,
                   () => {
                     setConfirmGoldenDelete(g.id)
                     setMovingId(null)
@@ -639,7 +651,7 @@ export function FoldersTab({
                   true,
                 )}
               </>,
-              { alignLeft: true },
+              'icon',
             )
           )}
         </div>
@@ -676,7 +688,6 @@ export function FoldersTab({
      *  重命名入口(v2.6.1):悬浮「重命名」图标钮,或**双击文件夹名**直接进入改名 */
     const header = (
       <div
-        className="pddcs-row"
         onClick={renamingId === f.id ? undefined : toggle}
         onDoubleClick={isUnc || renamingId === f.id ? undefined : startRename}
         title={isUnc ? undefined : '单击展开/折叠,双击重命名'}
@@ -751,22 +762,22 @@ export function FoldersTab({
             </span>
             {countPill(count)}
             {/* 常驻可见(2026-09-15 用户反馈"父文件夹不能改名":功能本就有,
-                但纯悬浮显现不可发现);默认文件夹不给改名/删除 */}
+                但纯悬浮显现不可发现);默认文件夹不给改名/删除。
+                v2.6.31 起全页操作组一律常驻(悬浮显隐机制退役) */}
             {opsWrap(
               <>
                 {!isUnc && (
                   <>
-                    {iconBtn('重命名(或双击文件夹名)', <PencilIcon size={13} strokeWidth={2} />, startRename)}
+                    {iconBtn('重命名(或双击文件夹名)', <PencilIcon size={ICON_SIZE} strokeWidth={2} />, startRename)}
                     {iconBtn(
                       '删除文件夹(其下标准回答移入「默认文件夹」)',
-                      <TrashIcon size={13} strokeWidth={2} />,
+                      <TrashIcon size={ICON_SIZE} strokeWidth={2} />,
                       () => setConfirmFolderDelete(f.id),
                       true,
                     )}
                   </>
                 )}
               </>,
-              { alwaysVisible: true },
             )}
           </>
         )}

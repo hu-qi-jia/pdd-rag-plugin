@@ -168,7 +168,7 @@ export function Card({
   title?: string
   children: React.ReactNode
   style?: React.CSSProperties
-  /** 附加 CSS 类(如 pddcs-row:配合 .pddcs-row-ops 做悬浮显现操作钮) */
+  /** 附加 CSS 类(容器透传;原 pddcs-row 悬浮显隐钩子已随 v2.6.31 退役) */
   className?: string
 }) {
   return (

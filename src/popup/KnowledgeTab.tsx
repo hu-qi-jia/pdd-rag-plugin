@@ -2,7 +2,7 @@
  * 知识库页(P4-KB,设计文档 §7):人工维护的"标题+正文"话术卡 + md 文档上传。
  * 手工条目操作:新建(内联表单)/ 关键词筛选 / 编辑(标题实质变更才重嵌)/
  * 停用开关(停用不参与检索、不重嵌)/ 删除(内联二次确认)/ 填充 / 复制 ——
- * v2.6.30 起这一排(填充在左)整组**悬浮显现**(与文件夹页同构,进入删除确认时常驻)。
+ * 这一排(填充在左)v2.6.30 合并为整组、v2.6.31 起**默认可见**(不再悬浮才显,与文件夹页同构)。
  * 文档上传:md 文本按 500 字/75 重叠分块(同原项目),每块一条只读条目,逐块向量化;
  * 同名文档重复上传整篇替换。
  */
@@ -294,7 +294,6 @@ export function KnowledgeTab({
           <Card
             key={k.id}
             tk={tk}
-            className="pddcs-row"
             style={{
               padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`,
               gap: spacing.sm + 1,
@@ -366,10 +365,9 @@ export function KnowledgeTab({
                 >
                   {k.content}
                 </div>
-                {/* 操作行(v2.6.30):整组悬浮显现(与文件夹页同构)—— 填充在左,复制/编辑/停用/删除紧随其右;
-                    进入删除确认时整组常驻。原「填充」常驻主钮 + 右侧 auto 顶边的次级组已合并为一组 */}
+                {/* 操作行(v2.6.30 合并 / v2.6.31 常驻):填充在左,复制/编辑/停用/删除紧随其右,
+                    **默认可见**(不再悬浮才显) */}
                 <div
-                  className={confirmDeleteId === k.id ? undefined : 'pddcs-row-ops'}
                   style={{ display: 'flex', gap: spacing.xs, flexWrap: 'wrap', alignItems: 'center' }}
                 >
                   <Btn tk={tk} variant="primary" disabled={disabled} onClick={() => void fillKb(k)} title="填充到聊天页输入框,发送由人工完成">

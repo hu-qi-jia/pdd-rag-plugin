@@ -178,7 +178,7 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 
 ## 六、聊天页覆盖层(`contents/pdd-ai-button.ts`)
 
-CSS 由纯函数 `utils/overlayTheme.ts#buildOverlayCss(tk)` 按主题令牌生成
+CSS 由纯函数 `ui/overlay-css.ts#buildOverlayCss(tk)` 按主题令牌生成
 (**颜色/字体/圆角/字号全部从 `ui/design` + `ui/theme` 插值**,与 popup 同源)。
 **跟随 popup 主题设置**(v2.6.3,替换原"固定浅色"):启动读 `chrome.storage` 的 `pddcs:theme`,
 `storage.onChanged` 实时整体重建 `<style>`;toast 保持深底白字不随主题切换。
@@ -198,7 +198,7 @@ CSS 由纯函数 `utils/overlayTheme.ts#buildOverlayCss(tk)` 按主题令牌生�
 按 `<p>` 右缘 +12px 定位,视觉间距只剩约 1px。
 现自文本块向上吸收「有不透明背景色 且 宽度贴近文本块(容差 48px)」的最外层祖先作锚,
 宽度守卫排除整行容器的底色;兜底取文本块直属容器。算法落在
-`src/utils/pddBubbleAnchor.ts`(含单测),内容脚本只做 WeakMap 缓存。
+`src/pdd/bubble-anchor.ts`(含单测),内容脚本只做 WeakMap 缓存。
 
 ## 七、文件夹模块布局(2026-09-15 重构)
 

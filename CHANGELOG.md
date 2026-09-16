@@ -16,6 +16,7 @@
 - manifest 配置收敛到 package.json 单处(原 config 文件优先,双份有静默漂移风险)
 - scripts/ 抽公共底座 `lib.mjs`:路径相对化 + 环境变量覆盖,归档一次性探针/诊断脚本
 - `.gitignore` 覆盖乱码 profile 目录,防登录态误入库
+- 中期重构(第二十九轮):建 `src/shared/`(跨上下文基础设施+常量)与 `src/pdd/`(平台领域纯逻辑),types/ 回归纯类型,embedding 引擎归位 offscreen —— 后台 bundle -85%;utils/ 与 504 行 messages.ts 按域拆清
 
 ### 界面(第二十五~二十六轮)
 - 推荐面板 ChatGPT 化:去分隔线 / 柔和双层阴影 / 徽标圆点化 / 页脚键帽化

@@ -2,7 +2,7 @@
   "name": "pdd-cs-quick-reply",
   "displayName": "拼多多客服快捷回复",
   "version": "0.10.0",
-  "description": "拼多多商家客服检索工具:自动记录买家问答,检索历史回复/标准回答/知识库一键填充,发送永远由人工完成。基于 personal-ai-memory 本地化改造。",
+  "description": "拼多多商家客服快捷回复助手:自动记录买家问答,检索历史回复、标准回答与知识库,一键填充回复;发送始终由人工确认,数据仅存本地。",
   "author": "Personal project",
   "scripts": {
     "dev": "plasmo dev",

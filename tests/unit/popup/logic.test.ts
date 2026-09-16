@@ -12,7 +12,7 @@ import {
   type PanelFolder,
   type PanelGolden,
   type FolderNode,
-} from '../../../src/utils/panelLogic'
+} from '../../../src/popup/logic'
 import { UNCATEGORIZED_FOLDER_ID } from '../../../src/types/memory'
 
 const DAY = 86_400_000

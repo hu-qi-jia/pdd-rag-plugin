@@ -12,7 +12,7 @@ import type {
   MemoryListItem,
   MemoryReplyItem,
 } from '../types/messages'
-import { filterQaRecords, remainingDays } from '../utils/panelLogic'
+import { filterQaRecords, remainingDays } from './logic'
 import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
 import {
   Btn,

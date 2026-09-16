@@ -1,8 +1,10 @@
 /**
- * 面板纯逻辑(popup 消费):记忆列表关键词筛选 / 剩余保留天数 / 两层文件夹树构建。
+ * 面板纯逻辑(popup 的 Model 层):记忆列表关键词筛选 / 剩余保留天数 / 两层文件夹树构建。
  * 设计依据:设计文档 §7(面板结构)。纯函数,无 chrome/DB 依赖,便于单测。
+ * (2026-09-16 工程审查③-V6:自 utils/panelLogic.ts 迁入 popup/,与 background/panel.ts
+ *  的命名撞车解除 —— 后者是 SW 侧 DB 读取,本文件是 UI 侧纯逻辑)
  */
-import { hashText, normalizeText } from './text'
+import { hashText, normalizeText } from '../utils/text'
 import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../types/memory'
 import type { PanelFolder, PanelGolden } from '../types/messages'
 

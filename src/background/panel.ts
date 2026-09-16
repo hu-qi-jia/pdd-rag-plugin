@@ -1,6 +1,6 @@
 /**
  * 面板数据编排(P3):记忆列表 / 面板数据拉取 / 文件夹 CRUD。
- * 树构建等纯逻辑见 utils/panelLogic.ts;本文件只做 DB 读取与形状组装。
+ * 树构建等纯逻辑见 popup/logic.ts;本文件只做 DB 读取与形状组装。
  */
 import { db } from "./db";
 import { UNCATEGORIZED_FOLDER_ID } from "../types/memory";

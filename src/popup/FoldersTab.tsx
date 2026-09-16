@@ -25,7 +25,7 @@ import type {
   UpdateGoldenResponse,
 } from '../types/messages'
 import { UNCATEGORIZED_FOLDER_ID } from '../types/memory'
-import { buildFolderTree, countGoldensByQuestion, type FolderNode } from '../utils/panelLogic'
+import { buildFolderTree, countGoldensByQuestion, type FolderNode } from './logic'
 import { hashText } from '../utils/text'
 import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
 import { CreateBtn, EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'

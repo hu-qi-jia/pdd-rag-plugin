@@ -1,52 +1,29 @@
 # Changelog
 
-### v0.0.7 — 2026-03-23
-- **New:** Infinite scroll in Memory List — older conversations load automatically as you scroll
-- **New:** Import deduplication — already-imported records are skipped; the success message shows how many were skipped
-- **New:** Explicit sort order label on the sort button
-- **Feat:** Gemini conversation capture migrated from XHR-based to DOM-based approach — more reliable and resilient to Gemini front-end changes
-- **Fix:** Gemini messages now sort correctly when multiple messages share the same timestamp (uses turn index as tiebreaker)
-- **Fix:** SPA navigation no longer corrupts Gemini conversation titles
-- **Fix:** Grok passive capture no longer silently misses conversations
+本扩展(拼多多客服快捷回复)的变更记录。格式参考 Keep a Changelog,版本号即 package.json 版本。
 
-### v0.0.6 — 2026-03-15
-- **Fix:** Theme changes now sync instantly across all open tabs — previously only the current tab updated when toggling dark/light mode
-- **Fix:** Language changes now sync instantly across all open tabs — previously required a page reload to take effect
-- **Fix:** Floating panel state (open/closed, active view) now persists across page reloads and site navigation — previously reset to the floating button on every page load
-- **Refactor:** Replaced MainMenuView with MemoryMenuContent — memory menu content now lives in a dedicated component used by both sidebar and popup
-- **Refactor:** Moved FloatingMemoryPanel from `src/ui/memory-panel/` to `src/popup/components/` for a single popup UI tree
-- **Refactor:** Moved importers from `src/popup/components/importers/` → `src/importers/` for cleaner separation
-- **Refactor:** Extracted shared `chrome.storage` utilities (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) into `src/utils/chrome-storage.ts` — used by both theme and language contexts
-- **Refactor:** Extracted background processing into dedicated modules: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
-- **Refactor:** Extracted RAG prompt formatting and recall logic into `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`
+> 上游 Personal AI Memory 的历史变更见 `docs/upstream-CHANGELOG.md`(Apache 2.0);
+> 逐轮开发明细见 `docs/工作状态-2026-09-08.md` 与 git log(每轮均有 docs+test 提交)。
 
-### v0.0.5 — 2026-03-12
-- **Fix:** Gemini passive capture now uses updated DOM selectors (`<user-query>` / `<message-content>`) matching the current Gemini UI — conversations were silently missed after a Gemini front-end update.
-- **Fix:** Gemini duplicate-capture eliminated — stable deterministic record IDs and XHR debounce (1 s) prevent the same conversation from being stored again on page reload or mid-stream.
-- **Fix:** Recall button now shows a clear alert when the input is empty or memories have already been injected — prevents accidental double-injection on all platforms (ChatGPT, Claude, Gemini, Grok, Perplexity).
-- **Fix:** Recall-injected `[System Context]` template is stripped before saving — only the real user query is stored in memory.
-- **Fix:** Perplexity Recall button now appears immediately after the "Choose a model" button (correct position).
-- **Fix:** Gemini conversation title now reads from the sidebar item instead of `document.title` for more accurate session names.
-- **Fix:** Gemini text injection rewritten for more reliable input handling.
-- **Fix:** Grok input detection improved — no more false "empty input" errors.
-- **Fix:** Memory list deduplication improved for Gemini and ChatGPT sessions.
-- **Improvement:** Recall button alerts now follow the extension's display language.
+## 0.10.0 — 2026-09-16
 
-### v0.0.4 — 2026-03-06
-- **New:** Grok (`grok.com`) support — conversations are silently captured while you browse.
-- **New:** Gemini passive message capture — existing conversations on the page are automatically captured when you visit.
+### 修复
+- 编辑金标准问题后检索缓存未失效,旧问题锚/旧向量继续参与检索直至 SW 重启(第二十七轮)
+- 知识库文档整篇替换「先删旧后写新」无事务,中途失败丢失整篇旧文档(第二十七轮)
 
-### v0.0.3 — 2026-03-02
-- Perplexity (`perplexity.ai`) support — conversations are silently captured while you browse. Note: Perplexity itself does not support user data export, so each conversation must be visited individually to be collected.
+### 工程审查(第二十七轮起)
+- SW 消息路由 24 分支 switch 改类型化 handler 映射表,消除逐 case 的 `as` 强转
+- manifest 配置收敛到 package.json 单处(原 config 文件优先,双份有静默漂移风险)
+- scripts/ 抽公共底座 `lib.mjs`:路径相对化 + 环境变量覆盖,归档一次性探针/诊断脚本
+- `.gitignore` 覆盖乱码 profile 目录,防登录态误入库
 
-### v0.0.2 — 2026-03-01
-- Full Claude web support (`claude.ai`) — conversation capture, Recall button injection, and floating memory panel now work on Claude
+### 界面(第二十五~二十六轮)
+- 推荐面板 ChatGPT 化:去分隔线 / 柔和双层阴影 / 徽标圆点化 / 页脚键帽化
+- 候选卡对话式排版 + 字号主次四层级(回答正文为唯一主层)
+- 面板循环切换滚动校正:回绕首条回顶,不再被 sticky 头遮盖
 
-### v0.0.1 — Initial Release 2026-02-24
-- ChatGPT and Gemini conversation capture
-- Hybrid vector + BM25 search with RRF fusion
-- One-click Recall button (ChatGPT, Gemini)
-- Favourite Prompts with Trie autocomplete and drag-and-drop folders
-- Export / import JSON backup
-- Floating memory panel
-- 8 UI languages, dark / light theme
+### 更早(第二十~二十四轮)
+- 检索配额 3/3/3、知识库独立阈值、标准回答同问多答上限
+- 面板键盘导航(Tab 循环 + Enter 填充)、细滚动条公共化、面板不透明双保险
+
+明细见 `docs/工作状态-2026-09-08.md` §〇-S 至 §〇-Z。

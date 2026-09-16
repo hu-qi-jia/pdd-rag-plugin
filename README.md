@@ -23,7 +23,7 @@
 ```bash
 pnpm install
 pnpm dev     # 开发模式(自动加载扩展)
-pnpm build   # 产物在 build/chrome
+pnpm build   # 产物在 build/chrome-mv3-prod
 pnpm test    # vitest 单测
 ```
 

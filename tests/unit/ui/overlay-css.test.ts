@@ -14,7 +14,7 @@ describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底/黑主钮', () => {
     const css = buildOverlayCss(lightTheme)
     expect(css).toContain(`background: ${lightTheme.bg}`)
-    expect(css).toContain(lightTheme.btnPrimaryBg) // #161616(浅色主钮不直接出现,主钮样式在面板卡;断言含令牌即可)
+    expect(css).toContain(lightTheme.btnPrimaryBg) // #45484d v2.6.27 起为深灰(浅色主钮不直接出现,主钮样式在面板卡;断言含令牌即可)
     expect(css).toContain(`color: ${lightTheme.text}`)
   })
   it('深色令牌 → 深色面板底/中性灰控件,与浅色产物不同', () => {

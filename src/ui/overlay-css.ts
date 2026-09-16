@@ -54,7 +54,7 @@ export function buildOverlayCss(tk: ThemeTokens): string {
    背景另行内联双保险);入场 160ms 淡入上移 */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px));
   display: flex; flex-direction: column; overflow: hidden; pointer-events: auto;
-  background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xxl}px;
+  background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
   box-shadow: ${tk.shadow}; opacity: 1;
   font-size: ${fontSize.body}px; color: ${tk.text};
   animation: pddcs-pop-in .16s cubic-bezier(0.2, 0, 0, 1); }

@@ -202,7 +202,7 @@ function App() {
         height: POPUP_HEIGHT,
         display: 'flex',
         overflow: 'hidden',
-        borderRadius: radius.xl,
+        borderRadius: radius.xxl,
         boxShadow: tk.shadow,
         fontFamily,
         backgroundColor: tk.bg,

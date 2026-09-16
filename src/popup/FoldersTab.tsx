@@ -5,7 +5,8 @@
  * 仅支持一级文件夹(v2.6.1 用户要求,子文件夹创建入口已移除;历史遗留的子夹数据仍照常展示可删)。
  * 层级表达只用三件事:统一缩进节奏(12 + 16×深度)、字重/字号、标题栏底色 ——
  * 不再用引导线/嵌套边框(实测叠在容器与行分隔线之间显乱)。
- * 行操作分层:填充(常驻主钮)/ 复制 / 编辑 / 迁移 / 删除(悬浮显现的图标钮);
+ * 行操作(v2.6.29):原「填充」常驻主钮已删,四个图标钮(迁移/复制/编辑/删除)
+ * 左移至原填充位置(仍为悬浮显现;填充能力保留在聊天页面板与知识库页)。
  * 文件夹操作:重命名 / 删除(内联确认行,常驻可见)。
  * 数据流与全部功能不变:默认文件夹不可改名删除且置底;删除文件夹仅移出标准回答。
  */
@@ -16,7 +17,6 @@ import type {
   CreateFolderResponse,
   DeleteFolderResponse,
   DeleteGoldenResponse,
-  FillInputResponse,
   FlattenFoldersResponse,
   GetPanelDataResponse,
   PanelFolder,
@@ -185,22 +185,6 @@ export function FoldersTab({
 
   // ─── 标准回答操作 ──────────────────────────────────────────────────────────────
 
-  const fillGolden = async (g: PanelGolden) => {
-    try {
-      const resp = await sendMessage<FillInputResponse>({
-        type: 'FILL_INPUT',
-        payload: { text: g.answer },
-      })
-      if (resp.payload.success) {
-        setMsg({ ok: true, text: '已填充至输入框,发送由人工完成' })
-      } else {
-        setMsg({ ok: false, text: resp.payload.error ?? '填充失败' })
-      }
-    } catch (err) {
-      setMsg({ ok: false, text: `填充失败:${String(err)}` })
-    }
-  }
-
   const copyGolden = async (g: PanelGolden) => {
     try {
       await navigator.clipboard.writeText(g.answer)
@@ -344,13 +328,20 @@ export function FoldersTab({
     </span>
   )
 
-  /** 操作钮容器:悬浮才显现;confirm 时常驻 */
-  const opsWrap = (children: React.ReactNode, alwaysVisible = false): React.ReactNode => (
+  /**
+   * 操作钮容器:悬浮才显现;confirm 时常驻。
+   * `alignLeft`(v2.6.29):标准回答行删掉「填充」主钮后,操作组要靠左占原填充位;
+   * 文件夹标题栏的操作组仍靠右(`marginLeft: auto`)。
+   */
+  const opsWrap = (
+    children: React.ReactNode,
+    { alwaysVisible = false, alignLeft = false }: { alwaysVisible?: boolean; alignLeft?: boolean } = {},
+  ): React.ReactNode => (
     <div
       className={alwaysVisible ? undefined : 'pddcs-row-ops'}
       onClick={(e) => e.stopPropagation()}
       style={{
-        marginLeft: 'auto',
+        marginLeft: alignLeft ? 0 : 'auto',
         display: 'flex',
         alignItems: 'center',
         gap: 2,
@@ -591,11 +582,8 @@ export function FoldersTab({
         >
           {g.answer}
         </div>
-        {/* 操作行:填充常驻主钮,其余悬浮显现 */}
+        {/* 操作行(v2.6.29):原「填充」主钮已删,四个图标钮左移至原填充位置(仍悬浮显现) */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <BtnMini tk={tk} primary title="填充到聊天页输入框,发送由人工完成" onClick={() => void fillGolden(g)}>
-            填充
-          </BtnMini>
           {confirmGoldenDelete === g.id ? (
             opsWrap(
               <>
@@ -604,7 +592,7 @@ export function FoldersTab({
                 </BtnMini>
                 <BtnMini tk={tk} onClick={() => setConfirmGoldenDelete(null)}>取消</BtnMini>
               </>,
-              true,
+              { alwaysVisible: true, alignLeft: true },
             )
           ) : moving ? (
             opsWrap(
@@ -630,7 +618,7 @@ export function FoldersTab({
                   {flatFolderOptions(tree)}
                 </select>
               </>,
-              true,
+              { alwaysVisible: true, alignLeft: true },
             )
           ) : (
             opsWrap(
@@ -651,6 +639,7 @@ export function FoldersTab({
                   true,
                 )}
               </>,
+              { alignLeft: true },
             )
           )}
         </div>
@@ -777,7 +766,7 @@ export function FoldersTab({
                   </>
                 )}
               </>,
-              true,
+              { alwaysVisible: true },
             )}
           </>
         )}
@@ -949,7 +938,7 @@ export function FoldersTab({
 
 // ─── 小工具 ────────────────────────────────────────────────────────────────────
 
-/** 行内小按钮(保存/取消/确认/填充),高度取 controlH.inline 与同排图标钮等高 */
+/** 行内小按钮(保存/取消/确认),高度取 controlH.inline 与同排图标钮等高 */
 function BtnMini({
   tk,
   children,

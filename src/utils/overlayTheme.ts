@@ -48,8 +48,10 @@ export function buildOverlayCss(tk: ThemeTokens): string {
   box-shadow: ${tk.shadow}; opacity: 1;
   font-size: ${fontSize.body}px; color: ${tk.text}; }
 ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
+/* 头部极简(v2.6.17 第二十六轮):小号中灰 500 字重让位给候选正文,标题不再是面板里最大的字 */
 .pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
-  border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.title}px; position: sticky; top: 0;
+  border-bottom: 1px solid ${tk.borderLight}; font-weight: 500; font-size: ${fontSize.body}px;
+  color: ${tk.textMuted}; position: sticky; top: 0;
   background: ${tk.bg}; letter-spacing: -0.01em; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
   width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
@@ -73,7 +75,6 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
   background: ${tk.textTertiary}; }
 .pddcs-badge.golden::before { background: ${semantic.golden}; }
 .pddcs-badge.knowledge::before { background: ${semantic.knowledge}; }
-.pddcs-score { color: ${tk.textTertiary}; font-size: 10px; font-variant-numeric: tabular-nums; }
 .pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
 .pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
 .pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: ${radius.sm}px;
@@ -83,11 +84,14 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 /* 危险型迷你钮(取消标准回答):悬浮转红,与图标钮的危险态同语言 */
 .pddcs-mini-danger { color: ${tk.errorText}; }
 .pddcs-mini-danger:hover { background: ${tk.errorBg}; color: ${tk.errorText}; }
-.pddcs-cand-text { white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+/* 回答正文 = 面板唯一主层(v2.6.17):13.5px + 1.6 行高,与其余 11.5/10.5 灰字拉开两档 */
+.pddcs-cand-text { font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
+  word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
+/* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略 */
+.pddcs-cand-q { margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: 11px; }
+.pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; }
 /* 键位键帽(v2.6.16):与 popup 设置页 HotkeyRow 的 <kbd> 同语言(灰底细边圆角等宽字) */
 .pddcs-kbd { display: inline-block; margin: 0 2px; padding: 1px 6px;
   border: 1px solid ${tk.border}; border-radius: ${radius.sm}px;

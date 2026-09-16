@@ -53,6 +53,32 @@ describe('buildOverlayCss:ChatGPT 化视觉(2026-09-16 第二十五轮,1+2+3+6,�
   })
 })
 
+describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六轮)', () => {
+  it('回答正文为主层:13.5px(title 档)+ 1.6 行高', () => {
+    const css = buildOverlayCss(lightTheme)
+    const textRule = css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]
+    expect(textRule).toContain('font-size: 13.5px')
+    expect(textRule).toContain('line-height: 1.6')
+  })
+  it('问题回显上置为引子:11.5px 灰字单行省略(.pddcs-cand-q);底部来源行规则移除', () => {
+    const css = buildOverlayCss(lightTheme)
+    const qRule = css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]
+    expect(qRule).toContain('font-size: 11.5px')
+    expect(qRule).toContain('text-overflow: ellipsis')
+    expect(css).not.toContain('.pddcs-cand-src')
+  })
+  it('头部极简:12.5px 中灰 500 字重(原 13.5/600 主色)', () => {
+    const css = buildOverlayCss(lightTheme)
+    const headRule = css.match(/\.pddcs-popup-head \{[^}]*\}/)![0]
+    expect(headRule).toContain('font-size: 12.5px')
+    expect(headRule).toContain('font-weight: 500')
+    expect(headRule).toContain(`color: ${lightTheme.textMuted}`)
+  })
+  it('死规则清理:score 元素早已移除,规则不再生成', () => {
+    expect(buildOverlayCss(lightTheme)).not.toContain('.pddcs-score')
+  })
+})
+
 describe('parseThemeMode:存储值容错解析', () => {
   it("有效值 'light'/'dark' 原样返回", () => {
     expect(parseThemeMode('light')).toBe('light')

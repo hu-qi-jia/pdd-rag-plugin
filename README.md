@@ -51,6 +51,7 @@ pnpm test    # vitest 单测
 
 - **单测**:`pnpm test`(vitest,覆盖检索计划、分段状态机、DB 契约、面板纯逻辑、组件行为);
 - **数据层 e2e**:`node scripts/verify-kb.mjs` / `verify-p3.mjs` / `verify-golden-multi.mjs` / `verify-settings.mjs` —— 在真实扩展上下文(SW + popup)跑纯数据断言,不开窗口、不截图;
+- **CI**:push 到 main 自动跑 tsc + 单测 + build + 数据层 e2e(`.github/workflows/ci.yml`);
 - `scripts/e2e-chromium.mjs` 为真机联调探针(需登录态,见脚本头说明)。
 
 - 技术栈:Plasmo + React + TypeScript + Dexie(IndexedDB)+ Xenova Transformers(offscreen 本地嵌入)

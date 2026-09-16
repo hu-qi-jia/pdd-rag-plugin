@@ -17,6 +17,9 @@
 - scripts/ 抽公共底座 `lib.mjs`:路径相对化 + 环境变量覆盖,归档一次性探针/诊断脚本
 - `.gitignore` 覆盖乱码 profile 目录,防登录态误入库
 - 中期重构(第二十九轮):建 `src/shared/`(跨上下文基础设施+常量)与 `src/pdd/`(平台领域纯逻辑),types/ 回归纯类型,embedding 引擎归位 offscreen —— 后台 bundle -85%;utils/ 与 504 行 messages.ts 按域拆清
+- 数据层 e2e 进 GitHub Actions(第三十一轮);scripts 底座去硬编码 chrome 路径(`channel: 'chromium'` 支持无头加载扩展,`PDD_E2E_CHROME` 可覆盖)
+- FoldersTab 操作流补 11 例特征测试;pdd-ai-button 覆盖层几何(行可视/按钮与弹窗定位/滚动校正)提取为 5 个纯函数,TDD 18 例
+- ADR 0004:检索管线不包化,目录分层即边界
 
 ### 界面(第二十五~二十六轮)
 - 推荐面板 ChatGPT 化:去分隔线 / 柔和双层阴影 / 徽标圆点化 / 页脚键帽化

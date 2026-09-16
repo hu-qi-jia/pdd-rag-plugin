@@ -104,8 +104,9 @@ export const lightTheme: ThemeTokens = {
   controlActive: '#45484d',
   controlActiveHover: '#53565b',
   controlKnobBg: '#ffffff',
-  // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层";
-  // popup 与聊天页面板共用本令牌,两表面同构不割裂
+  // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层"。
+  // v2.6.32 起**仅聊天页推荐面板(overlay-css)使用**:popup 是原生窗口,挂阴影只会在
+  // 24px 圆角切出的四角露出一圈渐变(见 DESIGN §九),popup 不再消费本令牌
   shadow: '0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)',
   scrollThumb: 'rgba(0,0,0,0.16)',
 }

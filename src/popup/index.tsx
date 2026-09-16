@@ -6,10 +6,10 @@
  * 视觉:工具风设计令牌 —— 白面板细边框、小圆角(6px 控件)、黑白主色。
  */
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import logoPng from '~assets/icon.png'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
-import { getThemeTokens, type ThemeTokens } from '../ui/theme'
+import { getThemeTokens, lightTheme, type ThemeTokens } from '../ui/theme'
 import { controlH, fontFamily, fontSize, formGap, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import { thinScrollbarCss } from '../ui/scrollbar'
 import {
@@ -33,11 +33,11 @@ const POPUP_WIDTH = size.popupWidth
 const POPUP_HEIGHT = size.popupHeight
 
 const RESET_CSS = `
-/* v2.6.32:文档底 = 面板底色(跟随主题)。popup 外框有 24px 圆角,窗口四角被切出来的区域
-   显示的就是这层底 —— 原来写 transparent !important,浅色下露出 Chrome 的默认白看不出,
-   深色主题下会露出四个白角块。变量由 App 挂到 <html> 上(html/body 是根 div 的父级,
-   读不到挂在内层 div 的 CSS 变量)。 */
-html, body { margin: 0; padding: 0; background: var(--pddcs-page-bg, #ffffff) !important; }
+/* v2.6.33:文档底 = 面板底色(跟随主题)。popup 外框有 24px 圆角,窗口四角被切出来的区域
+   显示的就是这层底 —— 写 transparent 的话,浅色下露出 Chrome 的默认白看不出,深色主题下
+   会露出四个白角块。变量由 App 统一挂到 <html>(v2.6.33 起五个主题变量都走这一条桥);
+   fallback 插值 lightTheme.bg 保持令牌单源;不写 !important(产物 popup.html 无竞争样式表)。 */
+html, body { margin: 0; padding: 0; background: var(--pddcs-page-bg, ${lightTheme.bg}); }
 * { box-sizing: border-box; }
 
 /* ── 按钮(工具风直角控件;高度固定为表单档,保证与同排输入框等高)───── */
@@ -168,7 +168,10 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
+  /** 样式注入 + 令牌 → CSS 变量桥(v2.6.33 起五变量统一走 <html> 一条桥)。
+   *  用 layout effect:变量必须在**首帧之前**落到 <html>,否则深色主题首帧
+   *  会用 fallback 白底画出四角(闪白);style 节点同理 pre-paint 注入。 */
+  useLayoutEffect(() => {
     const id = 'pddcs-popup-reset-style'
     if (!document.getElementById(id)) {
       const el = document.createElement('style')
@@ -176,28 +179,23 @@ function App() {
       el.textContent = RESET_CSS
       document.head.appendChild(el)
     }
+    const rootStyle = document.documentElement.style
+    rootStyle.setProperty('--pddcs-page-bg', tk.bg)
+    rootStyle.setProperty('--pddcs-scroll-thumb', tk.scrollThumb)
+    rootStyle.setProperty('--pddcs-accent', tk.accent)
+    rootStyle.setProperty('--pddcs-control-active', tk.controlActive)
+    rootStyle.setProperty('--pddcs-control-knob', tk.controlKnobBg)
+  }, [tk])
+
+  useEffect(() => {
     void refreshStats()
   }, [refreshStats])
-
-  /** 文档底色跟随主题(v2.6.32):圆角切出的四角显示的就是它,深色下不能留白 */
-  useEffect(() => {
-    document.documentElement.style.setProperty('--pddcs-page-bg', tk.bg)
-  }, [tk.bg])
 
   const railBtn = (active: boolean): React.CSSProperties => ({
     // 图标状态只靠颜色与描边粗细表达,无任何背景块(2026-09-15 用户要求:
     // "仅展示图标即可,图标后不需要有背景" —— 含悬浮态)
     color: active ? tk.text : tk.textMuted,
   })
-
-  // 令牌 → CSS 变量的桥(静态 CSS 无法直接读 React 令牌)
-  const cssVars = {
-    '--pddcs-scroll-thumb': tk.scrollThumb,
-    '--pddcs-accent': tk.accent,
-    // 开关/滑杆的灰白配色(第四十一轮):激活色 + 反相柄色
-    '--pddcs-control-active': tk.controlActive,
-    '--pddcs-control-knob': tk.controlKnobBg,
-  } as React.CSSProperties
 
   return (
     <div
@@ -213,7 +211,6 @@ function App() {
         fontFamily,
         backgroundColor: tk.bg,
         color: tk.text,
-        ...cssVars,
       }}
     >
       {/* ── 左侧图标导航栏(Codex app 式)────────────────────── */}

@@ -15,7 +15,7 @@
  */
 import type { PlasmoCSConfig } from 'plasmo'
 import type { PddCapturedEvent } from '../types/messages'
-import { extractMessages, type DomMessage } from '../utils/pddDomParser'
+import { extractMessages, type DomMessage } from '../pdd/dom-parser'
 
 // 校准期:整站 chat-merchant 顶层页;稳定后可再按需收紧
 export const config: PlasmoCSConfig = {

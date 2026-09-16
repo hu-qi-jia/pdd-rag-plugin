@@ -7,7 +7,7 @@ import {
   mergeBuyerQuery,
   decideUiAction,
   moveSelection,
-} from '../../../src/utils/pddUiLogic'
+} from '../../../src/pdd/ui-logic'
 import type { Suggestion } from '../../../src/types/messages'
 
 const sug = (text: string, kind: Suggestion['kind'] = 'history'): Suggestion => ({

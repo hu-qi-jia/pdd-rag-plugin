@@ -4,7 +4,7 @@ import {
   type AttachReplyCtx,
   type CloseQuestionCtx,
   type SegmenterHooks,
-} from '../../../src/background/pddSegmenter'
+} from '../../../src/pdd/segmenter'
 
 interface FakeStore {
   closed: CloseQuestionCtx[]

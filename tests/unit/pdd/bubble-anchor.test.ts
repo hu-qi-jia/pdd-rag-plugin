@@ -8,7 +8,7 @@ import {
   BUBBLE_WIDTH_TOLERANCE,
   findBubbleElement,
   isTransparentColor,
-} from '../../../src/utils/pddBubbleAnchor'
+} from '../../../src/pdd/bubble-anchor'
 
 /** 复刻真机结构:li.onemsg > .buyer-item > div[currentuid] > .msg-content > p.msg-content-box */
 function mount(bubbleStyle: string, wrapStyle = ''): { box: HTMLElement; row: HTMLElement } {

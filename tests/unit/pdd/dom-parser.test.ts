@@ -3,7 +3,7 @@ import {
   extractMessages,
   parseTimeText,
   type DomMessage,
-} from '../../../src/utils/pddDomParser'
+} from '../../../src/pdd/dom-parser'
 
 /**
  * 夹具取材于 2026-09-08 真机校准的 PDD chat-merchant DOM(逐字还原关键结构,

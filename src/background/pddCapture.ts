@@ -9,7 +9,7 @@
  */
 import { db } from "./db";
 import { queueEmbedding } from "./offscreen";
-import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "./pddSegmenter";
+import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "../pdd/segmenter";
 import { loadSettings } from "./settings";
 import { hashText, normalizeText } from "../shared/text";
 import type { QaRecord, ReplyRecord } from '../types/memory';

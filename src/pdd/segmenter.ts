@@ -7,6 +7,9 @@
  *  - 客服文本到达且无未结段 → 挂到本会话最近一条问答(补发/迟复情形);
  *  - idle(3 分钟无动静)/ leave → 关闭未结段为"无回复问题";
  *  - 顺序性由内部 promise 链保证(事件串行落盘,防 DB 竞态)。
+ *
+ * (2026-09-16 工程审查③:自 background/pddSegmenter.ts 迁入 pdd/ —— 平台领域
+ *  纯逻辑与 DOM 解析/锚点同域;SW 侧调用方为 background/pddCapture.ts)
  */
 import type { PddRole } from '../types/memory'
 export interface SegMsg {

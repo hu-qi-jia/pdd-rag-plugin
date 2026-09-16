@@ -27,8 +27,8 @@ import {
   mergeBuyerQuery,
   moveSelection,
   type UiAction,
-} from '../utils/pddUiLogic'
-import { findBubbleElement } from '../utils/pddBubbleAnchor'
+} from '../pdd/ui-logic'
+import { findBubbleElement } from '../pdd/bubble-anchor'
 import { DEFAULT_HOTKEY, DEFAULT_SETTINGS, MAX_GOLDENS_PER_QUESTION, SETTINGS_STORAGE_KEY } from '../shared/constants'
 import type { PddSettings } from '../types/memory'
 import { formatHotkey, isModifierOnly, matchesHotkey } from '../shared/hotkey'
@@ -157,7 +157,7 @@ function buyerRowText(li: Element): string | null {
 // 气泡底色与内边距挂在上层容器上,<p> 的 rect 右缘落在气泡 padding 之内。
 // 2026-09-15 用户反馈「按钮压住气泡」实测根因:按 <p> 右缘 +12px 定位,扣掉约 10px 的
 // 气泡内边距后视觉间距只剩 ~1px。故改为向上吸收有背景色的祖先,取最外层带背景者
-// 作锚(算法见 utils/pddBubbleAnchor.ts,含单测)。
+// 作锚(算法见 pdd/bubble-anchor.ts,含单测)。
 
 /** 行 → 真实气泡元素(WeakMap 缓存:DOM 结构跨轮稳定,免每轮 getComputedStyle) */
 const bubbleCache = new WeakMap<Element, HTMLElement>()

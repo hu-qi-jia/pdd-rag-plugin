@@ -139,6 +139,40 @@ check(
   (await pop.locator('button[aria-expanded="true"]').count()) === expandedBefore,
 )
 
+// ── 记忆页:删除入口(第十八轮:折叠钮左侧垃圾桶图标 + 行下确认条)──
+const delGeo = await pop.evaluate(() => {
+  const del = document.querySelector('button[title="删除该问答(需确认)"]')
+  const chevron = document.querySelector('button[aria-expanded]')
+  if (!del || !chevron) return null
+  const d = del.getBoundingClientRect()
+  const c = chevron.getBoundingClientRect()
+  return {
+    sameRow: del.parentElement === chevron.parentElement,
+    delLeftOfChevron: d.left < c.left,
+    delH: Math.round(d.height),
+    chevH: Math.round(c.height),
+  }
+})
+check(
+  '删除为图标钮且在折叠钮左侧(同问题行、同高)',
+  delGeo !== null && delGeo.sameRow && delGeo.delLeftOfChevron && delGeo.delH === delGeo.chevH,
+  delGeo ? `${delGeo.delH}/${delGeo.chevH}px` : 'missing',
+)
+const textDeleteBtns = await pop.evaluate(
+  () => [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === '删除').length,
+)
+check('「删除」文字按钮已图标化(页面不再有纯文字删除钮)', textDeleteBtns === 0, `命中 ${textDeleteBtns}`)
+await pop.locator('button[title="删除该问答(需确认)"]').first().click()
+await sleep(300)
+const confirmShown = await pop.evaluate(() => document.body.innerText.includes('删除该问答及其全部回复?'))
+check('点删除图标 → 问题行下方出确认条', confirmShown)
+await pop.locator('button', { hasText: '取消' }).first().click()
+await sleep(300)
+check(
+  '取消可退出确认条',
+  !(await pop.evaluate(() => document.body.innerText.includes('删除该问答及其全部回复?'))),
+)
+
 check(`头部统计刷新(标准回答 ${statsBefore} → ${statsAfter})`, statsAfter > statsBefore)
 check('记忆页只展示本页统计(问答/回复),不再堆四个计数', /^问答 \d+ · 回复 \d+$/.test(after.trim()), after)
 await pop.screenshot({ path: ROOT + '\\logs\\ui-0915-memory.png' })
@@ -151,6 +185,12 @@ check(
   '文件夹页统计 = 文件夹 n · 标准回答 m',
   /^文件夹 \d+ · 标准回答 \d+$/.test(foldersSummary.trim()),
   foldersSummary,
+)
+// ── 默认文件夹更名(第十八轮:未分类 → 默认文件夹,存量启动时迁移)──
+const folderPageText = await pop.evaluate(() => document.body.innerText)
+check(
+  '预置夹显示「默认文件夹」(不再出现「未分类」)',
+  folderPageText.includes('默认文件夹') && !folderPageText.includes('未分类'),
 )
 const railLogos = await pop.evaluate(
   () => document.querySelectorAll('nav [title="拼多多客服快捷回复"]').length,

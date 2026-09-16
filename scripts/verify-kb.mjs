@@ -11,6 +11,8 @@ import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep 
 const PROFILE = persistentProfile('fresh-profile')
 
 const ctx = await launchExtContext(PROFILE)
+// 离线证明(第四十七轮):封锁 hf-mirror —— 模型内置后检索链路必须在不触网的前提下工作
+await ctx.route('**hf-mirror.com/**', (route) => route.abort())
 await sleep(5000)
 const extId = await findExtensionId(ctx)
 if (!extId) {
@@ -56,13 +58,13 @@ if (!kbId) {
   process.exit(1)
 }
 
-// ── 2. 向量回填(首次含模型下载,预算 ~5 分钟)→ 检索命中 knowledge ──
+// ── 2. 向量回填(本地模型,首嵌秒级;5 分钟预算仅作慢机冗余)→ 检索命中 knowledge ──
 let embedded = false
 for (let i = 0; i < 100 && !embedded; i++) {
   await sleep(3000)
   const panel = await send('GET_PANEL_DATA')
   embedded = (panel.knowledge ?? []).find((x) => x.id === kbId)?.hasEmbedding === 1
-  if (i === 20) console.log('…模型下载/推理中(20×3s)')
+  if (i === 20) console.log('…本地模型推理中(20×3s)')
 }
 check('知识条目向量回填(hasEmbedding=1)', embedded)
 

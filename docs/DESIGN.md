@@ -1,7 +1,16 @@
 # 设计规范(Design System)
 
-> 版本 2.6.27 · 2026-09-16 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.28 · 2026-09-16 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
 > 版本口径:本文件 v2.6.x 为**设计系统规范**版本号,与扩展本体版本(package.json,当前 0.10.0)独立计数
+> v2.6.28 增补:**设置页字号/间距立规 + 开关滑杆改灰白**(第四十一轮,2026-09-16 用户"设置页中的文字字号
+> 做一下规范,比如标题、配置项字段、说明文字;各配置项之间间距增大,并做统一;将开关组件和滑动条组件的
+> 颜色修改为灰色和白色(亮色和暗色)")—— ①新增 `design.ts#formType`(三级:分组标题 13.5 semibold >
+> 字段标签 12.5 semibold > 说明文字 11.5 regular,等差 1px)与 `design.ts#formGap`(配置项之间/卡片之间
+> **16px**、标签→说明 4px、标签→滑杆轨道 8px),设置页全部文字与行距都收进这两个表,`fontSize.caption + 0.5`
+> 这类临时值清零;②`Card` 标题由 11.5 + textMuted 升为**分组标题档 + `tk.text`**(旧值是倒挂:比卡内 12.5
+> 的字段标签还小还灰);③开关选中轨道与滑杆已填充段由 accent 蓝改 **`controlActive`**(浅色 `#45484D` /
+> 深色白),柄色取 **`controlKnobBg`**(与激活色**反相**:浅色白 / 深色 `#2C2C2C`)—— accent 在控件里只留
+> 给焦点环(§二/§五/§九 随之更新,**焦点环仍是品牌蓝**,见下方"待确认")
 > v2.6.27 增补:**浅色主题主色软化**(第四十轮,2026-09-16 用户"将主面板的文字颜色换成 #2B2B2B,按钮的颜色
 > 修改为深灰色")—— ①`text` `#161616` → **`#2B2B2B`**(正文主文本不再用近黑);②`btnPrimaryBg`
 > `#161616` → **`#45484D`**、`btnPrimaryHover` `#333333` → **`#53565B`** —— 取深色主题主钮同值,
@@ -137,7 +146,8 @@
 
 1. **白面板 + 细边框**:层级靠 1px #E5E5E5 边框与明度差(#FFF / #FAFAFA / #EFEFEF),不用重描边、不堆卡片。
 2. **中性主色**:主操作深灰底白字(#45484D,v2.6.27 用户指定;原为近黑 #161616);
-   正文主文本 `text` 同步软化为 #2B2B2B。Figma 蓝(#0D99FF)只用于焦点、品牌标与滑杆等状态,不做大色块。
+   正文主文本 `text` 同步软化为 #2B2B2B。Figma 蓝(#0D99FF)只用于**焦点环与品牌标**,不做大色块
+   (v2.6.28 起开关/滑杆的激活色也退出蓝,改灰白,见 §二)。
 3. **小圆角**:控件一律 4/6/8px,靠近桌面工具软件质感;圆形仅保留给开关、圆点与计数徽标。
 4. **行悬浮操作**:列表行的次级操作(编辑/删除/迁移等)默认隐藏,悬浮或键盘聚焦时显现——静止界面只保留主路径。
 5. **层级靠字重与字号**:13px 级正文 + 加粗标题 + 灰色辅助,小字号高密度。
@@ -155,8 +165,11 @@
 | `textMuted` | `#5C5C5C` | `#9B9DA2` | 次级文本 |
 | `textTertiary` | `#8C8C8C` | `#6F7175` | 辅助/时间戳/图标默认色 |
 | `border` / `borderLight` | `#E5E5E5` / `#EFEFEF` | `#3B3D40` / rgba(255,255,255,.06) | 分隔 |
-| `accent` | `#0D99FF` | `#4CB3FF` | 焦点/品牌/**开关选中态**(Figma 蓝) |
+| `accent` | `#0D99FF` | `#4CB3FF` | **焦点环**与品牌标(Figma 蓝;v2.6.28 起不再用于开关/滑杆) |
 | `btnPrimaryBg` | `#45484D`(白字) | `#45484D`(白字) | 主按钮(见下方按钮亮暗规范;浅色 v2.6.27 由 #161616 改深灰) |
+| `controlActive` | `#45484D` | `#FFFFFF` | **开关选中轨道 / 滑杆已填充段**(v2.6.28;与主钮同值,浅色灰深色白) |
+| `controlActiveHover` | `#53565B` | `#E3E5E9` | 上述激活色的悬浮态(深色已是纯白,反向压暗一档) |
+| `controlKnobBg` | `#FFFFFF` | `#2C2C2C` | **开关滑块 / 滑杆拇指底色**(v2.6.28;必须与激活色**反相**,否则柄消失) |
 | `successText` | `#14AE5C` | `#0ACF83` | 成功提示 |
 | `errorText` | `#F24822` | `#FF7262` | 错误/危险 |
 
@@ -172,7 +185,7 @@
 | danger | `errorBg` 底 + `errorText` 字 | 同浅色(rgba 底自动适配) |
 
 规则:default = 面色 + 边框,悬浮提亮一档;primary = 主色底白字,悬浮再提亮一档;
-Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
+Figma 蓝只保留给**焦点环与品牌标**,不做按钮大色块,也不再用于开关/滑杆(v2.6.28)。
 
 语义色(与主题无关,`design.ts#semantic`):标准回答徽标 amber(`#B8860B` on `#FDF6E3`)、知识库徽标绿(`#14AE5C` on `rgba(20,174,92,.09)`)。
 
@@ -190,6 +203,12 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 字体栈(`design.ts#fontFamily`,工具软件同款):`"Segoe UI", "Microsoft YaHei", -apple-system, "PingFang SC", sans-serif`。
 不联网加载字体;数字统一 `tabular-nums`。
 
+**设置页三级字号(`design.ts#formType`,v2.6.28 立规)**:分组标题 **13.5 semibold** > 字段标签 **12.5 semibold**
+> 说明文字 **11.5 regular**,三档**等差 1px**,层级由「字号 + 字重 + 颜色」共同表达
+(标题与标签取 `tk.text`,说明取 `tk.textMuted`;`formType` 只管字号与字重,颜色留 `theme.ts`)。
+设置页**任何**文字都必须落在这三档之一 —— 禁止 `fontSize.caption + 0.5` 这类临时值,
+也禁止分组标题小于字段标签(`Card` 旧版 11.5 标题 + 卡内 12.5 标签 = 层级倒挂,本版已修正)。
+
 ## 四、几何
 
 | 令牌 | 值 | 用途 |
@@ -197,10 +216,15 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 | `radius.sm / md / lg / xl` | **4 / 6 / 8 / 8** | 徽标与图标钮 / 按钮输入框 / 卡片 / popup 外框与浮层 |
 | `radius.pill` | 9999 | 仅开关、圆点、圆形计数徽标 |
 | `spacing.xs→xxl` | 4 / 6 / 8 / 10 / 12 / 16 | 4 的倍数栅格 |
+| `formGap.row / labelDesc / labelControl` | **16 / 4 / 8** | 设置页:配置项之间(含卡片之间)/ 标签→说明 / 标签→滑杆轨道 |
 | `size.popupWidth / popupHeight` | **420** / 560 | popup 固定外框(内容区滚动;v2.4 由 400 加宽,容纳文件夹树层级) |
 | `size.railWidth / railBtn` | 52 / 36 | 图标导航栏 / 导航按钮 |
 | `controlH.inline / form` | **24 / 26** | 行内小控件 / 表单与工具栏控件(见下) |
 | `motion.fast / normal` | 0.12s / 0.15s ease | 悬停 / 开关过渡 |
+
+**设置页行距(`design.ts#formGap`,v2.6.28 立规)**:配置项之间与卡片之间共用 **16px** 一条栅格
+(原两处都是 10px),标签→说明 4px,标签→滑杆轨道 8px(比前者大一档,给 14px 圆拇指留上下溢出空间)。
+三个值单点决定,开关 / 滑杆 / 快捷键三种行**同构**,不允许各自微调 —— 否则"统一"立刻失效。
 
 **控件等高铁律**(2026-09-15 补):同一行内的输入框与按钮必须取同一档高度,
 且用**显式 `height`** 而不是靠 `padding + line-height` 撑 —— 后者会随字号/行高漂移,
@@ -217,13 +241,13 @@ Figma 蓝只保留给焦点/开关/滑杆等**状态**,不做按钮大色块。
 |------|------|
 | `Btn` | 直角按钮(6px),4 种 variant:default / primary(黑底白字) / danger / ghost;**四种 variant 全部有悬浮底色**(v2.6.3:primary 提亮一档、danger 加深一档 `errorHoverBg`、ghost/default 面色提亮一档) |
 | `CreateBtn` | 工具栏「新建」主钮公共组件(v2.6.5):加号图标 + 文字,Btn primary 承载;知识库页「新建条目」与文件夹页「新建文件夹」共用,新增"新建类"入口一律走它,不再手搓 |
-| `Card` | 卡片容器(白底 + 1px #E5E5E5 边框 + 8px 圆角),可选标题 |
+| `Card` | 卡片容器(白底 + 1px #E5E5E5 边框 + 8px 圆角),可选标题。**标题走 `formType.groupTitle`(13.5 semibold + `tk.text`,v2.6.28)**,原为 11.5 + textMuted(比卡内字段标签还小还灰);卡片内行距由调用方用 `style={{gap: formGap.row}}` 覆盖(spacing 型覆盖是 Card 的既定用法) |
 | `Badge` | 徽标,3 种 tone:golden / knowledge / neutral;4px 小方标;知识库页手工条目**不挂徽标**(v2.6.3:本页即知识库,徽标只用于标记文档块) |
 | `Notice` | 结果提示条(成功绿 / 错误红);**吸附在滚动区顶部**(`position: sticky; top: 0` + `bg` 底板),长列表下操作反馈不会被顶出视口;**成功提示 4s 自动消失**(v2.6.3,`onDismiss` 回调父级清 state;失败提示常驻供读错因) |
 | `EmptyState` | 空状态(居中、两行文案) |
 | `SearchInput` | 带放大镜的搜索输入框 |
-| `Toggle` | 拨杆开关,**行式布局:文字居左、开关居右**(v2.6.7 用户要求;36×20 轨道 + 16 滑块)。标签 semibold 加粗(v2.6.8)。选中态 accent(悬浮 accentHover),未选中走专用令牌 `switchTrack`(悬浮 `switchTrackHover`,比 inputBorder 深一档)。**滑块位移与按压拉伸(顺拖动方向 +2px)全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动**,React 只声明结构(knob 无内联 left,内联会压过 :active);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + focus-visible accent 焦点环) |
-| `Slider` | 数值滑杆(v2.6.7 重设计):4px 圆轨**按值填充**(accent 到当前值硬切,渐变由组件按 (value-min)/(max-min) 内联注入)+ 14px 白圆 accent 描边拇指钮(RESET_CSS `.pddcs-slider`,悬浮放大 1.12、按住 1.22);标签 semibold 加粗(v2.6.8);数值 tabular-nums 右对齐 |
+| `Toggle` | 拨杆开关,**行式布局:文字居左、开关居右**(v2.6.7 用户要求;36×20 轨道 + 16 滑块)。标签走 `formType.label`,说明走 `formType.desc` + `textMuted`,两者间距 `formGap.labelDesc`(v2.6.28 与 Slider/HotkeyRow 统一)。选中态 = `controlActive`(悬浮 `controlActiveHover`);未选中走专用令牌 `switchTrack`(悬浮 `switchTrackHover`,比 inputBorder 深一档);**滑块底色 `controlKnobBg` 必须与激活色反相**(v2.6.28:浅色灰轨白柄 / 深色白轨深灰柄)。**滑块位移与按压拉伸(顺拖动方向 +2px)全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动**,React 只声明结构(knob 无内联 left,内联会压过 :active);**键盘可达**(v2.6.3:`tabIndex=0` + Enter/Space 切换 + focus-visible accent 焦点环,焦点环刻意保留品牌蓝) |
+| `Slider` | 数值滑杆(v2.6.7 重设计):4px 圆轨**按值填充**(`controlActive` 到当前值硬切,渐变由组件按 (value-min)/(max-min) 内联注入)+ 14px 圆拇指(RESET_CSS `.pddcs-slider`:底色 `controlKnobBg`、2px `controlActive` 描边,悬浮放大 1.12、按住 1.22);**v2.6.28 填充色由 accent 蓝改灰白**(浅色深灰 / 深色白);标签走 `formType.label` semibold(v2.6.8),数值同档 regular + `textMuted` + tabular-nums 右对齐 |
 | `SectionLabel` | 小节标签 |
 | `inputStyle` | 表单元素统一样式原语(独立成行的输入框/文本域) |
 | `controlStyle` | 与按钮同排的输入框样式原语(显式高度,保证等高) |
@@ -416,11 +440,16 @@ v2.6.6 曾移底部操作行、v2.6.9 放回行内用 primary 钮,本轮按"挤�
   导航栏顶部**放品牌标**(v2.6.22 用户指定,废止 v2.6"不放品牌标"口径):
   与扩展图标同源(`assets/icon.png`),24×24、6px 圆角 + 1px `tk.border` 描边
   (纯黑图在深色导航上需要轮廓才可见),下距 `spacing.lg`。
-- `.pddcs-switch`:Toggle 开关的键盘焦点环 —— `.pddcs-switch:focus-visible` 画 2px accent
-  外描边(v2.6.3;仅键盘聚焦显现,鼠标点击不出环)。
+- `.pddcs-switch`:Toggle 开关 —— 滑块底色 `var(--pddcs-control-knob)`(v2.6.28 起随主题),
+  键盘焦点环 `.pddcs-switch:focus-visible` 画 2px accent 外描边(v2.6.3;仅键盘聚焦显现,鼠标点击不出环)。
+- `.pddcs-slider`:数值滑杆 —— 4px 圆轨(激活色填充段由组件内联注入渐变)+ 14px 圆拇指
+  (底色 `var(--pddcs-control-knob)`、描边 `var(--pddcs-control-active)`,v2.6.28 由白底+蓝描边改灰白);
+  **`display: block` 是行距前提** —— range 默认是 inline 级,父级 line-height 的 strut 会在轨道上方
+  多顶出 1px(实测标签→轨道 9px 而非 8px);下外边距归零,行距交给 `formGap.row`。
 - `.pddcs-row(-ops)`:行悬浮操作显现规则(见 §五)。
 - **令牌 → CSS 变量桥**:静态 CSS(RESET_CSS)读不到 React 令牌,凡随主题变化的静态规则一律走
-  CSS 变量:`--pddcs-scroll-thumb`(滚动条滑块)、`--pddcs-accent`(焦点环)。
+  CSS 变量:`--pddcs-scroll-thumb`(滚动条滑块)、`--pddcs-accent`(焦点环)、
+  `--pddcs-control-active` / `--pddcs-control-knob`(开关与滑杆的激活色/柄色,v2.6.28)。
   注意**内联样式优先级高于类选择器**:不要给依赖 `:hover` 的元素内联写死对应属性,
   否则 `:hover` 永远不生效。
 - 外框:`overflow:hidden; border-radius:8px`,body 背景透明。

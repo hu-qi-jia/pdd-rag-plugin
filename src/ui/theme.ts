@@ -6,10 +6,12 @@ export type ThemeMode = 'light' | 'dark'
  *
  * 原则:
  *  - 中性灰画布(#F5F5F5)+ 白色面板,1px 细边框(#E5E5E5),层级靠明度与字重;
- *  - 黑白主色:主操作黑底白字(#161616),Figma 蓝(#0D99FF)只做焦点、品牌与状态;
+ *  - 中性主色:主操作深灰底白字(v2.6.27 用户指定 #45484D,原为近黑 #161616),
+ *    正文主文本 v2.6.27 同步软化为 #2B2B2B(原 #161616);
+ *    Figma 蓝(#0D99FF)只做焦点、品牌与状态;
  *  - 按钮亮暗规范(2026-09-15 用户指定,参照示例图):两种主题同构 ——
  *    default = 面色底 + 边框,悬浮提亮一档;primary = 主色底白字,悬浮再提亮一档。
- *    浅色主色为近黑(#161616);深色主色为面色系提亮一档的**中性深灰(#45484D)**,
+ *    浅色主色 v2.6.27 起为**中性深灰(#45484D)**,与深色主色同值 —— 两主题映射完全同构,
  *    不再使用 Figma 蓝(蓝只保留给焦点/开关/滑杆等状态),保证亮暗切换时按钮
  *    遵循同一映射规则,不出现"黑色↔蓝色"式的跳色。
  */
@@ -51,12 +53,13 @@ export interface ThemeTokens {
   scrollThumb: string
 }
 
-/** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作黑底白字 */
+/** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作深灰底白字 */
 export const lightTheme: ThemeTokens = {
   bg: '#ffffff',
   bgSecondary: '#fafafa',
   bgCard: '#ffffff',
-  text: '#161616',
+  // v2.6.27(第四十轮)用户"主面板的文字颜色换成 #2B2B2B":近黑 #161616 → 略软的深灰
+  text: '#2b2b2b',
   textMuted: '#5c5c5c',
   textTertiary: '#8c8c8c',
   border: '#e5e5e5',
@@ -68,8 +71,10 @@ export const lightTheme: ThemeTokens = {
   btnBg: '#ffffff',
   btnBorder: '#d4d4d4',
   btnHoverBg: '#fafafa',
-  btnPrimaryBg: '#161616',
-  btnPrimaryHover: '#333333',
+  // v2.6.27(第四十轮)用户"按钮的颜色修改为深灰色":近黑 #161616 → 中性深灰
+  // (取深色主题主钮同值,两主题映射到此完全同构);悬浮仍按规范"再提亮一档"
+  btnPrimaryBg: '#45484d',
+  btnPrimaryHover: '#53565b',
   btnPrimaryText: '#ffffff',
   successBg: 'rgba(20,174,92,0.09)',
   successText: '#14ae5c',

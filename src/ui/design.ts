@@ -63,6 +63,41 @@ export const spacing = {
   xxl: 16,
 } as const
 
+// ── 表单类页面口径(设置页)— 文字层级 + 行距 ────────────────────────────────
+/**
+ * 设置页/表单页的三级文字层级(2026-09-16 第四十一轮用户"设置页中的文字字号做一下规范,
+ * 比如标题、配置项字段、说明文字"):
+ *
+ *   分组标题(13.5 semibold)> 字段标签(12.5 semibold)> 说明文字(11.5 regular)
+ *
+ * 三档**等差 1px**,层级由「字号 + 字重 + 颜色」共同表达(颜色在 theme.ts:
+ * 标题与标签取 `tk.text`,说明取 `tk.textMuted`;本表只管字号与字重)。
+ * 铁律:设置页任何文字都必须落在这三档之一 —— 禁止再出现 `fontSize.caption + 0.5`
+ * 这类临时值,也禁止让分组标题小于字段标签(旧版 11.5 标题 + 12.5 标签 = 层级倒挂)。
+ */
+export const formType = {
+  /** 卡片/分组标题(如「检索与填充」) */
+  groupTitle: { size: fontSize.title, weight: fontWeight.semibold },
+  /** 配置项字段名(开关 / 滑杆 / 快捷键行的标签) */
+  label: { size: fontSize.body, weight: fontWeight.semibold },
+  /** 说明文字(字段说明、统计行、警告句、关于正文) */
+  desc: { size: fontSize.secondary, weight: fontWeight.regular },
+} as const
+
+/**
+ * 表单行距(设置页唯一口径,2026-09-16 第四十一轮用户"各配置项之间间距增大,并做统一"):
+ * 两个值单点决定 —— 配置项之间一律 `row`,字段标签与其说明之间一律 `labelDesc`;
+ * 开关 / 滑杆 / 快捷键三种行都取同一组值,不允许各自微调。
+ */
+export const formGap = {
+  /** 配置项之间(**卡片内行距**)与**卡片之间** —— 设置页全页共用这一条 16px 栅格 */
+  row: spacing.xxl,
+  /** 字段标签 → 说明文字 */
+  labelDesc: spacing.xs,
+  /** 字段标签 → 其下方的控件(滑杆轨道);比 labelDesc 大一档,给 14px 圆拇指留上下溢出空间 */
+  labelControl: spacing.md,
+} as const
+
 // ── 尺寸 ─────────────────────────────────────────────────────────────────────
 export const size = {
   /** popup 外框(固定高度,不允许内容撑开;2026-09-15 400→420,文件夹树层级需要更宽) */

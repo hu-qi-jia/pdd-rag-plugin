@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import logoPng from '~assets/icon.png'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
-import { controlH, fontFamily, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
+import { controlH, fontFamily, fontSize, formGap, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import { thinScrollbarCss } from '../ui/scrollbar'
 import {
   BookOpenIcon,
@@ -66,11 +66,12 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
 }
 
 /* ── 开关(v2.6.7 重设计):滑块位置由 [aria-checked] 驱动,按压时滑块
-      顺拖动方向拉伸 2px 的微交互;减速曲线落定。React 只声明结构 ── */
+      顺拖动方向拉伸 2px 的微交互;减速曲线落定。React 只声明结构。
+      v2.6.28:滑块底色改由主题变量注入(浅色白 / 深色深灰),与轨道反相 ── */
 .pddcs-switch .pddcs-switch-knob {
   position: absolute; top: 2px; left: 2px;
   width: ${size.toggleKnob}px; height: ${size.toggleKnob}px;
-  border-radius: 9999px; background: #fff;
+  border-radius: 9999px; background: var(--pddcs-control-knob);
   box-shadow: 0 1px 2px rgba(0,0,0,0.25);
   transition: left ${motion.emphasized}, width ${motion.fast};
 }
@@ -88,17 +89,22 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
   outline-offset: 2px;
 }
 
-/* ── 滑杆(v2.6.7 重设计):4px 圆轨(accent 填充到当前值,渐变由组件内联注入),
-      14px 白圆拇指 + accent 描边,悬浮放大、按住再放大 ── */
+/* ── 滑杆(v2.6.7 重设计):4px 圆轨(激活色填充到当前值,渐变由组件内联注入),
+      14px 圆拇指 + 激活色描边,悬浮放大、按住再放大。
+      v2.6.28:填充与拇指描边由 accent 蓝改灰白(浅色深灰 / 深色白),
+      拇指底色随主题反相;下外边距并入表单行距(design.ts#formGap.row),故归零 ── */
 .pddcs-slider {
   -webkit-appearance: none; appearance: none;
-  width: 100%; height: 4px; margin: 8px 0 2px;
+  /* display:block 是行距前提:range 默认是 inline 级,父级 line-height 的 strut
+     会在轨道上方多顶出 1px(实测 9px 而非 8px) */
+  display: block;
+  width: 100%; height: 4px; margin: ${formGap.labelControl}px 0 0;
   border-radius: 9999px; outline: none; cursor: pointer;
 }
 .pddcs-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 14px; height: 14px; border-radius: 50%;
-  background: #fff; border: 2px solid var(--pddcs-accent);
+  background: var(--pddcs-control-knob); border: 2px solid var(--pddcs-control-active);
   box-shadow: 0 1px 3px rgba(0,0,0,0.28);
   transition: transform .12s ease;
 }
@@ -107,7 +113,7 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
 .pddcs-slider:focus-visible { outline: 2px solid var(--pddcs-accent); outline-offset: 4px; }
 .pddcs-slider::-moz-range-thumb {
   width: 14px; height: 14px; border-radius: 50%;
-  background: #fff; border: 2px solid var(--pddcs-accent);
+  background: var(--pddcs-control-knob); border: 2px solid var(--pddcs-control-active);
   box-shadow: 0 1px 3px rgba(0,0,0,0.28);
 }
 .pddcs-slider::-moz-range-track { height: 4px; border-radius: 9999px; background: transparent; }
@@ -184,6 +190,9 @@ function App() {
   const cssVars = {
     '--pddcs-scroll-thumb': tk.scrollThumb,
     '--pddcs-accent': tk.accent,
+    // 开关/滑杆的灰白配色(第四十一轮):激活色 + 反相柄色
+    '--pddcs-control-active': tk.controlActive,
+    '--pddcs-control-knob': tk.controlKnobBg,
   } as React.CSSProperties
 
   return (

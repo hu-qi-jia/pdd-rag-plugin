@@ -48,6 +48,21 @@ export interface ThemeTokens {
   switchTrack: string
   /** 开关未选中轨道悬浮色 */
   switchTrackHover: string
+  /**
+   * 控件激活色:开关**选中**轨道、滑杆**已填充**段
+   * (2026-09-16 第四十一轮用户"将开关组件和滑动条组件的颜色修改为灰色和白色")——
+   * 浅色 = 中性深灰(与主按钮同值 #45484D),深色 = 白;原为 accent 蓝,
+   * 自此 accent 在控件里只留给焦点环("蓝只做状态不做大色块"的既定口径)。
+   */
+  controlActive: string
+  /** 控件激活色的悬浮态:浅色再提亮一档;深色已是纯白,反向压暗一档 —— 方向不同,同样"悬浮有反馈" */
+  controlActiveHover: string
+  /**
+   * 控件「柄」底色(开关滑块、滑杆拇指):与激活色**反相**取色 ——
+   * 浅色白柄压在深灰轨道上、深色深灰柄压在白轨道上。
+   * 反相是硬约束而非审美选择:柄与轨道同色即柄消失(深色下"白轨白柄"是已踩过的坑)。
+   */
+  controlKnobBg: string
   shadow: string
   /** 滚动条滑块(悬浮显现);暗色下必须是浅色,否则在深底上不可见 */
   scrollThumb: string
@@ -85,6 +100,10 @@ export const lightTheme: ThemeTokens = {
   inputBorder: '#d4d4d4',
   switchTrack: '#c6c8cc',
   switchTrackHover: '#b3b6bc',
+  // v2.6.28(第四十一轮)开关/滑杆改灰白:激活色 = 中性深灰(与主钮同值),柄 = 白
+  controlActive: '#45484d',
+  controlActiveHover: '#53565b',
+  controlKnobBg: '#ffffff',
   // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层";
   // popup 与聊天页面板共用本令牌,两表面同构不割裂
   shadow: '0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)',
@@ -123,6 +142,12 @@ export const darkTheme: ThemeTokens = {
   inputBorder: '#3b3d40',
   switchTrack: 'rgba(255,255,255,0.16)',
   switchTrackHover: 'rgba(255,255,255,0.24)',
+  // v2.6.28(第四十一轮)开关/滑杆改灰白:激活色 = 白(与浅色主题反相),柄 = 卡片面色系深灰
+  // (#2c2c2c 比未选中轨道 rgba(255,255,255,.16)→≈#4e4e4e 更暗,未选中态也能看清柄;
+  //  若改白,白柄压白轨 = 柄消失)
+  controlActive: '#ffffff',
+  controlActiveHover: '#e3e5e9',
+  controlKnobBg: '#2c2c2c',
   // 与浅色同构的近影→环境影顺序(小→大),仅加大不透明度保深底可辨
   shadow: '0 2px 8px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.55)',
   scrollThumb: 'rgba(255,255,255,0.24)',

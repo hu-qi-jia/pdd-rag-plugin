@@ -16,9 +16,16 @@ import type {
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, type NoticeMsg } from '../ui/components'
-import { controlH, fontSize, fontWeight, spacing } from '../ui/design'
+import { controlH, fontSize, formGap, formType, spacing } from '../ui/design'
 import { DownloadIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
+
+/**
+ * 设置页所有卡片的统一行距(配置项之间,第四十一轮用户"各配置项之间间距增大,并做统一")——
+ * Card 默认 spacing.lg(10px)偏挤,设置页统一提到 formGap.row(16px);
+ * 四个卡片共用同一个常量对象,禁止逐卡微调,否则"统一"立刻失效。
+ */
+const SETTINGS_CARD_STYLE: React.CSSProperties = { gap: formGap.row }
 
 export function SettingsTab({
   tk,
@@ -181,18 +188,23 @@ export function SettingsTab({
 
   if (!draft) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
-        <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
+        {/* 占位文字同样走 formType.desc 档(设置页不允许出现规范外的字号) */}
+        <div style={{ fontSize: formType.desc.size, fontWeight: formType.desc.weight, color: tk.textMuted }}>
+          读取中…
+        </div>
         <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+    // 卡片之间与配置项之间同节奏(同取 formGap.row):全页一条 16px 栅格,
+    // 避免"卡内比卡外还松"的错位
+    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
       <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
-      <Card tk={tk} title="检索与填充">
+      <Card tk={tk} title="检索与填充" style={SETTINGS_CARD_STYLE}>
         <Toggle
           tk={tk}
           label="自动回复"
@@ -208,7 +220,7 @@ export function SettingsTab({
         <HotkeyRow
           tk={tk}
           label="候选切换键"
-          desc=""
+          desc="推荐面板打开时按此键在候选间循环切换(可用单键)"
           allowPlainKey
           hotkey={draft.panelNavHotkey}
           onChange={(hk) => void persist({ ...draft, panelNavHotkey: hk })}
@@ -262,7 +274,7 @@ export function SettingsTab({
         />
       </Card>
 
-      <Card tk={tk} title="导入与导出">
+      <Card tk={tk} title="导入与导出" style={SETTINGS_CARD_STYLE}>
         <Toggle
           tk={tk}
           label="导出包含记忆数据"
@@ -294,13 +306,15 @@ export function SettingsTab({
         </div>
       </Card>
 
-      <Card tk={tk} title="存储">
+      <Card tk={tk} title="存储" style={SETTINGS_CARD_STYLE}>
         <div
           style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: `4px ${spacing.lg}px`,
-            fontSize: fontSize.caption,
+            // 同一行内多项之间用 16px 列距(与配置项行距同值,横向也统一)
+            gap: `4px ${formGap.row}px`,
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
             color: tk.textMuted,
             fontVariantNumeric: 'tabular-nums',
           }}
@@ -323,7 +337,13 @@ export function SettingsTab({
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
           {confirmClear ? (
             <>
-              <span style={{ fontSize: fontSize.caption + 0.5, color: tk.errorText }}>
+              <span
+                style={{
+                  fontSize: formType.desc.size,
+                  fontWeight: formType.desc.weight,
+                  color: tk.errorText,
+                }}
+              >
                 清空全部问答与回复?标准回答/知识库/文件夹保留。
               </span>
               <Btn tk={tk} variant="danger" disabled={busy} onClick={() => void clearMemory()}>
@@ -341,8 +361,15 @@ export function SettingsTab({
         </div>
       </Card>
 
-      <Card tk={tk} title="关于">
-        <div style={{ fontSize: fontSize.secondary - 0.5, color: tk.textMuted, lineHeight: 1.7 }}>
+      <Card tk={tk} title="关于" style={SETTINGS_CARD_STYLE}>
+        <div
+          style={{
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
+            color: tk.textMuted,
+            lineHeight: 1.7,
+          }}
+        >
           本工具仅读取聊天页内容并填充官方输入框,发送始终由人工完成;
           全部数据仅存本机 IndexedDB,不上传任何服务器;模型文件仅从 hf-mirror.com 镜像下载。
           请勿用于自动群发等违反平台规则的场景。
@@ -408,9 +435,19 @@ function HotkeyRow({
   return (
     // 两行结构(2026-09-15 第十七轮重排):行1 = 标签 + kbd + 「修改」推至行右,
     // kbd 显式取 controlH.form 与按钮严格等高(等高铁律);行2 = 说明/录入提示。
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    // 第四十一轮:标签走 formType.label、说明走 formType.desc,两者间距取 formGap.labelDesc
+    // —— 与 Toggle / Slider 三种行完全同构。
+    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelDesc }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-        <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.semibold, flexShrink: 0 }}>{label}</span>
+        <span
+          style={{
+            fontSize: formType.label.size,
+            fontWeight: formType.label.weight,
+            flexShrink: 0,
+          }}
+        >
+          {label}
+        </span>
         <kbd
           style={{
             height: controlH.form,
@@ -440,11 +477,28 @@ function HotkeyRow({
         )}
       </div>
       {recording ? (
-        <span style={{ fontSize: fontSize.caption, color: tk.accent, lineHeight: 1.5 }}>
+        // 录入提示是"当前状态"而非普通说明:保留 accent 色以示激活(字号仍走 formType.desc)
+        <span
+          style={{
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
+            color: tk.accent,
+            lineHeight: 1.5,
+          }}
+        >
           请按下新的快捷键(Esc 取消{allowPlainKey ? ';可用单键(如 Tab)' : ';需带 Ctrl/Alt/Shift'})
         </span>
       ) : desc ? (
-        <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>{desc}</span>
+        <span
+          style={{
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
+            color: tk.textMuted,
+            lineHeight: 1.5,
+          }}
+        >
+          {desc}
+        </span>
       ) : null}
     </div>
   )

@@ -7,7 +7,7 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import type { ThemeTokens } from './theme'
-import { fontSize, fontWeight, radius, spacing, semantic, motion, size } from './design'
+import { fontSize, fontWeight, radius, spacing, semantic, motion, size, formType, formGap } from './design'
 import { PlusIcon, SearchIcon } from './icons'
 
 // ── 胶囊按钮 ─────────────────────────────────────────────────────────────────
@@ -186,7 +186,15 @@ export function Card({
       }}
     >
       {title && (
-        <div style={{ fontSize: fontSize.secondary, fontWeight: fontWeight.semibold, color: tk.textMuted }}>
+        // 分组标题(第四十一轮起走 formType 规范):13.5 semibold + 主文本色 ——
+        // 旧版是 11.5 + textMuted,比卡内 12.5 的字段标签还小还灰(层级倒挂)
+        <div
+          style={{
+            fontSize: formType.groupTitle.size,
+            fontWeight: formType.groupTitle.weight,
+            color: tk.text,
+          }}
+        >
           {title}
         </div>
       )}
@@ -317,12 +325,13 @@ export function Toggle({
   tk: ThemeTokens
 }) {
   const [hover, setHover] = useState(false)
-  // 选中态 accent(悬浮 accentHover);未选中轨道走专用令牌(比 inputBorder 深一档,
-  // 悬浮再深一档给出"可点"暗示)。黑白反转方案已废弃:深色下白轨白点会互相吞没。
+  // 选中态 = 控件激活色(2026-09-16 第四十一轮用户"开关…颜色修改为灰色和白色"):
+  // 浅色中性深灰 / 深色白,原 accent 蓝退出开关;
+  // 未选中轨道仍走专用令牌(比 inputBorder 深一档,悬浮再深一档给出"可点"暗示)。
   const track = checked
     ? hover
-      ? tk.accentHover
-      : tk.accent
+      ? tk.controlActiveHover
+      : tk.controlActive
     : hover
       ? tk.switchTrackHover
       : tk.switchTrack
@@ -337,16 +346,25 @@ export function Toggle({
       }}
     >
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: fontSize.body, fontWeight: fontWeight.semibold }}>
-          {label}
-        </span>
         <span
           style={{
             display: 'block',
-            fontSize: fontSize.caption,
+            fontSize: formType.label.size,
+            fontWeight: formType.label.weight,
+          }}
+        >
+          {label}
+        </span>
+        {/* 说明文字:formType.desc 档(11.5 regular)+ textMuted;
+            与标签的间距统一取 formGap.labelDesc(第四十一轮"间距统一") */}
+        <span
+          style={{
+            display: 'block',
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
             color: tk.textMuted,
             lineHeight: 1.55,
-            marginTop: 1,
+            marginTop: formGap.labelDesc,
           }}
         >
           {desc}
@@ -408,12 +426,13 @@ export function Slider({
   onChange: (v: number) => void
   format: (v: number) => string
 }) {
-  // 填充进度硬切:accent 到当前值,其后是轨道色(inputBorder)
+  // 填充进度硬切:激活色到当前值,其后是轨道色(inputBorder)
   const pct = Math.round(((value - min) / (max - min)) * 100)
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontSize.body }}>
-        <span style={{ fontWeight: fontWeight.semibold }}>{label}</span>
+      {/* 标签走 formType.label(12.5 semibold),当前值同档但 regular + 灰 + 等宽数字 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: formType.label.size }}>
+        <span style={{ fontWeight: formType.label.weight }}>{label}</span>
         <span
           style={{
             color: tk.textMuted,
@@ -433,7 +452,8 @@ export function Slider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
-          backgroundImage: `linear-gradient(to right, ${tk.accent} ${pct}%, ${tk.inputBorder} ${pct}%)`,
+          // 第四十一轮:已填充段由 accent 蓝改控件激活色(浅色深灰 / 深色白),与开关同一令牌
+          backgroundImage: `linear-gradient(to right, ${tk.controlActive} ${pct}%, ${tk.inputBorder} ${pct}%)`,
         }}
       />
     </div>

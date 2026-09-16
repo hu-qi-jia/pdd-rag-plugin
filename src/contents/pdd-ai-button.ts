@@ -391,12 +391,9 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   top.className = 'pddcs-cand-top'
   top.appendChild(badge(s.kind))
   // 得分数字对客服没有决策价值,不再展示(2026-09-15 用户要求);同内容折叠数保留
-  if ((s.foldCount ?? 1) > 1) {
-    const fold = document.createElement('span')
-    fold.className = 'pddcs-fold'
-    fold.textContent = `同内容×${s.foldCount}`
-    top.appendChild(fold)
-  }
+  // (v2.6.19:折叠数移至行右下角悬浮才显,行加 folded 类预留条位,见 append 处)
+  const foldCount = s.foldCount ?? 1
+  if (foldCount > 1) row.classList.add('pddcs-cand-folded')
   const actions = document.createElement('div')
   actions.className = 'pddcs-cand-actions'
   top.appendChild(actions)
@@ -494,6 +491,14 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   text.className = 'pddcs-cand-text'
   text.textContent = s.text
   row.appendChild(text)
+
+  // 同内容折叠数:行右下角悬浮才显(v2.6.19 用户指定;原在徽标旁常驻)
+  if (foldCount > 1) {
+    const fold = document.createElement('span')
+    fold.className = 'pddcs-fold'
+    fold.textContent = `同内容×${foldCount}`
+    row.appendChild(fold)
+  }
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {

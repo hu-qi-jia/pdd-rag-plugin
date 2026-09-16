@@ -8,7 +8,6 @@ import {
   THEME_STORAGE_KEY,
 } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
-import { semantic } from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底/黑主钮', () => {
@@ -36,15 +35,15 @@ describe('buildOverlayCss:ChatGPT 化视觉(2026-09-16 第二十五轮,1+2+3+6,�
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).not.toContain('border-bottom')
   })
-  it('徽标降级:色块 chip → 6px 小圆点(::before)+ 灰字,金/绿语义点同源 popup', () => {
+  it('徽标软底 chip 化(v2.6.19 用户"明显一点"):金=琥珀软底金字,知识库=绿软底绿字,圆点移除', () => {
     const css = buildOverlayCss(lightTheme)
     const badgeRule = css.match(/\.pddcs-badge \{[^}]*\}/)![0]
-    expect(badgeRule).not.toContain('background') // chip 软底移除
-    expect(css).toContain('.pddcs-badge::before')
-    expect(css).toContain('width: 6px')
-    expect(css).toContain(`background: ${semantic.golden}`)
-    expect(css).toContain(`background: ${semantic.knowledge}`)
-    expect(css).not.toContain(semantic.goldenBg) // 色块底色不再出现
+    expect(badgeRule).toContain('background:') // chip 软底回归
+    expect(css).not.toContain('.pddcs-badge::before') // 6px 圆点移除
+    expect(css).toContain('.pddcs-badge.golden')
+    expect(css).toContain('rgba(184, 134, 11, 0.14)')
+    expect(css).toContain('.pddcs-badge.knowledge')
+    expect(css).toContain('rgba(20, 174, 92, 0.12)')
   })
   it('页脚键位提示键帽化:.pddcs-kbd 细边框圆角灰底', () => {
     const css = buildOverlayCss(lightTheme)
@@ -71,11 +70,11 @@ describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六
     expect(qRule).toContain('text-overflow: ellipsis')
     expect(css).not.toContain('.pddcs-cand-src')
   })
-  it('头部极简:12.5px 中灰 500 字重(原 13.5/600 主色)', () => {
+  it('头部小字但加粗(v2.6.19 用户指定 600;12.5px 中灰保持)', () => {
     const css = buildOverlayCss(lightTheme)
     const headRule = css.match(/\.pddcs-popup-head \{[^}]*\}/)![0]
     expect(headRule).toContain('font-size: 12.5px')
-    expect(headRule).toContain('font-weight: 500')
+    expect(headRule).toContain('font-weight: 600')
     expect(headRule).toContain(`color: ${lightTheme.textMuted}`)
   })
   it('死规则清理:score 元素早已移除,规则不再生成', () => {
@@ -121,6 +120,24 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
     const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
     expect(popupRule).toContain('animation: pddcs-pop-in')
     expect(css).toContain('prefers-reduced-motion')
+  })
+})
+
+describe('buildOverlayCss:面板细节四调(2026-09-16 第三十三轮 v2.6.19)', () => {
+  it('面板圆角增大至 12px(radius.xxl 新档,不影响 popup 本体的 8px)', () => {
+    const css = buildOverlayCss(lightTheme)
+    const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
+    expect(popupRule).toContain('border-radius: 12px')
+  })
+  it('同内容×n 移至行右下角悬浮才显(absolute 定位 + 静止透明);折叠行预留条位不压正文', () => {
+    const css = buildOverlayCss(lightTheme)
+    const foldRule = css.match(/\.pddcs-fold \{[^}]*\}/)![0]
+    expect(foldRule).toContain('position: absolute')
+    expect(foldRule).toContain('right: 10px')
+    expect(foldRule).toContain('bottom: 6px')
+    expect(foldRule).toContain('opacity: 0')
+    expect(css).toMatch(/\.pddcs-cand:hover \.pddcs-fold[^{]*\{[^}]*opacity: 1/)
+    expect(css).toContain('.pddcs-cand-folded')
   })
 })
 

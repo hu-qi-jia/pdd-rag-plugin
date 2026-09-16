@@ -45,7 +45,7 @@ export function buildOverlayCss(tk: ThemeTokens): string {
    背景另行内联双保险);入场 160ms 淡入上移 */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px));
   display: flex; flex-direction: column; overflow: hidden; pointer-events: auto;
-  background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
+  background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xxl}px;
   box-shadow: ${tk.shadow}; opacity: 1;
   font-size: ${fontSize.body}px; color: ${tk.text};
   animation: pddcs-pop-in .16s cubic-bezier(0.2, 0, 0, 1); }
@@ -54,7 +54,7 @@ export function buildOverlayCss(tk: ThemeTokens): string {
 ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 头部常驻壳(字号极简口径 v2.6.17 不变;sticky 取消 —— 头已移出滚动视口,不再遮挡行) */
 .pddcs-popup-head { display: flex; align-items: center; flex: 0 0 auto; padding: 10px 14px 9px;
-  border-bottom: 1px solid ${tk.borderLight}; font-weight: 500; font-size: ${fontSize.body}px;
+  border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.body}px;
   color: ${tk.textMuted}; letter-spacing: -0.01em; }
 /* 滚动中段:唯一滚动容器(6px 细轨挂此) */
 .pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 3px 0 5px; }
@@ -65,19 +65,24 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 候选行(v2.6.18 重设计):通栏矩形 → 内缩圆角软行(留白分组,无分隔线);
    悬浮与键盘选中共用同一软中性灰圆角填充(第二十三轮用户指定的中性灰口径;
    旧 3px 左描边属表格行语言,随通栏行一并移除) */
-.pddcs-cand { margin: 4px 8px; padding: 10px 12px; border-radius: ${radius.lg}px; cursor: pointer;
-  transition: background-color .12s ease; }
+.pddcs-cand { position: relative; margin: 4px 8px; padding: 10px 12px; border-radius: ${radius.lg}px;
+  cursor: pointer; transition: background-color .12s ease; }
 .pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
+/* 折叠候选行:底边预留条位,右下角「同内容×n」不压正文 */
+.pddcs-cand-folded { padding-bottom: 26px; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-/* 类别徽标(v2.6.16 降级):色块 chip → 6px 小圆点 + 灰字,信息在视觉噪音降;
-   圆点色与 popup 金标 ★ 同源(semantic 金/绿),两表面色系不割裂;历史 = 中性灰点 */
-.pddcs-badge { display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10px; font-weight: 500; color: ${tk.textMuted}; }
-.pddcs-badge::before { content: ''; width: 6px; height: 6px; border-radius: ${radius.pill}px;
-  background: ${tk.textTertiary}; }
-.pddcs-badge.golden::before { background: ${semantic.golden}; }
-.pddcs-badge.knowledge::before { background: ${semantic.knowledge}; }
-.pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
+/* 类别徽标(v2.6.19 重设计,用户"明显一点"):6px 圆点 → 软底色 chip ——
+   标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(色相同源 semantic,两表面不割裂),
+   历史 = 中性灰软底灰字;10px caption 档不抢正文 */
+.pddcs-badge { display: inline-flex; align-items: center; padding: 1px 7px;
+  border-radius: ${radius.sm}px; font-size: 10px; font-weight: 500;
+  background: ${tk.selectedBg}; color: ${tk.textMuted}; }
+.pddcs-badge.golden { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
+.pddcs-badge.knowledge { background: rgba(20, 174, 92, 0.12); color: ${semantic.knowledge}; }
+/* 同内容折叠数(v2.6.19,用户指定):移至行右下角,悬浮才显 */
+.pddcs-fold { position: absolute; right: 10px; bottom: 6px; color: ${tk.textTertiary};
+  font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+.pddcs-cand:hover .pddcs-fold { opacity: 1; }
 /* 操作钮(v2.6.18):悬浮/选中才显 —— 静止时行内只有徽标+回显+正文,
    9 行候选不再顶着一排常驻灰字小钮;布局占位不变,显现无跳动 */
 .pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px;

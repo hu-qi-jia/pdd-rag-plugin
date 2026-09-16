@@ -47,6 +47,8 @@ export const radius = {
   lg: 8,
   /** 弹窗 / popup 外框 */
   xl: 8,
+  /** 大号浮层(聊天页推荐回复面板;v2.6.19 用户要求圆角增大,不浮动 popup 本体的 8px) */
+  xxl: 12,
   /** 拨杆开关、圆形计数徽标、圆点 */
   pill: 9999,
 } as const

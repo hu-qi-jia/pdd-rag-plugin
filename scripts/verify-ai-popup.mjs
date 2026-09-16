@@ -274,7 +274,12 @@ const visual = await page.evaluate(() => {
       : '',
     panelShadow: cs?.boxShadow ?? '',
     badgeBg: badge ? getComputedStyle(badge).backgroundColor : '',
-    badgeDot: badge ? getComputedStyle(badge, '::before').width : '',
+    badgeColor: badge ? getComputedStyle(badge).color : '',
+    popupRadius: cs?.borderRadius ?? '',
+    headWeight: (() => {
+      const h = document.querySelector('.pddcs-popup-head')
+      return h ? getComputedStyle(h).fontWeight : ''
+    })(),
     footKbd: !!document.querySelector('.pddcs-popup-foot kbd'),
   }
 })
@@ -300,10 +305,12 @@ check(
   `panelShadow=${visual.panelShadow}`,
 )
 check(
-  '徽标已降级小圆点(6px ::before,无色块底)',
-  visual.badgeDot === '6px' && visual.badgeBg === 'rgba(0, 0, 0, 0)',
-  `badgeDot=${visual.badgeDot} badgeBg=${visual.badgeBg}`,
+  '徽标软底 chip 化(琥珀软底金字,圆点已移除)',
+  visual.badgeBg.includes('184, 134, 11') && visual.badgeColor === 'rgb(184, 134, 11)',
+  `badgeBg=${visual.badgeBg} badgeColor=${visual.badgeColor}`,
 )
+check('面板圆角增大至 12px', visual.popupRadius === '12px', `popupRadius=${visual.popupRadius}`)
+check('头部标题加粗(600)', visual.headWeight === '600', `headWeight=${visual.headWeight}`)
 check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
 check('回答正文为主层(13.5px)', visual.candTextFont === '13.5px', `candTextFont=${visual.candTextFont}`)
 check(
@@ -384,6 +391,7 @@ await page.evaluate(() => {
     score: 0.7,
     sourceId: `x-${i}`,
     replyId: `rp-x-${i}`,
+    ...(i === 0 ? { foldCount: 3 } : {}), // 首条带折叠数,验「同内容×n 右下角悬浮才显」
   }))
 })
 await page.evaluate(() => {
@@ -409,6 +417,17 @@ const scrolled = await page.evaluate(() => {
   }
 })
 check('9 条候选面板:连按 Tab 到末条(滚动跟随)', scrolled.count === 9 && scrolled.selected === 8 && scrolled.scrollTop > 0, JSON.stringify(scrolled))
+const foldVis = await page.evaluate(() => {
+  const f = document.querySelector('.pddcs-fold')
+  return f
+    ? { text: f.textContent, pos: getComputedStyle(f).position, opacity: getComputedStyle(f).opacity }
+    : null
+})
+check(
+  '同内容×n 右下角 absolute 定位,静止隐藏悬浮才显',
+  !!foldVis && foldVis.text === '同内容×3' && foldVis.pos === 'absolute' && foldVis.opacity === '0',
+  JSON.stringify(foldVis),
+)
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
 })

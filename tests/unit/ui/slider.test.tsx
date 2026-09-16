@@ -1,5 +1,7 @@
 // Slider 组件单测(2026-09-15 用户要求更换滑轨组件):
-// 自定义滑轨 = 填充进度渐变(accent 到已过值,未填充段走轨道色)+ CSS 拇指钮。
+// 自定义滑轨 = 填充进度渐变(激活色到已过值,未填充段走轨道色)+ CSS 拇指钮。
+// 2026-09-16 第四十一轮:填充色由 accent 蓝改控件激活色(浅色深灰 / 深色白),
+// 颜色口径与回归断言见 form-spec.test.tsx。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'

@@ -11,16 +11,22 @@ import {
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
-  it('浅色令牌 → 浅色面板底/黑主钮', () => {
+  it('浅色令牌 → 浅色面板底 + 主/次级文本色,且不混入深色文本', () => {
     const css = buildOverlayCss(lightTheme)
     expect(css).toContain(`background: ${lightTheme.bg}`)
-    expect(css).toContain(lightTheme.btnPrimaryBg) // #45484d v2.6.27 起为深灰(浅色主钮不直接出现,主钮样式在面板卡;断言含令牌即可)
+    // 覆盖层里出现的是面板与气泡按钮用到的令牌(text / textMuted / textTertiary);
+    // **不含** btnPrimaryBg —— 主按钮只在 popup 侧,此处断它等于在断一个不存在的引用
+    // (第四十一轮修正:旧断言 toContain(btnPrimaryBg) 曾因 tk.text 恰与主钮同值而"假绿")
     expect(css).toContain(`color: ${lightTheme.text}`)
+    expect(css).toContain(`color: ${lightTheme.textMuted}`)
+    expect(css).toContain(`color: ${lightTheme.textTertiary}`)
+    expect(css).not.toContain(darkTheme.text)
   })
   it('深色令牌 → 深色面板底/中性灰控件,与浅色产物不同', () => {
     const css = buildOverlayCss(darkTheme)
     expect(css).toContain(`background: ${darkTheme.bg}`)
     expect(css).toContain(darkTheme.btnBg)
+    expect(css).not.toContain(lightTheme.text)
     expect(css).not.toBe(buildOverlayCss(lightTheme))
   })
   it('轻提示 toast 两主题下都是深底白字(可读性不随主题切换)', () => {

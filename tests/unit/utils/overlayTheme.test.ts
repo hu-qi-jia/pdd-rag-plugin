@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildOverlayCss, parseThemeMode, THEME_STORAGE_KEY } from '../../../src/utils/overlayTheme'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
+import { semantic } from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底/黑主钮', () => {
@@ -21,6 +22,34 @@ describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
     for (const tk of [lightTheme, darkTheme]) {
       expect(buildOverlayCss(tk)).toContain('rgba(22,22,22,.92)')
     }
+  })
+})
+
+describe('buildOverlayCss:ChatGPT 化视觉(2026-09-16 第二十五轮,1+2+3+6,不割裂)', () => {
+  it('候选行去分隔线靠留白分组(padding 12px 14px,无 border-bottom)', () => {
+    const css = buildOverlayCss(lightTheme)
+    const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
+    expect(candRule).not.toContain('border-bottom')
+    expect(candRule).toContain('padding: 12px 14px')
+  })
+  it('徽标降级:色块 chip → 6px 小圆点(::before)+ 灰字,金/绿语义点同源 popup', () => {
+    const css = buildOverlayCss(lightTheme)
+    const badgeRule = css.match(/\.pddcs-badge \{[^}]*\}/)![0]
+    expect(badgeRule).not.toContain('background') // chip 软底移除
+    expect(css).toContain('.pddcs-badge::before')
+    expect(css).toContain('width: 6px')
+    expect(css).toContain(`background: ${semantic.golden}`)
+    expect(css).toContain(`background: ${semantic.knowledge}`)
+    expect(css).not.toContain(semantic.goldenBg) // 色块底色不再出现
+  })
+  it('页脚键位提示键帽化:.pddcs-kbd 细边框圆角灰底', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css).toContain('.pddcs-kbd')
+    expect(css).toContain(`border: 1px solid ${lightTheme.border}`)
+  })
+  it('浮层阴影柔和双层(浅/深同构:近影 + 环境影)', () => {
+    expect(lightTheme.shadow).toBe('0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)')
+    expect(darkTheme.shadow).toBe('0 2px 8px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.55)')
   })
 })
 

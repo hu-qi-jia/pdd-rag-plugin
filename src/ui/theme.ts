@@ -81,7 +81,9 @@ export const lightTheme: ThemeTokens = {
   inputBorder: '#d4d4d4',
   switchTrack: '#c6c8cc',
   switchTrackHover: '#b3b6bc',
-  shadow: '0 4px 16px rgba(0,0,0,0.08)',
+  // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层";
+  // popup 与聊天页面板共用本令牌,两表面同构不割裂
+  shadow: '0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)',
   scrollThumb: 'rgba(0,0,0,0.16)',
 }
 
@@ -118,7 +120,8 @@ export const darkTheme: ThemeTokens = {
   inputBorder: '#3b3d40',
   switchTrack: 'rgba(255,255,255,0.16)',
   switchTrackHover: 'rgba(255,255,255,0.24)',
-  shadow: '0 12px 40px rgba(0,0,0,0.60), 0 2px 8px rgba(0,0,0,0.35)',
+  // 与浅色同构的近影→环境影顺序(小→大),仅加大不透明度保深底可辨
+  shadow: '0 2px 8px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.55)',
   scrollThumb: 'rgba(255,255,255,0.24)',
 }
 

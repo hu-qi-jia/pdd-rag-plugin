@@ -55,7 +55,8 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
   width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
   justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
 .pddcs-popup-close:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
-.pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
+/* 候选行(v2.6.16 第二十五轮 ChatGPT 化):去 1px 行分隔线,靠留白 + 悬浮底色分组 */
+.pddcs-cand { padding: 12px 14px; cursor: pointer;
   transition: background-color .1s ease, box-shadow .1s ease; }
 .pddcs-cand:hover { background: ${tk.btnHoverBg}; }
 /* 键盘选中态(v2.6.14 用户指定中性灰:灰软底 + 3px 灰左描边,不再用 accent 蓝);
@@ -64,11 +65,14 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg};
   box-shadow: inset 3px 0 0 ${tk.selectedBar}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.pddcs-badge { display: inline-flex; align-items: center; border-radius: ${radius.sm}px;
-  font-size: 10px; font-weight: 600; padding: 2px 7px; }
-.pddcs-badge.golden { background: ${semantic.goldenBg}; color: ${semantic.golden}; }
-.pddcs-badge.knowledge { background: ${semantic.knowledgeBg}; color: ${semantic.knowledge}; }
-.pddcs-badge.history { background: ${tk.bgCard}; color: ${tk.textMuted}; border: 1px solid ${tk.border}; }
+/* 类别徽标(v2.6.16 降级):色块 chip → 6px 小圆点 + 灰字,信息在视觉噪音降;
+   圆点色与 popup 金标 ★ 同源(semantic 金/绿),两表面色系不割裂;历史 = 中性灰点 */
+.pddcs-badge { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 500; color: ${tk.textMuted}; }
+.pddcs-badge::before { content: ''; width: 6px; height: 6px; border-radius: ${radius.pill}px;
+  background: ${tk.textTertiary}; }
+.pddcs-badge.golden::before { background: ${semantic.golden}; }
+.pddcs-badge.knowledge::before { background: ${semantic.knowledge}; }
 .pddcs-score { color: ${tk.textTertiary}; font-size: 10px; font-variant-numeric: tabular-nums; }
 .pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
 .pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
@@ -84,6 +88,11 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 .pddcs-cand-src { margin-top: 5px; color: ${tk.textTertiary}; font-size: 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: 11px; }
+/* 键位键帽(v2.6.16):与 popup 设置页 HotkeyRow 的 <kbd> 同语言(灰底细边圆角等宽字) */
+.pddcs-kbd { display: inline-block; margin: 0 2px; padding: 1px 6px;
+  border: 1px solid ${tk.border}; border-radius: ${radius.sm}px;
+  background: ${tk.bgSecondary}; color: ${tk.textMuted};
+  font-size: 10px; line-height: 1.4; font-family: ui-monospace, Consolas, monospace; }
 
 /* 轻提示 — 近黑 toast(两主题下都深底白字,可读性不随主题切换) */
 .pddcs-toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);

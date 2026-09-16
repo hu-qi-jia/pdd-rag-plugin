@@ -4,13 +4,19 @@
  * 走到"点击 AI回复 → 候选弹窗 → 设置/取消标准回答"的真实交互路径。
  *
  * 验收点(2026-09-15 用户反馈):
- *  ① 已是标准回答的候选 → 操作钮为「取消标准回答」(原先无法取消)
- *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回「设置标准回答」
- *  ③ 历史候选 → 点「设置标准回答」发 ADD_GOLDEN,成功后原位翻为「取消标准回答」
+ *  ① 已是标准回答的候选 → 星标钮为**实心金星**,语义「取消标准回答」(原先无法取消)
+ *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回描边星
+ *  ③ 历史候选 → 点星标发 ADD_GOLDEN,成功后原位翻为实心金星
  *  ④ 达到每问上限时 → 提示且不误报成功
  *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十四轮改循环):初始选中第一条,
  *    Tab 单键循环切换 —— 末条再按回绕到首条(Shift+Tab 反向已删,不再拦截;↑↓ 亦让位平台切换会话),
  *    Enter 填充**选中项**(非固定第一条)
+ *  ⑥ 图标钮几何(2026-09-16 第三十七轮 v2.6.24 用户四调):徽标放大到 11.5px、
+ *    徽标/原问题/正文**同一条左基线**(按 rect 量)、两枚 24px 图标钮右移 6px、相邻行间距 ≤2px
+ *  ⑦ 词条留白重配(第三十八轮 v2.6.25 用户"标签/原问题/回答间距各 +2px,但词条整体高度不要变化;
+ *    词条的默认高度减小一点;同内容移动至标签的右侧"):两处行内间距按 rect 量到 4px、
+ *    行内竖向总留白(a_pad + 两处间距 + b_pad)= **14px**(上版 16px,净减 2px)、
+ *    「同内容×n」在徽标右侧同一行且常驻(position static / opacity 1)、折叠不再撑高词条
  * 用法:node scripts/verify-ai-popup.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
@@ -141,7 +147,11 @@ const rows = () =>
   page.evaluate(() =>
     [...document.querySelectorAll('.pddcs-cand')].map((r) => ({
       badge: r.querySelector('.pddcs-badge')?.textContent ?? '',
-      actions: [...r.querySelectorAll('.pddcs-mini')].map((b) => b.textContent ?? ''),
+      actions: [...r.querySelectorAll('.pddcs-icon-btn')].map(
+        (b) => b.getAttribute('aria-label') ?? '',
+      ),
+      goldenFill:
+        r.querySelector('.pddcs-icon-btn[data-action="golden"] svg')?.getAttribute('fill') ?? '',
       text: r.querySelector('.pddcs-cand-text')?.textContent ?? '',
     })),
   )
@@ -154,23 +164,43 @@ await sleep(600)
 const first = await rows()
 console.log('候选行 =', JSON.stringify(first, null, 1))
 check('候选弹窗渲染 3 行', first.length === 3, `rows=${first.length}`)
-check('标准回答候选的操作钮是「取消标准回答」', first[0]?.actions.includes('取消标准回答'), JSON.stringify(first[0]?.actions))
-check('历史候选的操作钮是「设置标准回答」', first[1]?.actions.includes('设置标准回答'), JSON.stringify(first[1]?.actions))
+// 第三十七轮(v2.6.24):操作钮由文字改图标 —— 语义落在 aria-label,已设态 = 实心金星
+check(
+  '标准回答候选:星标钮为实心(fill=currentColor)且语义为「取消标准回答」',
+  first[0]?.goldenFill === 'currentColor' &&
+    first[0]?.actions.some((a) => a.startsWith('取消标准回答')),
+  JSON.stringify({ fill: first[0]?.goldenFill, actions: first[0]?.actions }),
+)
+check(
+  '历史候选:星标钮为描边(none)且语义为「设为标准回答」',
+  first[1]?.goldenFill === 'none' && first[1]?.actions.some((a) => a.startsWith('设为标准回答')),
+  JSON.stringify({ fill: first[1]?.goldenFill, actions: first[1]?.actions }),
+)
+check(
+  '复制钮为图标钮(aria-label = 复制该条答复文本)',
+  first[0]?.actions.some((a) => a === '复制该条答复文本'),
+  JSON.stringify(first[0]?.actions),
+)
 
 // ── ① 取消标准回答 ──
 // v2.6.18 起操作钮悬浮/选中才显(pointer-events none → auto):先 hover 行再点钮,
 // 与真实用户路径一致(鼠标必然先划过行),Playwright 的 hit-target 预检也才可通过
 await page.locator('.pddcs-cand').nth(0).hover()
-await page.locator('.pddcs-cand').nth(0).locator('.pddcs-mini', { hasText: '取消标准回答' }).click()
+await page.locator('.pddcs-cand').nth(0).locator('.pddcs-icon-btn[data-action="golden"]').click()
 await sleep(500)
 const del = await sentOf('DELETE_GOLDEN')
 check('点取消 → 发出 DELETE_GOLDEN 且 id 为该候选的标准回答 id', del.length === 1 && del[0].payload?.id === 'gd-1', JSON.stringify(del))
 const afterCancel = await rows()
-check('取消成功 → 原位翻回「设置标准回答」', afterCancel[0]?.actions.includes('设置标准回答'), JSON.stringify(afterCancel[0]?.actions))
+check(
+  '取消成功 → 原位翻回描边星(未设态)',
+  afterCancel[0]?.goldenFill === 'none' &&
+    afterCancel[0]?.actions.some((a) => a.startsWith('设为标准回答')),
+  JSON.stringify({ fill: afterCancel[0]?.goldenFill, actions: afterCancel[0]?.actions }),
+)
 
 // ── ② 把历史候选设为标准回答 ──
 await page.locator('.pddcs-cand').nth(1).hover()
-await page.locator('.pddcs-cand').nth(1).locator('.pddcs-mini', { hasText: '设置标准回答' }).click()
+await page.locator('.pddcs-cand').nth(1).locator('.pddcs-icon-btn[data-action="golden"]').click()
 await sleep(500)
 const add = await sentOf('ADD_GOLDEN')
 check(
@@ -181,20 +211,38 @@ check(
   JSON.stringify(add[0]?.payload),
 )
 const afterAdd = await rows()
-check('设置成功 → 原位翻为「取消标准回答」(无需重开面板)', afterAdd[1]?.actions.includes('取消标准回答'), JSON.stringify(afterAdd[1]?.actions))
+check(
+  '设置成功 → 原位翻为实心金星(无需重开面板)',
+  afterAdd[1]?.goldenFill === 'currentColor' &&
+    afterAdd[1]?.actions.some((a) => a.startsWith('取消标准回答')),
+  JSON.stringify({ fill: afterAdd[1]?.goldenFill, actions: afterAdd[1]?.actions }),
+)
 
 // ── ③ 触及每问上限(桩切到 limitReached)──
 await page.evaluate(() => {
   window.__forceLimit = true
 })
 await page.locator('.pddcs-cand').nth(2).hover()
-await page.locator('.pddcs-cand').nth(2).locator('.pddcs-mini', { hasText: '设置标准回答' }).click()
+await page.locator('.pddcs-cand').nth(2).locator('.pddcs-icon-btn[data-action="golden"]').click()
 await sleep(500)
 const toast = await page.evaluate(() => document.querySelector('.pddcs-toast')?.textContent ?? '')
 console.log('toast =', JSON.stringify(toast))
 check('达上限时提示「该问题已有 3 条标准回答…」且不误报成功', toast.includes('已有 3 条标准回答'), toast)
 const afterLimit = await rows()
-check('达上限时按钮不翻转为已设置态', afterLimit[2]?.actions.includes('设置标准回答'), JSON.stringify(afterLimit[2]?.actions))
+check('达上限时星标不翻转为已设态', afterLimit[2]?.goldenFill === 'none', JSON.stringify(afterLimit[2]))
+
+// ── ③b 复制图标钮:点击只给提示、不填充输入框(stopPropagation 生效)──
+const beforeCopy = await page.evaluate(() => document.querySelector('#replyTextarea')?.value ?? '')
+await page.locator('.pddcs-cand').nth(0).hover()
+await page.locator('.pddcs-cand').nth(0).locator('.pddcs-icon-btn[data-action="copy"]').click()
+await sleep(400)
+const copyToast = await page.evaluate(() => document.querySelector('.pddcs-toast')?.textContent ?? '')
+const afterCopy = await page.evaluate(() => document.querySelector('#replyTextarea')?.value ?? '')
+check(
+  '点复制图标 → 只提示复制结果,不填充输入框',
+  copyToast.includes('复制') && afterCopy === beforeCopy,
+  `toast=${copyToast} textarea=${afterCopy.slice(0, 12)}`,
+)
 
 // ── ④ 快捷键:Ctrl+Enter 唤起面板 → ↑↓ 选择 → Enter 填充选中项(2026-09-16 第二十一轮)──
 await page.evaluate(() => {
@@ -336,6 +384,81 @@ check(
   `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop}`,
 )
 
+// ── ⑥b 图标钮 / 对齐 / 间距几何(第三十七轮 v2.6.24,用户"标签比例增大,下方内容和标签左侧对齐,
+//      按钮向右移动一点,词条间的间距近一些"):全部按真实 rect 量,不靠肉眼 ──
+await page.mouse.move(5, 5) // 移出面板,量静止态几何
+const geo = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('.pddcs-cand')]
+  const row = rows[0]
+  const badge = row.querySelector('.pddcs-badge')
+  const q = row.querySelector('.pddcs-cand-q')
+  const text = row.querySelector('.pddcs-cand-text')
+  const top = row.querySelector('.pddcs-cand-top')
+  const btns = [...row.querySelectorAll('.pddcs-icon-btn')]
+  const actions = row.querySelector('.pddcs-cand-actions')
+  const bRect = badge.getBoundingClientRect()
+  const bs = getComputedStyle(badge)
+  const rowRect = row.getBoundingClientRect()
+  const rs = getComputedStyle(row)
+  const tRect = top.getBoundingClientRect()
+  const qRect = q.getBoundingClientRect()
+  const actRect = actions.getBoundingClientRect()
+  const r0 = rows[0].getBoundingClientRect()
+  const r1 = rows[1].getBoundingClientRect()
+  const iconRect = btns[0]?.getBoundingClientRect()
+  return {
+    badgeFont: bs.fontSize,
+    badgePadX: bs.paddingLeft,
+    badgeRadius: bs.borderRadius,
+    badgeLeft: +bRect.left.toFixed(2),
+    qLeft: +q.getBoundingClientRect().left.toFixed(2),
+    textLeft: +text.getBoundingClientRect().left.toFixed(2),
+    btnCount: btns.length,
+    btnSize: iconRect ? `${iconRect.width}x${iconRect.height}` : '',
+    rowRight: +rowRect.right.toFixed(2),
+    actionsRight: +actRect.right.toFixed(2),
+    rowGap: +(r1.top - r0.bottom).toFixed(2),
+    // 第三十八轮 v2.6.25:标签→原问题、原问题→回答两处行内间距(按相邻块 rect 差量,含外边距塌缩后的实际值)
+    gapBadgeQ: +(qRect.top - tRect.bottom).toFixed(2),
+    gapQText: +(text.getBoundingClientRect().top - qRect.bottom).toFixed(2),
+    rowPadTop: rs.paddingTop,
+    rowPadBottom: rs.paddingBottom,
+    rowH: +rowRect.height.toFixed(2),
+  }
+})
+check(
+  '类别徽标比例增大(11.5px / 内边距 9px / 圆角 6px)',
+  geo.badgeFont === '11.5px' && geo.badgePadX === '9px' && geo.badgeRadius === '6px',
+  JSON.stringify({ font: geo.badgeFont, padX: geo.badgePadX, radius: geo.badgeRadius }),
+)
+check(
+  '下方内容与标签左缘对齐(徽标 / 原问题 / 正文同一条左基线)',
+  Math.abs(geo.badgeLeft - geo.qLeft) <= 0.5 && Math.abs(geo.badgeLeft - geo.textLeft) <= 0.5,
+  `badge=${geo.badgeLeft} q=${geo.qLeft} text=${geo.textLeft}`,
+)
+check(
+  '操作钮图标化:两枚 24×24 图标钮(星标 + 复制)',
+  geo.btnCount === 2 && geo.btnSize === '24x24',
+  `count=${geo.btnCount} size=${geo.btnSize}`,
+)
+check(
+  '操作钮向右移动:组右缘距行右缘 6px(行内边距 12px − 右移 6px)',
+  Math.abs(geo.rowRight - geo.actionsRight - 6) <= 1,
+  `rowRight=${geo.rowRight} actionsRight=${geo.actionsRight}`,
+)
+check('词条间距收紧:相邻候选行外边距合计 ≤2px', geo.rowGap <= 2, `rowGap=${geo.rowGap}`)
+// 第三十八轮 v2.6.25:内部更松、整体更矮 —— 数值口径写在断言里(上版 = 6+2+2+6 = 16px)
+check(
+  '标签/原问题/回答两处间距各增大到 4px(上版 2px,按 rect 量实得)',
+  Math.abs(geo.gapBadgeQ - 4) <= 0.5 && Math.abs(geo.gapQText - 4) <= 0.5,
+  `标签→原问题=${geo.gapBadgeQ} 原问题→回答=${geo.gapQText}`,
+)
+check(
+  '词条默认高度净减 2px:行内竖向总留白 = 3+4+4+3 = 14px(上版 6+2+2+6 = 16px)',
+  geo.rowPadTop === '3px' && geo.rowPadBottom === '3px' && geo.gapBadgeQ + geo.gapQText === 8,
+  `pad=${geo.rowPadTop}/${geo.rowPadBottom} 间距合计=${geo.gapBadgeQ + geo.gapQText} 行高=${geo.rowH}`,
+)
+
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
 })
@@ -391,7 +514,7 @@ await page.evaluate(() => {
     score: 0.7,
     sourceId: `x-${i}`,
     replyId: `rp-x-${i}`,
-    ...(i === 0 ? { foldCount: 3 } : {}), // 首条带折叠数,验「同内容×n 右下角悬浮才显」
+    ...(i === 0 ? { foldCount: 3 } : {}), // 首条带折叠数,验「同内容×n 在徽标右侧常驻」
   }))
 })
 await page.evaluate(() => {
@@ -419,14 +542,40 @@ const scrolled = await page.evaluate(() => {
 check('9 条候选面板:连按 Tab 到末条(滚动跟随)', scrolled.count === 9 && scrolled.selected === 8 && scrolled.scrollTop > 0, JSON.stringify(scrolled))
 const foldVis = await page.evaluate(() => {
   const f = document.querySelector('.pddcs-fold')
-  return f
-    ? { text: f.textContent, pos: getComputedStyle(f).position, opacity: getComputedStyle(f).opacity }
-    : null
+  if (!f) return null
+  const row = f.closest('.pddcs-cand')
+  const top = row.querySelector('.pddcs-cand-top')
+  const b = row.querySelector('.pddcs-badge')
+  const fr = f.getBoundingClientRect()
+  const br = b.getBoundingClientRect()
+  const cs = getComputedStyle(f)
+  return {
+    text: f.textContent,
+    pos: cs.position,
+    opacity: cs.opacity,
+    inTopRow: f.parentElement === top,
+    rightOfBadge: fr.left >= br.right - 0.5,
+    centerDelta: +Math.abs(fr.top + fr.height / 2 - (br.top + br.height / 2)).toFixed(2),
+    foldedCls: row.classList.contains('pddcs-cand-folded'),
+    rowPadBottom: getComputedStyle(row).paddingBottom,
+    rowH: +row.getBoundingClientRect().height.toFixed(2),
+  }
 })
 check(
-  '同内容×n 右下角 absolute 定位,静止隐藏悬浮才显',
-  !!foldVis && foldVis.text === '同内容×3' && foldVis.pos === 'absolute' && foldVis.opacity === '0',
+  '同内容×n 移在徽标右侧同一行(第三十八轮:position static / opacity 1 常驻,与徽标同中线)',
+  !!foldVis &&
+    foldVis.text === '同内容×3' &&
+    foldVis.pos === 'static' &&
+    foldVis.opacity === '1' &&
+    foldVis.inTopRow &&
+    foldVis.rightOfBadge &&
+    foldVis.centerDelta <= 1,
   JSON.stringify(foldVis),
+)
+check(
+  '折叠不再撑高词条:带折叠数的行无 folded 类、底边距与常规行同为 3px',
+  !!foldVis && !foldVis.foldedCls && foldVis.rowPadBottom === '3px',
+  JSON.stringify(foldVis ? { cls: foldVis.foldedCls, padB: foldVis.rowPadBottom, rowH: foldVis.rowH } : null),
 )
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
@@ -450,6 +599,8 @@ check(
 )
 
 await page.screenshot({ path: path.join(ROOT, 'logs', 'ui-0915-ai-popup.png') })
+await page.screenshot({ path: path.join(ROOT, 'logs', 'ui-0916-ai-popup-v2624.png') })
+await page.screenshot({ path: path.join(ROOT, 'logs', 'ui-0916-ai-popup-v2625.png') })
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)
 await browser.close()
 process.exit(results.every((r) => r.ok) ? 0 : 1)

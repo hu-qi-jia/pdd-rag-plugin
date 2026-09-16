@@ -91,13 +91,10 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).toContain('border-radius')
     expect(candRule).toContain('margin: 2px 8px')
-    expect(candRule).toContain('padding: 8px 28px 8px 12px') // 右侧预留填入箭头位(v2.6.21)
+    expect(candRule).toContain('padding: 8px 12px')
     const fillRule = css.match(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
     expect(fillRule).toContain(lightTheme.selectedBg)
     expect(fillRule).not.toContain('inset 3px') // 左描边属旧表格语言,移除
-    // 分组标题与填入箭头(v2.6.21 设计优化)
-    expect(css).toContain('.pddcs-cand-group')
-    expect(css).toContain('.pddcs-cand-arrow')
   })
   it('操作钮悬浮/选中才显:静止 opacity 0 + pointer-events none,悬浮或选中显现', () => {
     const css = buildOverlayCss(lightTheme)

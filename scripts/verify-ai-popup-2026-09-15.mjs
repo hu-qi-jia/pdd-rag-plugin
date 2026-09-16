@@ -8,6 +8,8 @@
  *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回「设置标准回答」
  *  ③ 历史候选 → 点「设置标准回答」发 ADD_GOLDEN,成功后原位翻为「取消标准回答」
  *  ④ 达到每问上限时 → 提示且不误报成功
+ *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮):初始选中第一条,↑↓ 夹取移动,
+ *    Enter 填充**选中项**(非固定第一条)
  * 用法:node scripts/verify-ai-popup-2026-09-15.mjs
  */
 import { chromium } from '@playwright/test'
@@ -185,7 +187,7 @@ check('达上限时提示「该问题已有 3 条标准回答…」且不误报�
 const afterLimit = await rows()
 check('达上限时按钮不翻转为已设置态', afterLimit[2]?.actions.includes('设置标准回答'), JSON.stringify(afterLimit[2]?.actions))
 
-// ── ④ 快捷键:Ctrl+Enter 唤起面板 → Enter 填充第一条 ──
+// ── ④ 快捷键:Ctrl+Enter 唤起面板 → ↑↓ 选择 → Enter 填充选中项(2026-09-16 第二十一轮)──
 await page.evaluate(() => {
   document.querySelector('.pddcs-popup-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 })
@@ -197,7 +199,31 @@ await sleep(900)
 const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
 const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
 check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
-check('面板脚注提示 Enter 填充第一条', hkFoot.includes('按 Enter 填充第一条'), hkFoot)
+check('面板脚注提示 ↑↓ 选择 + Enter 填充', hkFoot.includes('↑↓ 选择') && hkFoot.includes('Enter 填充'), hkFoot)
+
+const selIdx = () =>
+  page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.pddcs-cand')]
+    return rows.findIndex((r) => r.classList.contains('pddcs-cand-selected'))
+  })
+check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
+
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+})
+await sleep(200)
+check('↓ → 选中第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+})
+await sleep(200)
+check('连按 ↓ 到末尾夹取(3 条面板停在第 3 条)', (await selIdx()) === 2, `selected=${await selIdx()}`)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+})
+await sleep(200)
+check('↑ → 回到第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
 
 // 面板不溢出视口:顶部 ≥ 8 且底部 ≤ 视口高 - 8
 const fit = await page.evaluate(() => {
@@ -217,8 +243,8 @@ await sleep(500)
 const filled = await page.evaluate(() => document.querySelector('#replyTextarea')?.value ?? '')
 const popupGone = await page.evaluate(() => !document.querySelector('.pddcs-popup'))
 check(
-  '再按 Enter → 第一条推荐回复填入输入框,面板关闭',
-  filled.length > 0 && popupGone,
+  'Enter → 填充的是**选中项**(第二条历史),面板关闭',
+  filled === '历史答复甲:支持7天无理由,请放心下单。' && popupGone,
   `value=${filled.slice(0, 24)}… popupGone=${popupGone}`,
 )
 

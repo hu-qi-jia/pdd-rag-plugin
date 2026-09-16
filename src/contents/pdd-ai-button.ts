@@ -5,8 +5,10 @@
  *  - 每条可见买家文本气泡右侧紧跟「AI回复」胶囊按钮(Figma 官网控件风格)
  *  - 点击 → 合并该行向上连续买家文本为 query → SW GET_SUGGESTIONS
  *  - 状态机:无候选提示 / 单候选或直填开关开 → 直填 / 多候选弹推荐回复面板
- *    (条数 = 检索侧类别配额:标准回答全部 + 历史最近 2 + 知识库 1;
+ *    (条数 = 检索侧类别配额:标准回答/历史/知识库各至多 3;
  *     快捷键唤起的面板与此完全同构,共用 openPopup)
+ *  - 快捷键面板(自动回复关):↑↓ 移动选中项(夹取不回绕),Enter 填充**选中项**
+ *    (第二十一轮;鼠标悬浮同步选中,两套高亮共用一态)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
  *  - 主题:覆盖层跟随 popup 的主题设置(storage pddcs:theme + onChanged 实时切换,
  *    2026-09-15 设计1;样式生成纯逻辑见 utils/overlayTheme.ts)
@@ -22,6 +24,7 @@ import type { Suggestion, UiSettings } from '../types/messages'
 import {
   decideUiAction,
   mergeBuyerQuery,
+  moveSelection,
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
@@ -321,13 +324,34 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
 // ─── 候选弹窗 ─────────────────────────────────────────────────────────────────
 
 let popupEl: HTMLDivElement | null = null
-/** 由快捷键唤起的推荐回复面板:再按 Enter 填充第一条(点外部/Esc 关闭即解除) */
-let armedPanel: { items: Suggestion[] } | null = null
+/**
+ * 由快捷键唤起的推荐回复面板:↑↓ 移动选中项,Enter 填充**选中项**
+ * (2026-09-16 第二十一轮,原为固定填第一条;点外部/Esc 关闭即解除)。
+ * 仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
+ */
+let armedPanel: { items: Suggestion[]; selected: number } | null = null
 
 function closePopup(): void {
   popupEl?.remove()
   popupEl = null
   armedPanel = null
+}
+
+/** 把选中态渲染到行上:唯一高亮源,↑↓ 与鼠标悬浮都写这里 */
+function applySelection(): void {
+  if (!popupEl || !armedPanel) return
+  const rows = popupEl.querySelectorAll('.pddcs-cand')
+  rows.forEach((r, i) => r.classList.toggle('pddcs-cand-selected', i === armedPanel!.selected))
+  // 长面板(候选至多 9 条)可能出滚动条:选中项始终滚进可视区
+  rows[armedPanel.selected]?.scrollIntoView({ block: 'nearest' })
+}
+
+/** ↑↓ 移动选中项;无快捷键面板时返回 false(按键放行) */
+function movePanelSelection(delta: number): boolean {
+  if (!popupEl || !armedPanel) return false
+  armedPanel.selected = moveSelection(armedPanel.selected, delta, armedPanel.items.length)
+  applySelection()
+  return true
 }
 
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
@@ -473,7 +497,12 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   return row
 }
 
-function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): void {
+function openPopup(
+  anchor: HTMLElement,
+  items: Suggestion[],
+  query: string,
+  opts: { keyboard?: boolean } = {},
+): void {
   closePopup()
   const overlay = ensureOverlay()
   const el = document.createElement('div')
@@ -490,11 +519,25 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): voi
   head.appendChild(close)
   el.appendChild(head)
 
-  for (const s of items) el.appendChild(candidateRow(s, query))
+  for (const [i, s] of items.entries()) {
+    const row = candidateRow(s, query)
+    row.dataset.idx = String(i)
+    if (opts.keyboard) {
+      // 键盘模式:悬浮即选中(两套高亮共用一态,避免 hover 底色与选中描边打架)
+      row.addEventListener('mouseenter', () => {
+        if (!armedPanel || armedPanel.selected === i) return
+        armedPanel.selected = i
+        applySelection()
+      })
+    }
+    el.appendChild(row)
+  }
 
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
-  foot.textContent = '点击候选填入输入框;发送请手动点击'
+  foot.textContent = opts.keyboard
+    ? '↑↓ 选择,Enter 填充;发送请手动点击'
+    : '点击候选填入输入框;发送请手动点击'
   el.appendChild(foot)
 
   overlay.appendChild(el)
@@ -517,6 +560,11 @@ function openPopup(anchor: HTMLElement, items: Suggestion[], query: string): voi
   el.style.top = `${Math.round(y)}px`
   el.style.visibility = ''
   popupEl = el
+  // 键盘模式:挂载完成后初始化选中态(popupEl 就位前 applySelection 是空操作)
+  if (opts.keyboard) {
+    armedPanel = { items, selected: 0 }
+    applySelection()
+  }
 }
 
 // ─── 启动 ─────────────────────────────────────────────────────────────────────
@@ -544,7 +592,7 @@ document.addEventListener('keydown', (ev) => {
 })
 
 // ─── 快捷键(默认 Ctrl+Enter,可在设置中自定义)─────────────────────────────────
-// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → 再按 Enter 填充第一条;
+// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → ↑↓ 选选项,Enter 填充选中项;
 // 「自动回复」开:检索 → 直接把第一条填入输入框。全程不自动发送。
 
 let hotkeySettings: PddSettings = { ...DEFAULT_SETTINGS }
@@ -634,15 +682,12 @@ async function onHotkey(): Promise<void> {
     return
   }
 
-  // 关 → 弹推荐回复面板,再按 Enter 填充第一条
+  // 关 → 弹推荐回复面板(键盘模式:↑↓ 选择,Enter 填充选中项)
   const anchor =
     (rowBtns.get(latest) as HTMLElement | undefined) ??
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
     (latest as HTMLElement)
-  openPopup(anchor, suggestions, query)
-  armedPanel = { items: suggestions }
-  const foot = popupEl?.querySelector('.pddcs-popup-foot')
-  if (foot) foot.textContent = '点击候选填入输入框;发送请手动点击 · 按 Enter 填充第一条'
+  openPopup(anchor, suggestions, query, { keyboard: true })
 }
 
 document.addEventListener(
@@ -652,16 +697,23 @@ document.addEventListener(
       closePopup()
       return
     }
-    // 面板已由快捷键唤起:单独按 Enter = 填充第一条推荐回复
+    // 面板已由快捷键唤起:↑↓ 移动选中项,Enter = 填充**选中项**(第二十一轮)
+    if (armedPanel && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
+      ev.preventDefault()
+      ev.stopPropagation()
+      movePanelSelection(ev.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
     if (
       armedPanel &&
       matchesHotkey(ev, { ctrl: false, alt: false, shift: false, key: 'Enter' })
     ) {
       ev.preventDefault()
       ev.stopPropagation()
-      const first = armedPanel.items[0]
-      if (fillInput(first.text)) {
-        toast('已填充:第一条推荐回复 · 请手动发送')
+      const picked = armedPanel.items[armedPanel.selected]
+      if (fillInput(picked.text)) {
+        const kindLabel = picked.kind === 'golden' ? '标准回答' : picked.kind === 'knowledge' ? '知识库' : '历史回忆'
+        toast(`已填充:${kindLabel} · 请手动发送`)
         closePopup()
       } else {
         toast('未找到输入框,请手动粘贴')

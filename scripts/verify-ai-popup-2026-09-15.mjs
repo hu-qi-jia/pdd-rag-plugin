@@ -8,8 +8,8 @@
  *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回「设置标准回答」
  *  ③ 历史候选 → 点「设置标准回答」发 ADD_GOLDEN,成功后原位翻为「取消标准回答」
  *  ④ 达到每问上限时 → 提示且不误报成功
- *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十二轮改键):初始选中第一条,
- *    Tab/Shift+Tab 夹取移动(↑↓ 已让位平台切换会话,不再拦截),
+ *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十四轮改循环):初始选中第一条,
+ *    Tab 单键循环切换 —— 末条再按回绕到首条(Shift+Tab 反向已删,不再拦截;↑↓ 亦让位平台切换会话),
  *    Enter 填充**选中项**(非固定第一条)
  * 用法:node scripts/verify-ai-popup-2026-09-15.mjs
  */
@@ -200,7 +200,7 @@ await sleep(900)
 const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
 const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
 check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
-check('面板脚注提示 Tab 切换候选 + Enter 填充', hkFoot.includes('Tab 切换候选') && hkFoot.includes('Enter 填充'), hkFoot)
+check('面板脚注提示 Tab 切换候选(循环) + Enter 填充', hkFoot.includes('Tab 切换候选') && hkFoot.includes('Enter 填充'), hkFoot)
 
 const selIdx = () =>
   page.evaluate(() => {
@@ -253,17 +253,17 @@ await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
 })
 await sleep(200)
-check('连按 Tab 到末尾夹取(3 条面板停在第 3 条)', (await selIdx()) === 2, `selected=${await selIdx()}`)
+check('连按 Tab 到末条后回绕到首条(循环切换)', (await selIdx()) === 0, `selected=${await selIdx()}`)
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
 })
 await sleep(200)
-check('Shift+Tab → 回到第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
+check('Shift+Tab 不再拦截(反向已删,选中不动)', (await selIdx()) === 0, `selected=${await selIdx()}`)
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
 })
 await sleep(200)
-check('↑↓ 不再拦截(让位平台切换会话,选中不动)', (await selIdx()) === 1, `selected=${await selIdx()}`)
+check('↑↓ 不再拦截(让位平台切换会话,选中不动)', (await selIdx()) === 0, `selected=${await selIdx()}`)
 
 // 面板不溢出视口:顶部 ≥ 8 且底部 ≤ 视口高 - 8
 const fit = await page.evaluate(() => {
@@ -283,8 +283,8 @@ await sleep(500)
 const filled = await page.evaluate(() => document.querySelector('#replyTextarea')?.value ?? '')
 const popupGone = await page.evaluate(() => !document.querySelector('.pddcs-popup'))
 check(
-  'Enter → 填充的是**选中项**(第二条历史),面板关闭',
-  filled === '历史答复甲:支持7天无理由,请放心下单。' && popupGone,
+  'Enter → 填充的是**选中项**(回绕后的首条标准回答),面板关闭',
+  filled === '标准回答:支持7天无理由退换,运费我们承担。' && popupGone,
   `value=${filled.slice(0, 24)}… popupGone=${popupGone}`,
 )
 

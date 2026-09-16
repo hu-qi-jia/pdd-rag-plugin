@@ -54,15 +54,16 @@ async function fetchOne(file) {
 
 function copyTo(dist) {
   const from = localModelDir()
+  const to = distModelDir(dist)
   rmSync(path.join(dist, 'model'), { recursive: true, force: true })
   for (const f of MODEL_FILES) {
     const src = path.join(from, f)
     if (!existsSync(src)) throw new Error(`模型文件缺失:${src}(先跑 pnpm fetch-model)`)
-    const dst = path.join(dist, 'model', f)
+    const dst = path.join(to, f)
     mkdirSync(path.dirname(dst), { recursive: true })
     createReadStream(src).pipe(createWriteStream(dst))
   }
-  console.log(`copy  model/ → ${path.join(dist, 'model')}`)
+  console.log(`copy  model/ → ${to}`)
 }
 
 const cmd = process.argv[2]

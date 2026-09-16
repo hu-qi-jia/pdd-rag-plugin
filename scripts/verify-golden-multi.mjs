@@ -9,9 +9,8 @@
  * 用法:node scripts/verify-golden-multi.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { launchExtContext, findExtensionId, openPopup, freshProfile, ROOT, sleep } from './lib.mjs'
+import { launchExtContext, findExtensionId, openPopup, freshProfile, sleep } from './lib.mjs'
 import { rmSync } from 'node:fs'
-import path from 'node:path'
 
 // 每次运行独立 profile:避免陈旧 SW 脚本缓存与 profile 锁(跑完即删)
 const PROFILE = freshProfile()
@@ -71,7 +70,9 @@ const panelOrder = async () => {
 
 // ── ①②③ 连续设置 3 条 + 第 4 条超限 + 重复幂等 ──
 const r1 = await add(A(1))
+await sleep(25) // 隔开写入:慢机器上同毫秒写库会打平 updatedAt,④ 的"最近设置靠前"排序即不稳定
 const r2 = await add(A(2))
+await sleep(25)
 const r3 = await add(A(3))
 check('第 1 条成功且 count=1', !!r1.id && r1.count === 1, JSON.stringify(r1))
 check('第 2 条成功且 count=2', !!r2.id && r2.count === 2, JSON.stringify(r2))
@@ -92,7 +93,6 @@ check(
 const order1 = await panelOrder()
 check('文件夹页按最近设置靠前展示(3 → 2 → 1)', order1.join(',') === '3,2,1', `order=${order1.join(',')}`)
 check('同问题多条在面板上标注「同问题 3 条 · 已满」', await pop.locator('text=同问题 3 条 · 已满').count() > 0)
-await pop.screenshot({ path: path.join(ROOT, 'logs', 'ui-0915-golden-multi.png') })
 
 // ── ⑤ 取消一条后额度释放 ──
 const del = await send('DELETE_GOLDEN', { id: r2.id })

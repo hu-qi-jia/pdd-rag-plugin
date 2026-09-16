@@ -55,9 +55,11 @@ export function buildOverlayCss(tk: ThemeTokens): string {
 .pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
   transition: background-color .1s ease, box-shadow .1s ease; }
 .pddcs-cand:hover { background: ${tk.btnHoverBg}; }
-/* 键盘选中态(2026-09-16 第二十一轮):accent 左描边 + 悬浮同款底色;
-   悬浮会把选中态一并带过去(m mouseenter 写同一 state),两套高亮不打架 */
-.pddcs-cand-selected { background: ${tk.btnHoverBg}; box-shadow: inset 2px 0 0 ${tk.accent}; }
+/* 键盘选中态(v2.6.13 加强:accent 软底 + 3px 左描边,原 btnHoverBg 底太淡难辨);
+   :hover 同列避免悬浮底色盖掉选中底色(specificity 同级时后者胜);
+   悬浮会把选中态一并带过去(mouseenter 写同一 state),两套高亮不打架 */
+.pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.accentBg};
+  box-shadow: inset 3px 0 0 ${tk.accent}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .pddcs-badge { display: inline-flex; align-items: center; border-radius: ${radius.sm}px;
   font-size: 10px; font-weight: 600; padding: 2px 7px; }

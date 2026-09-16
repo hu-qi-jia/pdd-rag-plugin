@@ -7,8 +7,9 @@
  *  - 状态机:无候选提示 / 单候选或直填开关开 → 直填 / 多候选弹推荐回复面板
  *    (条数 = 检索侧类别配额:标准回答/历史/知识库各至多 3;
  *     快捷键唤起的面板与此完全同构,共用 openPopup)
- *  - 快捷键面板(自动回复关):↑↓ 移动选中项(夹取不回绕),Enter 填充**选中项**
- *    (第二十一轮;鼠标悬浮同步选中,两套高亮共用一态)
+ *  - 快捷键面板(自动回复关):Tab/Shift+Tab 移动选中项(键可在设置自定义,
+ *    第二十二轮;↑↓ 与平台切换会话冲突已让位),Enter 填充**选中项**
+ *    (鼠标悬浮同步选中,两套高亮共用一态)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
  *  - 主题:覆盖层跟随 popup 的主题设置(storage pddcs:theme + onChanged 实时切换,
  *    2026-09-15 设计1;样式生成纯逻辑见 utils/overlayTheme.ts)
@@ -25,6 +26,7 @@ import {
   decideUiAction,
   mergeBuyerQuery,
   moveSelection,
+  panelNavKeys,
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
@@ -36,6 +38,7 @@ import {
   type PddSettings,
 } from '../types/memory'
 import { formatHotkey, isModifierOnly, matchesHotkey } from '../utils/hotkey'
+
 import {
   THEME_STORAGE_KEY,
   POPUP_W,
@@ -325,7 +328,7 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
 
 let popupEl: HTMLDivElement | null = null
 /**
- * 由快捷键唤起的推荐回复面板:↑↓ 移动选中项,Enter 填充**选中项**
+ * 由快捷键唤起的推荐回复面板:Tab/Shift+Tab 移动选中项,Enter 填充**选中项**
  * (2026-09-16 第二十一轮,原为固定填第一条;点外部/Esc 关闭即解除)。
  * 仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
  */
@@ -337,7 +340,7 @@ function closePopup(): void {
   armedPanel = null
 }
 
-/** 把选中态渲染到行上:唯一高亮源,↑↓ 与鼠标悬浮都写这里 */
+/** 把选中态渲染到行上:唯一高亮源,导航键与鼠标悬浮都写这里 */
 function applySelection(): void {
   if (!popupEl || !armedPanel) return
   const rows = popupEl.querySelectorAll('.pddcs-cand')
@@ -346,7 +349,7 @@ function applySelection(): void {
   rows[armedPanel.selected]?.scrollIntoView({ block: 'nearest' })
 }
 
-/** ↑↓ 移动选中项;无快捷键面板时返回 false(按键放行) */
+/** 导航键移动选中项;无快捷键面板时返回 false(按键放行) */
 function movePanelSelection(delta: number): boolean {
   if (!popupEl || !armedPanel) return false
   armedPanel.selected = moveSelection(armedPanel.selected, delta, armedPanel.items.length)
@@ -536,7 +539,7 @@ function openPopup(
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
   foot.textContent = opts.keyboard
-    ? '↑↓ 选择,Enter 填充;发送请手动点击'
+    ? `${formatHotkey(panelNavKeys(hotkeySettings.panelNavHotkey).next)} 切换候选,Enter 填充;发送请手动点击`
     : '点击候选填入输入框;发送请手动点击'
   el.appendChild(foot)
 
@@ -592,7 +595,7 @@ document.addEventListener('keydown', (ev) => {
 })
 
 // ─── 快捷键(默认 Ctrl+Enter,可在设置中自定义)─────────────────────────────────
-// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → ↑↓ 选选项,Enter 填充选中项;
+// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → Tab/Shift+Tab 选候选,Enter 填充选中项;
 // 「自动回复」开:检索 → 直接把第一条填入输入框。全程不自动发送。
 
 let hotkeySettings: PddSettings = { ...DEFAULT_SETTINGS }
@@ -682,7 +685,7 @@ async function onHotkey(): Promise<void> {
     return
   }
 
-  // 关 → 弹推荐回复面板(键盘模式:↑↓ 选择,Enter 填充选中项)
+  // 关 → 弹推荐回复面板(键盘模式:导航键选择,Enter 填充选中项)
   const anchor =
     (rowBtns.get(latest) as HTMLElement | undefined) ??
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
@@ -697,12 +700,22 @@ document.addEventListener(
       closePopup()
       return
     }
-    // 面板已由快捷键唤起:↑↓ 移动选中项,Enter = 填充**选中项**(第二十一轮)
-    if (armedPanel && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
-      ev.preventDefault()
-      ev.stopPropagation()
-      movePanelSelection(ev.key === 'ArrowDown' ? 1 : -1)
-      return
+    // 面板已由快捷键唤起:导航键(默认 Tab/Shift+Tab)移动选中项,Enter = 填充**选中项**
+    // (第二十二轮:↑↓ 让位平台"切换会话",不再拦截)
+    if (armedPanel) {
+      const nav = panelNavKeys(hotkeySettings.panelNavHotkey)
+      if (matchesHotkey(ev, nav.next)) {
+        ev.preventDefault()
+        ev.stopPropagation()
+        movePanelSelection(1)
+        return
+      }
+      if (matchesHotkey(ev, nav.prev)) {
+        ev.preventDefault()
+        ev.stopPropagation()
+        movePanelSelection(-1)
+        return
+      }
     }
     if (
       armedPanel &&

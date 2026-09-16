@@ -1,6 +1,6 @@
 /**
- * 设置页(P3,设计文档 §7/§8):直接填充开关、金标准优先、相似度/金标准/知识库阈值、
- * 保留期天数;导入/导出 v2(默认金标准+文件夹+设置,记忆可选);
+ * 设置页(P3,设计文档 §7/§8):直接填充开关、唤起/候选切换快捷键、金标准优先、
+ * 相似度/金标准/知识库阈值、保留期天数;导入/导出 v2(默认金标准+文件夹+设置,记忆可选);
  * 关于与合规说明。P0 自检卡按设计移除。
  * 复用组件:Card / Toggle / Slider / Btn / Notice(见 ui/components.tsx)。
  */
@@ -205,6 +205,14 @@ export function SettingsTab({
           hotkey={draft.autoReplyHotkey}
           onChange={(hk) => void persist({ ...draft, autoReplyHotkey: hk })}
         />
+        <HotkeyRow
+          tk={tk}
+          label="候选切换键"
+          desc="推荐面板中切至下一候选;加 Shift 反向(2026-09-16 起 ↑↓ 已让位平台切换会话)"
+          allowPlainKey
+          hotkey={draft.panelNavHotkey}
+          onChange={(hk) => void persist({ ...draft, panelNavHotkey: hk })}
+        />
         <Toggle
           tk={tk}
           label="标准回答优先"
@@ -364,10 +372,17 @@ function fmtBytes(n: number): string {
 function HotkeyRow({
   tk,
   hotkey,
+  label = '快捷键',
+  desc = '在聊天页按此键唤起推荐回复',
+  allowPlainKey = false,
   onChange,
 }: {
   tk: ThemeTokens
   hotkey: HotkeyConfig
+  label?: string
+  desc?: string
+  /** 允许纯主键(无修饰键)录入:面板导航键默认 Tab,须放开;唤起键仍要求带修饰键 */
+  allowPlainKey?: boolean
   onChange: (hk: HotkeyConfig) => void
 }) {
   const [recording, setRecording] = useState(false)
@@ -383,8 +398,8 @@ function HotkeyRow({
         return
       }
       if (isModifierOnly(e.key)) return
-      if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
-        // 纯主键(无修饰键)容易与日常输入冲突,不允许录入
+      if (!allowPlainKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        // 纯主键(无修饰键)容易与日常输入冲突:唤起键不允许,导航键(allowPlainKey)放开
         setRecording(false)
         return
       }
@@ -394,14 +409,14 @@ function HotkeyRow({
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [recording, onChange])
+  }, [recording, onChange, allowPlainKey])
 
   return (
     // 两行结构(2026-09-15 第十七轮重排):行1 = 标签 + kbd + 「修改」推至行右,
     // kbd 显式取 controlH.form 与按钮严格等高(等高铁律);行2 = 说明/录入提示。
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-        <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.semibold, flexShrink: 0 }}>快捷键</span>
+        <span style={{ fontSize: fontSize.body, fontWeight: fontWeight.semibold, flexShrink: 0 }}>{label}</span>
         <kbd
           style={{
             height: controlH.form,
@@ -432,12 +447,10 @@ function HotkeyRow({
       </div>
       {recording ? (
         <span style={{ fontSize: fontSize.caption, color: tk.accent, lineHeight: 1.5 }}>
-          请按下新的快捷键(Esc 取消;需带 Ctrl/Alt/Shift)
+          请按下新的快捷键(Esc 取消{allowPlainKey ? ';可用单键(如 Tab)' : ';需带 Ctrl/Alt/Shift'})
         </span>
       ) : (
-        <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>
-          在聊天页按此键唤起推荐回复
-        </span>
+        <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>{desc}</span>
       )}
     </div>
   )

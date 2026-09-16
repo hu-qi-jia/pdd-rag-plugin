@@ -24,6 +24,8 @@ export interface ThemeTokens {
   separator: string
   accent: string
   accentHover: string
+  /** accent 软底(同色系低透明,用于选中态等强调底色;2026-09-16 v2.6.13) */
+  accentBg: string
   btnBg: string
   btnBorder: string
   btnHoverBg: string
@@ -60,6 +62,7 @@ export const lightTheme: ThemeTokens = {
   separator: '#e5e5e5',
   accent: '#0d99ff',
   accentHover: '#0b87e0',
+  accentBg: 'rgba(13,153,255,0.10)',
   btnBg: '#ffffff',
   btnBorder: '#d4d4d4',
   btnHoverBg: '#fafafa',
@@ -92,6 +95,7 @@ export const darkTheme: ThemeTokens = {
   separator: 'rgba(255,255,255,0.10)',
   accent: '#4cb3ff',
   accentHover: '#6bc4ff',
+  accentBg: 'rgba(76,179,255,0.16)',
   btnBg: '#2c2c2c',
   btnBorder: '#3b3d40',
   btnHoverBg: '#383b3d',

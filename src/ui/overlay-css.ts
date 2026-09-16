@@ -67,12 +67,20 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    旧 3px 左描边属表格行语言,随通栏行一并移除) */
 /* 候选行(v2.6.20 收紧):行距 2px(外边距塌缩)+ 行内 padding 8px,
    条目间视觉间隙 24→18px,列表更紧凑;悬浮/选中语言不变 */
-.pddcs-cand { position: relative; margin: 2px 8px; padding: 8px 12px; border-radius: ${radius.lg}px;
+.pddcs-cand { position: relative; margin: 2px 8px; padding: 8px 28px 8px 12px; border-radius: ${radius.lg}px;
   cursor: pointer; transition: background-color .12s ease; }
 .pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
 /* 折叠候选行:底边预留条位,右下角「同内容×n」不压正文 */
 .pddcs-cand-folded { padding-bottom: 22px; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+/* 候选分组标题(标准回答/历史/知识库):帮用户把不同来源的条目扫成块 */
+.pddcs-cand-group { padding: 6px 14px; font-size: ${fontSize.caption}px; font-weight: 600;
+  color: ${tk.textMuted}; letter-spacing: -0.01em; }
+/* 填入指示箭头:行右侧中央,悬浮/键盘选中才显,提示整行可点击填入 */
+.pddcs-cand-arrow { position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  color: ${tk.textMuted}; font-size: 14px; line-height: 1; opacity: 0; pointer-events: none;
+  transition: opacity .12s ease; }
+.pddcs-cand:hover .pddcs-cand-arrow, .pddcs-cand-selected .pddcs-cand-arrow { opacity: 1; }
 /* 类别徽标(v2.6.19 重设计,用户"明显一点"):6px 圆点 → 软底色 chip ——
    标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(色相同源 semantic,两表面不割裂),
    历史 = 中性灰软底灰字;10px caption 档不抢正文 */
@@ -101,7 +109,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 回答正文 = 面板唯一主层(v2.6.17):13.5px + 1.6 行高,与其余 11.5/10.5 灰字拉开两档 */
 .pddcs-cand-text { font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
   word-break: break-word;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略 */
 .pddcs-cand-q { margin-bottom: 3px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

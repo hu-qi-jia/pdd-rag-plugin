@@ -492,6 +492,13 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   text.textContent = s.text
   row.appendChild(text)
 
+  // 填入指示箭头:悬浮/键盘选中时显形,给用户一个明确的"点这里填过去"的暗示
+  const arrow = document.createElement('span')
+  arrow.className = 'pddcs-cand-arrow'
+  arrow.textContent = '→'
+  arrow.setAttribute('aria-hidden', 'true')
+  row.appendChild(arrow)
+
   // 同内容折叠数:行右下角悬浮才显(v2.6.19 用户指定;原在徽标旁常驻)
   if (foldCount > 1) {
     const fold = document.createElement('span')
@@ -528,7 +535,7 @@ function openPopup(
 
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'
-  head.textContent = `推荐回复(${items.length})`
+  head.textContent = `推荐回复 · ${items.length}`
   const close = document.createElement('button')
   close.className = 'pddcs-popup-close'
   close.textContent = '×'
@@ -540,7 +547,18 @@ function openPopup(
   // v2.6.18 三段式:滚动只发生在 body 中段,头/脚常驻成面板外壳(页脚键位提示不再滚走)
   const body = document.createElement('div')
   body.className = 'pddcs-popup-body'
+  let lastKind = ''
+  const groupLabel = (kind: Suggestion['kind']) =>
+    kind === 'golden' ? '标准回答' : kind === 'knowledge' ? '知识库' : '历史'
   for (const [i, s] of items.entries()) {
+    // 来源切换时插入分组标题,把平铺列表切成可扫的块(v2.6.21 设计优化)
+    if (s.kind !== lastKind) {
+      const group = document.createElement('div')
+      group.className = 'pddcs-cand-group'
+      group.textContent = groupLabel(s.kind)
+      body.appendChild(group)
+      lastKind = s.kind
+    }
     const row = candidateRow(s, query)
     row.dataset.idx = String(i)
     if (opts.keyboard) {
@@ -567,12 +585,12 @@ function openPopup(
     }
     foot.append(
       kbdEl(formatHotkey(hotkeySettings.panelNavHotkey)),
-      document.createTextNode(' 切换候选(循环),'),
+      document.createTextNode(' 切换 · '),
       kbdEl('Enter'),
-      document.createTextNode(' 填充;发送请手动点击'),
+      document.createTextNode(' 填入 · 发送需手动完成'),
     )
   } else {
-    foot.textContent = '点击候选填入输入框;发送请手动点击'
+    foot.textContent = '点击候选填入 · 发送需手动完成'
   }
   el.appendChild(foot)
 

@@ -110,7 +110,7 @@ describe('rankCandidates:阈值过滤 + 双路融合', () => {
       ],
       '怎么开发票',
       qvec,
-      { golden: 0.4, history: 0.5 },
+      { golden: 0.4, history: 0.5, knowledge: 0.4 },
       now,
     )
     expect(ranked.map((r) => r.source.id)).toEqual(['g1'])
@@ -126,7 +126,7 @@ describe('rankCandidates:阈值过滤 + 双路融合', () => {
       ],
       '发票',
       qvec,
-      { golden: 0.4, history: 0.5 },
+      { golden: 0.4, history: 0.5, knowledge: 0.4 },
       now,
     )
     expect(ranked.map((r) => r.source.id).sort()).toEqual(['g2'])
@@ -138,7 +138,7 @@ describe('rankCandidates:阈值过滤 + 双路融合', () => {
       [{ source: mkSource('h-old', 'history', '发票', now - 80 * DAY), vec: v }],
       '发票',
       qvec,
-      { golden: 0.4, history: 0.5 },
+      { golden: 0.4, history: 0.5, knowledge: 0.4 },
       now,
     )
     expect(ranked).toHaveLength(1) // cosine=1 过阈值
@@ -195,15 +195,15 @@ describe('assembleSuggestions:展开回复/折叠/金标准置顶', () => {
     expect(out).toHaveLength(0)
   })
 
-  it('历史配额:多条历史只保留最近 2 条,按回复时间倒序(2026-09-15 配额口径)', () => {
+  it('历史配额:多条历史只保留最近 3 条,按回复时间倒序(2026-09-16 配额口径 top-k=3)', () => {
     const many: RetReply[] = Array.from({ length: 5 }, (_, i) => ({
       qaId: 'h1', id: `rr${i}`, text: `回复方案${i}号内容`, ts: i,
     }))
     const rep = new Map([['h1', many]])
     const ranked = [{ source: mkSource('h1', 'history', '怎么选'), cosine: 0.9, rrfScore: 0.03 }]
     const out = assembleSuggestions(ranked, { getReplies: (id) => rep.get(id)!, getGoldenAnswer: () => '', goldenPriority, now: 1000 })
-    expect(out).toHaveLength(2)
-    expect(out.map((s) => s.replyId)).toEqual(['rr4', 'rr3']) // 最近设置的靠前
+    expect(out).toHaveLength(3)
+    expect(out.map((s) => s.replyId)).toEqual(['rr4', 'rr3', 'rr2']) // 最近设置的靠前
   })
 
   // 2026-09-15:同一问题可挂多条标准回答(上限 3);展示按设置时间倒序
@@ -278,14 +278,30 @@ describe('知识库源 knowledge', () => {
   const now = 100 * DAY
   const qv = vec(1, 0, 0)
 
-  it('知识库阈值走 goldenThreshold(放宽),历史仍走 simThreshold', () => {
+  it('知识库阈值独立可调,历史仍走 simThreshold', () => {
     const entries = [
       { source: mkSource('k1', 'knowledge', '发货时间说明'), vec: vec(0.55, 0) },
       { source: mkSource('h1', 'history', '发货时间说明'), vec: vec(0.55, 0) },
     ]
-    // 0.55:金标准/知识库门槛 0.4 → 过;历史门槛 0.6 → 滤
-    const ranked = rankCandidates(entries, '发货时间', qv, { golden: 0.4, history: 0.6 }, now)
+    // 0.55:知识库门槛 0.4 → 过;历史门槛 0.6 → 滤
+    const ranked = rankCandidates(entries, '发货时间', qv, { golden: 0.4, history: 0.6, knowledge: 0.4 }, now)
     expect(ranked.map((r) => r.source.id)).toEqual(['k1'])
+  })
+
+  it('知识库源用 kbThreshold,与金标准阈值互不影响(2026-09-16 独立滑杆)', () => {
+    // cosine=0.45:过金标准 0.4,不过知识库 0.5
+    const v45 = vec(0.45, Math.sqrt(1 - 0.45 * 0.45), 0)
+    const ranked = rankCandidates(
+      [
+        { source: mkSource('g2', 'golden', '发票'), vec: v45 },
+        { source: mkSource('k2', 'knowledge', '发票'), vec: v45 },
+      ],
+      '发票',
+      qv,
+      { golden: 0.4, history: 0.5, knowledge: 0.5 },
+      now,
+    )
+    expect(ranked.map((r) => r.source.id)).toEqual(['g2'])
   })
 
   it('层级排序:金标准 > 历史 > 知识库(goldenPriority 开)', () => {
@@ -380,12 +396,12 @@ describe('知识库源 knowledge', () => {
   })
 })
 
-// ─── 类别配额(2026-09-15:标准回答全部 + 历史最近 2 + 知识库 1)────────────────
+// ─── 类别配额(2026-09-16:标准回答/历史/知识库各 top-3)────────────────────────
 
 describe('assembleSuggestions:类别配额', () => {
   const kbDay = 86_400_000
 
-  it('标准回答全部展示(不被截断),历史/知识库按配额占位,顺序保持层级', () => {
+  it('标准回答至多 3 条(2026-09-16 用户口径),历史/知识库按配额占位,顺序保持层级', () => {
     const manyGoldens = Array.from({ length: 5 }, (_, i) => ({
       source: mkSource(`g${i}`, 'golden', `金标准问题${i}`, i),
       cosine: 0.95,
@@ -406,7 +422,7 @@ describe('assembleSuggestions:类别配额', () => {
       },
     )
     const kinds = out.map((x) => x.kind)
-    expect(kinds.filter((k) => k === 'golden')).toHaveLength(5) // 全部展示
+    expect(kinds.filter((k) => k === 'golden')).toHaveLength(3) // 至多 3 条
     expect(kinds.filter((k) => k === 'history')).toHaveLength(1)
     expect(kinds.filter((k) => k === 'knowledge')).toHaveLength(1)
     // 层级次序:标准答案在前,历史次之,知识库最后
@@ -414,7 +430,7 @@ describe('assembleSuggestions:类别配额', () => {
     expect(kinds.indexOf('knowledge')).toBe(kinds.length - 1)
   })
 
-  it('历史配额:多条历史只取最近 2 条;知识库配额:多条只取相关度最高 1 条', () => {
+  it('历史配额 top-3(按回复时间倒序);知识库配额 top-3(按相关度)', () => {
     const ranked = [
       { source: mkSource('h1', 'history', '历史问题甲', 100), cosine: 0.9, rrfScore: 0.05 },
       { source: mkSource('h3', 'history', '历史问题乙', 300), cosine: 0.8, rrfScore: 0.02 },
@@ -429,8 +445,24 @@ describe('assembleSuggestions:类别配额', () => {
       goldenPriority: true,
       now: kbDay,
     })
-    // 历史 = 最近两条(h3=300、h2=200),按时间倒序;知识库 = 相关度最高的 k2
-    expect(out.map((s) => s.sourceId)).toEqual(['h3', 'h2', 'k2'])
+    // 历史 = 全部 3 条按时间倒序(h3、h2、h1);知识库 = 2 条按相关度(k2、k1)
+    expect(out.map((s) => s.sourceId)).toEqual(['h3', 'h2', 'h1', 'k2', 'k1'])
+  })
+
+  it('历史超配额:4 条历史只留最近 3 条(2026-09-16 口径,2026-09-15 为 2 条)', () => {
+    const ranked = [
+      { source: mkSource('h1', 'history', '历史问题甲', 100), cosine: 0.9, rrfScore: 0.05 },
+      { source: mkSource('h4', 'history', '历史问题丁', 400), cosine: 0.8, rrfScore: 0.04 },
+      { source: mkSource('h3', 'history', '历史问题乙', 300), cosine: 0.7, rrfScore: 0.03 },
+      { source: mkSource('h2', 'history', '历史问题丙', 200), cosine: 0.6, rrfScore: 0.02 },
+    ]
+    const out = assembleSuggestions(ranked, {
+      getReplies: (id) => [{ qaId: id, id: `r-${id}`, text: `答复-${id}`, ts: Number(id.slice(1)) }],
+      getGoldenAnswer: () => '',
+      goldenPriority: true,
+      now: kbDay,
+    })
+    expect(out.map((s) => s.sourceId)).toEqual(['h4', 'h3', 'h2']) // h1(最老)被截
   })
 
   it('知识库与标准答案同文本 → 折叠为金标准后知识库配额不产生重复占位', () => {

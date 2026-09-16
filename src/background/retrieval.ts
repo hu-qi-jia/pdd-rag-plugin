@@ -150,22 +150,28 @@ export function timeDecay(ts: number, now: number, halfLifeDays: number): number
 
 /**
  * 阈值过滤 + 双路排名 + RRF 融合。
- * 历史源阈值 simThreshold(默认 0.5);金标准/知识库同走 goldenThreshold
- * (默认 0.4,放宽)——均为人工精选源,宁多勿漏。
+ * 阈值按源独立(2026-09-16):历史 simThreshold(默认 0.5)、
+ * 金标准 goldenThreshold(默认 0.4,放宽)、知识库 kbThreshold(默认 0.4,
+ * 同档放宽但独立可调)——后两者均为人工精选源,宁多勿漏。
  * 返回按 rrfScore 降序排列。
  */
 export function rankCandidates(
   entries: Array<{ source: RetSource; vec: Float32Array }>,
   query: string,
   qvec: Float32Array,
-  thresholds: { golden: number; history: number },
+  thresholds: { golden: number; history: number; knowledge: number },
   now: number,
 ): RankedSource[] {
-  // 1. 阈值过滤(原始余弦;金标准放宽)
+  // 1. 阈值过滤(原始余弦;金标准/知识库放宽,各自独立)
   const survivors: Array<{ source: RetSource; cosine: number }> = []
   for (const { source, vec } of entries) {
     const cosine = Math.max(0, Math.min(1, cosineSim(qvec, vec)))
-    const gate = source.kind === 'history' ? thresholds.history : thresholds.golden
+    const gate =
+      source.kind === 'history'
+        ? thresholds.history
+        : source.kind === 'knowledge'
+          ? thresholds.knowledge
+          : thresholds.golden
     if (cosine >= gate) survivors.push({ source, cosine })
   }
   if (survivors.length === 0) return []
@@ -192,12 +198,12 @@ export function rankCandidates(
 }
 
 /**
- * 推荐回复面板类别配额(2026-09-15 用户指定,推荐回复与快捷键面板共用):
- *  - 标准回答:全部展示(同一问题本身有 MAX_GOLDENS_PER_QUESTION=3 上限);
- *  - 历史:取**最近** 2 条(按回复时间倒序,而非按相关度);
- *  - 知识库:取 1 条(相关度最高)。
+ * 推荐回复面板类别配额(2026-09-16 用户指定,推荐回复与快捷键面板共用):
+ *  - 标准回答:有则展示,至多 3 条(按设置时间倒序);
+ *  - 历史:top-k=3,取**最近** 3 条(按回复时间倒序,而非按相关度);
+ *  - 知识库:top-k=3,按相关度最高取 3 条。
  */
-export const PANEL_QUOTA = { history: 2, knowledge: 1 } as const
+export const PANEL_QUOTA = { golden: 3, history: 3, knowledge: 3 } as const
 
 /**
  * 候选组装:过阈源展开为回复候选 → 同内容折叠(hashText)→ 按类别配额装配。
@@ -281,7 +287,7 @@ export function assembleSuggestions(
   }
 
   // 层级:金标准(人工沉淀,最准)> 历史(真实话术,打招呼等高频场景覆盖最好)>
-  // 知识库(文档片段,预设少;阈值虽放宽到 0.4,置顶优先级最低)
+  // 知识库(文档片段,预设少;阈值独立放宽,置顶优先级最低)
   const foldWinnerRank = (k: Suggestion['kind']): number =>
     k === 'golden' ? 0 : k === 'history' ? 1 : 2
 
@@ -307,12 +313,12 @@ export function assembleSuggestions(
       b.ts - a.ts,
   )
 
-  // ── 类别配额装配(2026-09-15 用户指定,替代原"maxSuggestions 截断 + 类别保障"):
-  // 标准回答全部展示;历史取最近 2 条(回复时间倒序,与相关度无关);
-  // 知识库取 1 条(相关度最高)。配额在折叠后的胜者池上选取,
+  // ── 类别配额装配(2026-09-16 用户指定,替代 2026-09-15 的"标准全量+历史2+知识1"):
+  // 标准回答至多 3 条(设置时间倒序);历史取最近 3 条(回复时间倒序,与相关度无关);
+  // 知识库取相关度最高 3 条。配额在折叠后的胜者池上选取,
   // 某类别候选存在就必然占位,无需再做事后补位。
   const ordered = groupGoldenAnswersByRecency(basic)
-  const goldenPicked = ordered.filter((c) => c.kind === 'golden')
+  const goldenPicked = ordered.filter((c) => c.kind === 'golden').slice(0, PANEL_QUOTA.golden)
   const historyPicked = ordered
     .filter((c) => c.kind === 'history')
     .sort((a, b) => b.ts - a.ts)

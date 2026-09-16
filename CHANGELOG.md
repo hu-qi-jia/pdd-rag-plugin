@@ -5,6 +5,18 @@
 > 上游 Personal AI Memory 的历史变更见 `docs/upstream-CHANGELOG.md`(Apache 2.0);
 > 逐轮开发明细见 `docs/工作状态-2026-09-08.md` 与 git log(每轮均有 docs+test 提交)。
 
+## 0.11.0 — 2026-09-17
+
+### 新增
+- 向量模型内置:bge-small-zh-v1.5 量化 ONNX + tokenizer 随扩展包分发(ADR 0005),安装即用、离线可用,首跑不再下载 ~25MB;`pnpm fetch-model` 构建期拉取命令(锁 revision `75c43b0`,hf-mirror 仅存在于构建期)
+
+### 变更
+- offscreen 嵌入改纯本地加载(`allowRemoteModels=false` 永久),本地模型失败给出「重新安装扩展」可行动文案
+- verify-kb e2e 封锁 hf-mirror 作离线证明(19/19 照常通过);设置页合规文案同步(「模型已内置,离线可用」)
+
+### 移除
+- `host_permissions` 的 `https://hf-mirror.com/*` —— 扩展运行期零远程请求
+
 ## 0.10.0 — 2026-09-16
 
 ### 修复

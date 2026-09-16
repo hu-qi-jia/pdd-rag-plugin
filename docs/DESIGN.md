@@ -1,7 +1,15 @@
 # 设计规范(Design System)
 
-> 版本 2.6.32 · 2026-09-16 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.33 · 2026-09-17 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
 > 版本口径:本文件 v2.6.x 为**设计系统规范**版本号,与扩展本体版本(package.json,当前 0.10.0)独立计数
+> v2.6.33 增补:**审查修复轮 —— 主题变量桥统一 + 首帧前落位**(第四十六轮,2026-09-17,接 45 轮的独立审查)——
+> ①五个主题变量(`--pddcs-page-bg/scroll-thumb/accent/control-active/control-knob`)由
+> "内联桥(根 div)+ effect(page-bg)"两条路**统一为 `<html>` 上一条 layout-effect 桥**
+> (documentElement 是全文档祖先,html/body 与根 div 子孙都读得到;加规则不再挑桥);
+> ②layout effect 在**首帧之前**注入样式并落变量 —— ThemeProvider 从 localStorage 同步初始化,
+> 原先变量走 useEffect 首帧后才生效,深色主题首帧会用 fallback 白底画出四角(闪白);
+> ③`html, body` 底色去掉无对手的 `!important`(产物 popup.html 无任何样式表竞争),
+> fallback 插值 `lightTheme.bg` 保持令牌单源;④§九旧版外框条目(radius 8px/body 透明)更正为现行事实。
 > v2.6.32 增补:**去掉 popup 外框阴影 + 文档底随主题**(第四十五轮,2026-09-16 用户"主窗口圆角后方会看到
 > 半透明边框,这个边框可以去除吗,还是原生的?")—— 先用像素尺量截图**定性再动手**:窗口四边中段
 > **没有任何 1px 线**(右/上/下边全 255,左边 250 = 导航栏底色),只有四角沿对角线由外向内渐深
@@ -501,14 +509,18 @@ v2.6.6 曾移底部操作行、v2.6.9 放回行内用 primary 钮,本轮按"挤�
   聊天页推荐面板保持 `radius.xl`(12px)不变,两者互不牵连。
   **v2.6.32 起不再挂 `boxShadow`**:popup 是原生窗口,外面没有可"浮起"的背景,阴影唯一可见的部分恰好
   溢进圆角切出的四角,看起来像一圈半透明边框(用户原话);浮层阴影 `tk.shadow` 只归聊天页推荐面板。
-  圆角切出的四角显示的是**文档底**:`--pddcs-page-bg`(App 用 effect 挂到 `<html>`,值 = `tk.bg`)——
+  圆角切出的四角显示的是**文档底**:`--pddcs-page-bg`(值 = `tk.bg`)——
   因此不许把 `html, body` 写回 `background: transparent`(深色主题下会露白角)。
-- **令牌 → CSS 变量桥**:静态 CSS(RESET_CSS)读不到 React 令牌,凡随主题变化的静态规则一律走
-  CSS 变量:`--pddcs-scroll-thumb`(滚动条滑块)、`--pddcs-accent`(焦点环)、
+- **令牌 → CSS 变量桥(v2.6.33 起唯一一条)**:静态 CSS(RESET_CSS)读不到 React 令牌,
+  凡随主题变化的静态规则一律走 CSS 变量,且**五个变量统一由 App 用 layout effect 挂到 `<html>`**
+  (documentElement 是全文档祖先,html/body 与根 div 子孙都读得到;变量须在**首帧前**落位,
+  深色首帧才不闪白):`--pddcs-scroll-thumb`(滚动条滑块)、`--pddcs-accent`(焦点环)、
   `--pddcs-control-active` / `--pddcs-control-knob`(开关与滑杆的激活色/柄色,v2.6.28)、
-  `--pddcs-page-bg`(文档底;规则打在 `html, body` 上,而它们**不是**根 div 的子节点,
-  故由 App 用 effect 显式写到 `<html>`,不能走上面的内联桥,v2.6.32)。
+  `--pddcs-page-bg`(文档底,v2.6.32 引入;v2.6.33 并入同一条桥)。
+  `html, body` 底色 fallback 插值 `lightTheme.bg`(令牌单源),**不写 `!important`**
+  (产物 popup.html 无任何竞争样式表,写了只是给未来改样式上锁)。
   注意**内联样式优先级高于类选择器**:不要给依赖 `:hover` 的元素内联写死对应属性,
   否则 `:hover` 永远不生效。
-- 外框:`overflow:hidden; border-radius:8px`,body 背景透明。
+- 外框:`overflow:hidden; border-radius:radius.xxl`(24px,v2.6.29),body 背景 = `var(--pddcs-page-bg)`
+  (随主题;**不许 transparent**,v2.6.32)。
 - `* { box-sizing: border-box }`:popup 全局重置,表单控件显式高度才能生效。

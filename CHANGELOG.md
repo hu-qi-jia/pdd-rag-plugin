@@ -23,6 +23,7 @@
 - ADR 0004:检索管线不包化,目录分层即边界
 
 ### 界面(第二十五~二十六轮)
+- 审查修复轮(第四十六轮):popup 五个主题变量由"内联桥 + effect"双轨统一为 `<html>` 上一条 layout-effect 桥,变量**首帧前**落位 —— 深色主题开 popup 首帧不再闪白角;`html, body` 底色移除无竞争对象的 `!important`,fallback 插值 `lightTheme.bg` 令牌单源;DESIGN §九旧版外框条目(radius 8px/body 透明)与 `tk.shadow` 令牌注释更正为现行口径
 - 去掉 popup 外框阴影 + 文档底随主题(第四十五轮):popup 外层容器不再挂 `boxShadow`(24px 圆角放大后,阴影溢进窗口四角,视觉上像一圈半透明边框);`html, body` 底色由 `transparent !important` 改为 `var(--pddcs-page-bg)`(App 用 effect 写入 `tk.bg`,避免深色主题下四角露白);浮层阴影令牌 `tk.shadow` 保留给聊天页推荐面板
 - 操作组一律常驻 + 图标钮左缘对齐正文(第四十四轮):文件夹页(标准回答行四枚图标钮、标题栏重命名/删除)与知识库页(填充/复制/编辑/停用/删除)的操作组**默认可见**,`.pddcs-row-ops` 悬浮显隐规则与 `.pddcs-row` 钩子从 RESET_CSS 删除、三处类名摘除;`FoldersTab#opsWrap` 对齐档细分 `right`/`text`/`icon`,靠左的**图标钮组**用 `marginLeft: -(controlH.inline−ICON_SIZE)/2 = -5.5px` 抵消 24px 钮盒内的居中留白,使**图标左缘与上方正文左缘对齐**(文字钮与下拉走 `text` 档 0 偏移;图标尺寸收敛为 `FoldersTab#ICON_SIZE` 单点)
 - 知识库卡片操作组收进悬浮层(第四十三轮):原「填充」常驻主钮 + 右侧顶边的次级组(复制/编辑/停用/删除)合并为一个悬浮层组,顺序 `填充 → 复制 →(编辑)→ 停用|启用 → 删除`,靠左紧贴、与文件夹页操作组同构(删除二次确认时整组常驻);填充逻辑未动

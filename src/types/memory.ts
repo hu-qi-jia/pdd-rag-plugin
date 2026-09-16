@@ -157,6 +157,8 @@ export interface PddSettings {
   simThreshold: number
   /** 金标准命中阈值(0~1),放宽,默认 0.4 */
   goldenThreshold: number
+  /** 知识库命中阈值(0~1),放宽,默认 0.4(独立于金标准可调) */
+  kbThreshold: number
   /** 问答记录保留期天数(30~365),默认 90;金标准/文件夹豁免 */
   retentionDays: number
   /** 候选排序"金标准优先"开关,默认开 */
@@ -169,6 +171,7 @@ export const DEFAULT_SETTINGS: PddSettings = {
   directFillEnabled: false,
   simThreshold: 0.5,
   goldenThreshold: 0.4,
+  kbThreshold: 0.4,
   retentionDays: 90,
   goldenPriorityEnabled: true,
   autoReplyHotkey: DEFAULT_HOTKEY,

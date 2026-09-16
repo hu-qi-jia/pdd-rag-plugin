@@ -258,6 +258,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 directFillEnabled: false,
                 simThreshold: 0.5,
                 goldenThreshold: 0.4,
+                kbThreshold: 0.4,
                 retentionDays: 90,
                 goldenPriorityEnabled: true,
               },

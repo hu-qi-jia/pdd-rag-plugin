@@ -26,6 +26,7 @@ function clampSettings(raw: Partial<PddSettings>): PddSettings {
     directFillEnabled: !!base.directFillEnabled,
     simThreshold: Math.min(1, Math.max(0, Number(base.simThreshold) || DEFAULT_SETTINGS.simThreshold)),
     goldenThreshold: Math.min(1, Math.max(0, Number(base.goldenThreshold) || DEFAULT_SETTINGS.goldenThreshold)),
+    kbThreshold: Math.min(1, Math.max(0, Number(base.kbThreshold) || DEFAULT_SETTINGS.kbThreshold)),
     retentionDays: Math.min(365, Math.max(30, Math.round(Number(base.retentionDays) || DEFAULT_SETTINGS.retentionDays))),
     goldenPriorityEnabled: !!base.goldenPriorityEnabled,
     autoReplyHotkey: clampHotkey(base.autoReplyHotkey),

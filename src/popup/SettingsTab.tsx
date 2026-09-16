@@ -1,5 +1,5 @@
 /**
- * 设置页(P3,设计文档 §7/§8):直接填充开关、金标准优先、相似度/金标准阈值、
+ * 设置页(P3,设计文档 §7/§8):直接填充开关、金标准优先、相似度/金标准/知识库阈值、
  * 保留期天数;导入/导出 v2(默认金标准+文件夹+设置,记忆可选);
  * 关于与合规说明。P0 自检卡按设计移除。
  * 复用组件:Card / Toggle / Slider / Btn / Notice(见 ui/components.tsx)。
@@ -230,6 +230,16 @@ export function SettingsTab({
           max={0.8}
           step={0.05}
           onChange={(v) => persistSlider({ goldenThreshold: v })}
+          format={(v) => v.toFixed(2)}
+        />
+        <Slider
+          tk={tk}
+          label="知识库阈值(放宽)"
+          value={draft.kbThreshold}
+          min={0.2}
+          max={0.8}
+          step={0.05}
+          onChange={(v) => persistSlider({ kbThreshold: v })}
           format={(v) => v.toFixed(2)}
         />
         <Slider

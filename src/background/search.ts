@@ -55,7 +55,11 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     entries,
     query,
     qvec,
-    { golden: settings.goldenThreshold, history: settings.simThreshold },
+    {
+      golden: settings.goldenThreshold,
+      history: settings.simThreshold,
+      knowledge: settings.kbThreshold,
+    },
     now,
   );
 

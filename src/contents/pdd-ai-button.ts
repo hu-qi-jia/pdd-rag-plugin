@@ -542,9 +542,23 @@ function openPopup(
 
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
-  foot.textContent = opts.keyboard
-    ? `${formatHotkey(hotkeySettings.panelNavHotkey)} 切换候选(循环),Enter 填充;发送请手动点击`
-    : '点击候选填入输入框;发送请手动点击'
+  if (opts.keyboard) {
+    // 键位键帽化(v2.6.16 第二十五轮):Tab/Enter 渲染成小键帽,文本节点保底正常朗读/复制
+    const kbdEl = (text: string): HTMLElement => {
+      const k = document.createElement('kbd')
+      k.className = 'pddcs-kbd'
+      k.textContent = text
+      return k
+    }
+    foot.append(
+      kbdEl(formatHotkey(hotkeySettings.panelNavHotkey)),
+      document.createTextNode(' 切换候选(循环),'),
+      kbdEl('Enter'),
+      document.createTextNode(' 填充;发送请手动点击'),
+    )
+  } else {
+    foot.textContent = '点击候选填入输入框;发送请手动点击'
+  }
   el.appendChild(foot)
 
   overlay.appendChild(el)

@@ -209,10 +209,12 @@ const selIdx = () =>
   })
 check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
 
-// ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明 / 灰选中 / 6px 细滚动条)──
+// ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明/灰选中/细滚动条;第二十五轮:ChatGPT 化)──
 const visual = await page.evaluate(() => {
   const popup = document.querySelector('.pddcs-popup')
   const sel = document.querySelector('.pddcs-cand-selected')
+  const cand = document.querySelector('.pddcs-cand')
+  const badge = document.querySelector('.pddcs-badge')
   const cs = popup ? getComputedStyle(popup) : null
   const ss = sel ? getComputedStyle(sel) : null
   const hasRule = (needle) =>
@@ -229,6 +231,11 @@ const visual = await page.evaluate(() => {
     selBg: ss?.backgroundColor ?? '',
     selShadow: ss?.boxShadow ?? '',
     thinRule: hasRule('.pddcs-popup::-webkit-scrollbar') && hasRule('width: 6px'),
+    candBorder: cand ? getComputedStyle(cand).borderBottomWidth : '',
+    panelShadow: cs?.boxShadow ?? '',
+    badgeBg: badge ? getComputedStyle(badge).backgroundColor : '',
+    badgeDot: badge ? getComputedStyle(badge, '::before').width : '',
+    footKbd: !!document.querySelector('.pddcs-popup-foot kbd'),
   }
 })
 check(
@@ -242,6 +249,22 @@ check(
   `bg=${visual.selBg} shadow=${visual.selShadow}`,
 )
 check('面板滚动条为 6px 细轨(公共规格)', visual.thinRule, `thinRule=${visual.thinRule}`)
+check(
+  '候选行无分隔线(border-bottom-width=0,留白分组)',
+  visual.candBorder === '0px',
+  `candBorder=${visual.candBorder}`,
+)
+check(
+  '浮层阴影柔和双层(含 0 8px 24px 环境影)',
+  visual.panelShadow.includes('0px 8px 24px'),
+  `panelShadow=${visual.panelShadow}`,
+)
+check(
+  '徽标已降级小圆点(6px ::before,无色块底)',
+  visual.badgeDot === '6px' && visual.badgeBg === 'rgba(0, 0, 0, 0)',
+  `badgeDot=${visual.badgeDot} badgeBg=${visual.badgeBg}`,
+)
+check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
 
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))

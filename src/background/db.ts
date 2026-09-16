@@ -443,6 +443,8 @@ export class PddDatabase extends Dexie {
 
   async updateGolden(id: string, patch: Partial<GoldenRecord>): Promise<void> {
     await this.goldens.update(id, { ...patch, updatedAt: Date.now() });
+    // 问题实质编辑会作废旧向量待重嵌,缓存里的旧锚必须立即失效(与 updateKnowledge 同契约)
+    invalidateRetrievalCache();
   }
 
   async deleteGolden(id: string): Promise<void> {

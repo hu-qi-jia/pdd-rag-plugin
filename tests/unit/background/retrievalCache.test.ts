@@ -184,6 +184,22 @@ describe('db 写路径自动失效', () => {
     expect(await getRetrievalEntries()).toHaveLength(0)
   })
 
+  it('updateGolden:编辑问题出缓存(重嵌完成前旧锚不参与检索)', async () => {
+    const { getRetrievalEntries, db } = await freshCache()
+    await db.goldens.add(
+      makeGolden({ id: 'g-1', hasEmbedding: 1, qEmbedding: new Float32Array([1]) }),
+    )
+    expect(await getRetrievalEntries()).toHaveLength(1)
+
+    // 编辑问题实质变更:hasEmbedding 置 0 待重嵌,缓存里的旧问题锚+旧向量必须立即失效
+    await db.updateGolden('g-1', {
+      question: '退货政策是什么(修改版)?',
+      questionHash: hashText('退货政策是什么(修改版)?'),
+      hasEmbedding: 0,
+    })
+    expect(await getRetrievalEntries()).toHaveLength(0)
+  })
+
   it('deleteGolden:标准回答删除后出缓存', async () => {
     const { getRetrievalEntries, db } = await freshCache()
     await db.goldens.add(

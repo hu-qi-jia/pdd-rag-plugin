@@ -125,32 +125,43 @@ export async function importKbDocument(
   }
 
   const chunks = chunkMarkdown(content)
-  const replaced = (await db.deleteKnowledgeByDoc(docId)) > 0
 
   const now = Date.now()
   const rootId = `kbd-${now}-${Math.random().toString(36).slice(2, 8)}`
   // 同一小节被拆成多块时,第 2 块起标题加"(续n)"标识同节兄弟块
   const sectionSeq = new Map<string, number>()
-  for (let i = 0; i < chunks.length; i++) {
-    const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`
-    const base = chunks[i].title ? `${docId} · ${chunks[i].title}` : docId
-    const seq = sectionSeq.get(base) ?? 0
-    sectionSeq.set(base, seq + 1)
-    const title = seq === 0 ? base : `${base} (续${seq + 1})`
-    await db.addKnowledge({
-      id,
-      title,
-      content: chunks[i].text,
-      questionHash: hashText(`${docId}#${i}`),
-      hasEmbedding: 0,
-      enabled: 1,
-      source: 'doc',
-      docId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    // 锚 = 展示标题 + 块正文(小节标题语义强,拼进锚提升命中率;与 search.ts 同源)
-    queueEmbedding('knowledge', id, kbAnchorText({ source: 'doc', title, content: chunks[i].text }))
-  }
+  // 嵌入入队延后到事务提交后:失败回滚不得产生孤儿嵌入任务
+  const pendingEmbeds: Array<{ id: string; anchor: string }> = []
+  let replaced = false
+
+  // 整篇替换必须原子:删旧块 + 写新块同事务,中途失败整体回滚(旧文档原样保留)
+  await db.transaction('rw', db.knowledge, async () => {
+    replaced = (await db.deleteKnowledgeByDoc(docId)) > 0
+    for (let i = 0; i < chunks.length; i++) {
+      const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`
+      const base = chunks[i].title ? `${docId} · ${chunks[i].title}` : docId
+      const seq = sectionSeq.get(base) ?? 0
+      sectionSeq.set(base, seq + 1)
+      const title = seq === 0 ? base : `${base} (续${seq + 1})`
+      await db.addKnowledge({
+        id,
+        title,
+        content: chunks[i].text,
+        questionHash: hashText(`${docId}#${i}`),
+        hasEmbedding: 0,
+        enabled: 1,
+        source: 'doc',
+        docId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      // 锚 = 展示标题 + 块正文(小节标题语义强,拼进锚提升命中率;与 search.ts 同源)
+      pendingEmbeds.push({
+        id,
+        anchor: kbAnchorText({ source: 'doc', title, content: chunks[i].text }),
+      })
+    }
+  })
+  for (const p of pendingEmbeds) queueEmbedding('knowledge', p.id, p.anchor)
   return { docId, chunkCount: chunks.length, replaced }
 }

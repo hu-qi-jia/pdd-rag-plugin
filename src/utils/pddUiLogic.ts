@@ -2,8 +2,8 @@
 // UI 行为状态机见设计文档 §6.3:直填开关开 → 永远直填最高分;
 // 关 → 永远弹推荐回复面板由人工选(2026-09-15 用户反馈:开关关就不该静默直填,
 // 原实现"单候选免面板直填"与开关语义冲突,已移除),无候选仅提示。
-// 面板条数由检索侧类别配额决定(标准回答全部 + 历史最近 2 + 知识库 1,
-// 见 retrieval.ts#PANEL_QUOTA),此处不再截断。
+// 面板条数由检索侧类别配额决定(标准回答/历史/知识库各至多 3,见 retrieval.ts#PANEL_QUOTA),
+// 此处不再截断。
 
 import type { Suggestion } from "../types/messages";
 
@@ -33,4 +33,13 @@ export function decideUiAction(
   if (suggestions.length === 0) return { action: "none" };
   if (directFillEnabled) return { action: "fill", fillIndex: 0 };
   return { action: "popup", items: suggestions };
+}
+
+/**
+ * 面板 ↑↓ 键盘导航(2026-09-16 第二十一轮):当前选中项 ± delta,
+ * 夹取在 [0, count-1],到端点停住不回绕(候选 ≤ 9 条,回绕反而跳来跳去)。
+ */
+export function moveSelection(current: number, delta: number, count: number): number {
+  if (count <= 0) return 0;
+  return Math.min(count - 1, Math.max(0, current + delta));
 }

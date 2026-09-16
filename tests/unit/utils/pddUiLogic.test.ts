@@ -3,7 +3,7 @@
  * DOM/样式部分不可单测,只测纯函数。
  */
 import { describe, it, expect } from 'vitest'
-import { mergeBuyerQuery, decideUiAction } from '../../../src/utils/pddUiLogic'
+import { mergeBuyerQuery, decideUiAction, moveSelection } from '../../../src/utils/pddUiLogic'
 import type { Suggestion } from '../../../src/types/messages'
 
 const sug = (text: string, kind: Suggestion['kind'] = 'history'): Suggestion => ({
@@ -46,5 +46,19 @@ describe('decideUiAction:直填/弹窗状态机', () => {
     const r = decideUiAction(items, false)
     expect(r.action).toBe('popup')
     if (r.action === 'popup') expect(r.items).toEqual(items)
+  })
+})
+
+describe('moveSelection:面板 ↑↓ 键盘导航(2026-09-16 第二十一轮)', () => {
+  it('↓ 逐条下移,↑ 逐条上移', () => {
+    expect(moveSelection(0, 1, 3)).toBe(1)
+    expect(moveSelection(1, -1, 3)).toBe(0)
+  })
+  it('到末尾夹取不回绕:末条再 ↓ 停在末条', () => {
+    expect(moveSelection(2, 1, 3)).toBe(2)
+    expect(moveSelection(0, -1, 3)).toBe(0) // 首条再 ↑ 停在首条
+  })
+  it('空列表安全返回 0', () => {
+    expect(moveSelection(0, 1, 0)).toBe(0)
   })
 })

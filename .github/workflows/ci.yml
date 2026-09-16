@@ -41,6 +41,9 @@ jobs:
     name: Data-layer E2E · verify-*
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # runner 无 X server:脚本走无头(channel 'chromium' 新无头模式支持扩展)
+      PDD_E2E_HEADLESS: '1'
 
     steps:
       - uses: actions/checkout@v4

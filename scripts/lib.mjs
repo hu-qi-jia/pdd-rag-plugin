@@ -25,8 +25,14 @@ export const freshProfile = () => mkdtempSync(path.join(tmpdir(), 'pddcs-diag-')
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** 加载扩展启动 Chromium(各脚本原有 launch 参数组的统一版) */
-export async function launchExtContext(profile, { headless = false, timeout = 60000 } = {}) {
+/**
+ * 加载扩展启动 Chromium(各脚本原有 launch 参数组的统一版)。
+ * headless 缺省 false(本地有桌面, headed 观感接近真机);CI 无 X server,
+ * 设 PDD_E2E_HEADLESS=1 走无头(channel 'chromium' 新无头模式支持扩展)。
+ */
+export async function launchExtContext(profile, options = {}) {
+  const headless = options.headless ?? process.env.PDD_E2E_HEADLESS === '1'
+  const { timeout = 60000 } = options
   return chromium.launchPersistentContext(profile, {
     // 指定 PDD_E2E_CHROME 用之;否则 channel: 'chromium'(完整 chromium,新无头模式,
     // 支持 --load-extension——默认的 headless shell 不加载扩展)

@@ -45,3 +45,6 @@ assets/models/
 # 一次性诊断 profile(自动化用,勿入库)
 .diag-golden-profile/
 .diag-run-*/
+# scripts 硬编码绝对路径在 bash 下被吞反斜杠产生的乱码 profile 目录(防误入库)
+*chrome-debug-profile/
+*.diag-run-*

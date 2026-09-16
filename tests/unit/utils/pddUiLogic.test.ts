@@ -7,7 +7,6 @@ import {
   mergeBuyerQuery,
   decideUiAction,
   moveSelection,
-  panelNavKeys,
 } from '../../../src/utils/pddUiLogic'
 import type { Suggestion } from '../../../src/types/messages'
 
@@ -54,28 +53,16 @@ describe('decideUiAction:直填/弹窗状态机', () => {
   })
 })
 
-describe('moveSelection:面板 ↑↓ 键盘导航(2026-09-16 第二十一轮)', () => {
-  it('↓ 逐条下移,↑ 逐条上移', () => {
+describe('moveSelection:面板导航键移动选中项(2026-09-16 第二十四轮:末条回绕首条)', () => {
+  it('逐条下移/上移', () => {
     expect(moveSelection(0, 1, 3)).toBe(1)
     expect(moveSelection(1, -1, 3)).toBe(0)
   })
-  it('到末尾夹取不回绕:末条再 ↓ 停在末条', () => {
-    expect(moveSelection(2, 1, 3)).toBe(2)
-    expect(moveSelection(0, -1, 3)).toBe(0) // 首条再 ↑ 停在首条
+  it('循环切换:末条再按回绕到首条', () => {
+    expect(moveSelection(2, 1, 3)).toBe(0)
+    expect(moveSelection(0, -1, 3)).toBe(2)
   })
   it('空列表安全返回 0', () => {
     expect(moveSelection(0, 1, 0)).toBe(0)
-  })
-})
-
-describe('panelNavKeys:一个配置推导 下一个/上一个 两键(2026-09-16 第二十二轮)', () => {
-  it('默认 Tab:next = Tab,prev = Shift+Tab(表单导航同款惯例)', () => {
-    const { next, prev } = panelNavKeys({ ctrl: false, alt: false, shift: false, key: 'Tab' })
-    expect(next).toEqual({ ctrl: false, alt: false, shift: false, key: 'Tab' })
-    expect(prev).toEqual({ ctrl: false, alt: false, shift: true, key: 'Tab' })
-  })
-  it('自定义组合键(如 Ctrl+J)同样以 Shift 反向', () => {
-    const { next, prev } = panelNavKeys({ ctrl: true, alt: false, shift: false, key: 'j' })
-    expect(prev).toEqual({ ctrl: true, alt: false, shift: true, key: 'j' })
   })
 })

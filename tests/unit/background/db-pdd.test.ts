@@ -237,3 +237,44 @@ describe('保留期清理(TTL)', () => {
     expect(await testDb.goldens.get('g-1')).toBeDefined()
   })
 })
+
+describe('嵌入回填不改写 updatedAt', () => {
+  it('updateGoldenEmbedding 只回填向量,updatedAt 保持设置时间(面板"最近设置靠前"的口径)', async () => {
+    const now = Date.now()
+    await testDb.addGolden({
+      id: 'g-1',
+      folderId: null,
+      question: 'q',
+      answer: 'a',
+      questionHash: hashText('q'),
+      hasEmbedding: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await new Promise((r) => setTimeout(r, 15)) // 让时钟前进,回填若 touch 必然可测
+    await testDb.updateGoldenEmbedding('g-1', new Float32Array([0.1, 0.2]), 'test-model', '1.0.0')
+    const g = await testDb.getGolden('g-1')
+    expect(g?.hasEmbedding).toBe(1)
+    expect(g?.embeddingModel).toBe('test-model')
+    expect(g?.updatedAt).toBe(now) // 第三十一轮 CI flake 根因:回填 touch 后完成顺序随机 → 排序乱
+  })
+
+  it('updateKnowledgeEmbedding 同契约:知识库列表按 updatedAt 排序,回填不得改写', async () => {
+    const now = Date.now()
+    await testDb.addKnowledge({
+      id: 'k-1',
+      title: '售后政策',
+      content: '内容',
+      questionHash: hashText('售后政策'),
+      enabled: 1,
+      hasEmbedding: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await new Promise((r) => setTimeout(r, 15))
+    await testDb.updateKnowledgeEmbedding('k-1', new Float32Array([0.3]), 'test-model', '1.0.0')
+    const k = await testDb.getKnowledge('k-1')
+    expect(k?.hasEmbedding).toBe(1)
+    expect(k?.updatedAt).toBe(now)
+  })
+})

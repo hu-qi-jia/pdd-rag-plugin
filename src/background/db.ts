@@ -302,12 +302,13 @@ export class PddDatabase extends Dexie {
     model: string,
     version: string,
   ): Promise<void> {
+    // 不 touch updatedAt:它是"最近设置/编辑时间",面板"最近设置靠前"按它排;
+    // 回填完成顺序在慢机器上随机,touch 会打乱口径(第三十一轮 CI flake 根因)
     await this.goldens.update(id, {
       qEmbedding: embedding,
       embeddingModel: model,
       embeddingVersion: version,
       hasEmbedding: 1,
-      updatedAt: Date.now(),
     });
     invalidateRetrievalCache();
   }
@@ -318,12 +319,12 @@ export class PddDatabase extends Dexie {
     model: string,
     version: string,
   ): Promise<void> {
+    // 同 updateGoldenEmbedding:listKnowledge 按 updatedAt 倒序,回填不得 touch
     await this.knowledge.update(id, {
       qEmbedding: embedding,
       embeddingModel: model,
       embeddingVersion: version,
       hasEmbedding: 1,
-      updatedAt: Date.now(),
     });
     invalidateRetrievalCache();
   }

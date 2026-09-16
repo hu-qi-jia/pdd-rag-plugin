@@ -4,28 +4,13 @@
  *  2. 点击按钮 → toast/弹窗/textarea 三者必有其一
  *  3. 不自动发送:填充前后消息行数不变
  * 用法:node scripts/verify-p2-ui.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { chromium } from '@playwright/test'
+import { launchExtContext, LOGGED_IN_PROFILE, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = 'E:\\个人项目\\拼多多客服检索工具\\.chrome-debug-profile'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const PROFILE = LOGGED_IN_PROFILE
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
-  headless: false,
-  timeout: 60000,
-  args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
-    '--no-first-run',
-    '--hide-crash-restore-bubble',
-    '--no-default-browser-check',
-  ],
-})
+const ctx = await launchExtContext(PROFILE)
 await sleep(5000)
 const page = ctx.pages()[0] ?? (await ctx.newPage())
 await page.goto('https://mms.pinduoduo.com/chat-merchant/index.html#/', {

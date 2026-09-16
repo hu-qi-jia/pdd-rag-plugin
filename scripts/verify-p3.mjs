@@ -4,38 +4,18 @@
  *   仅改答案不重嵌 → 文件夹 CRUD+迁移 → 导出 v2 → 幂等再导入(全跳过)→ 坏版本拒绝 →
  *   FILL_INPUT 无聊天页报错 → 清理测试数据(不污染真实库)。
  * 用法:node scripts/verify-p3.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { chromium } from '@playwright/test'
+import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
 // 一次性干净 profile(P1 教训:登录态 profile 对自动化脆弱;P3 验收是纯数据层,无需登录态。
 // 代价:首次需下载嵌入模型 ~25MB(hf-mirror),下方重嵌轮询预算已放大)
-const PROFILE = ROOT + '\\.diag-fresh-profile'
+const PROFILE = persistentProfile('fresh-profile')
 const SESS = 'p3-verify'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
-  headless: false,
-  timeout: 60000,
-  args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
-    '--no-first-run',
-    '--hide-crash-restore-bubble',
-    '--no-default-browser-check',
-  ],
-})
+const ctx = await launchExtContext(PROFILE)
 await sleep(5000)
-let extId = null
-for (let i = 0; i < 10 && !extId; i++) {
-  const sw = ctx.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://'))
-  if (sw) extId = new URL(sw.url()).host
-  if (!extId) await sleep(1000)
-}
+const extId = await findExtensionId(ctx)
 if (!extId) {
   console.log('FAIL: 扩展未加载')
   await ctx.close()
@@ -55,22 +35,7 @@ if (process.env.PDDCS_PROFILE === 'login' && beforeSw) {
   console.log('SW 已强制 reload(击穿陈旧脚本缓存)')
 }
 
-let pop = null
-let lastErr = ''
-for (let i = 0; i < 12 && !pop; i++) {
-  await sleep(2000)
-  try {
-    const p = await ctx.newPage()
-    await p.goto(`chrome-extension://${extId}/popup.html`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    })
-    pop = p
-  } catch (err) {
-    lastErr = String(err).slice(0, 160)
-    console.log(`popup 尝试 ${i + 1} 失败: ${lastErr}; SW=[${ctx.serviceWorkers().map((w) => w.url().slice(0, 60))}]`)
-  }
-}
+const pop = await openPopup(ctx, extId)
 if (!pop) {
   console.log('FAIL: popup 打不开')
   await ctx.close()

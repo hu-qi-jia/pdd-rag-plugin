@@ -5,16 +5,12 @@
  *   逐块向量回填 → 检索命中且填充文本干净 → 文档块拒编辑 → 整篇重传替换 →
  *   导出含 source/docId → 幂等再导入 → 清理。
  * 用法:node scripts/verify-kb-doc.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { chromium } from '@playwright/test'
+import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = ROOT + '\\.diag-fresh-profile'
+const PROFILE = persistentProfile('fresh-profile')
 const DOC = '售后政策手册'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ── 政策风格 md:文档标题 + 引言 + 8 个小节(各 3 条列表项,节 ~230 字 ≤500 整节成块)──
 const SECTION_TOPICS = [
@@ -41,42 +37,16 @@ const EXPECTED_SECTIONS = SECTION_TOPICS.length + 1 // 8 小节 + 文档标题/�
 // 无结构长文本兜底用例(回退 chunkText 滑窗)
 const PLAIN = Array.from({ length: 1500 }, (_, i) => String(i % 10)).join('')
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
-  headless: false,
-  timeout: 60000,
-  args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
-    '--no-first-run',
-    '--hide-crash-restore-bubble',
-    '--no-default-browser-check',
-  ],
-})
+const ctx = await launchExtContext(PROFILE)
 await sleep(5000)
-let extId = null
-for (let i = 0; i < 10 && !extId; i++) {
-  const sw = ctx.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://'))
-  if (sw) extId = new URL(sw.url()).host
-  if (!extId) await sleep(1000)
-}
+const extId = await findExtensionId(ctx)
 if (!extId) {
   console.log('FAIL: 扩展未加载')
   await ctx.close()
   process.exit(1)
 }
 
-let pop = null
-for (let i = 0; i < 12 && !pop; i++) {
-  await sleep(2000)
-  try {
-    const p = await ctx.newPage()
-    await p.goto(`chrome-extension://${extId}/popup.html`, { waitUntil: 'domcontentloaded', timeout: 15000 })
-    pop = p
-  } catch {
-    /* 重试 */
-  }
-}
+const pop = await openPopup(ctx, extId)
 if (!pop) {
   console.log('FAIL: popup 打不开')
   await ctx.close()

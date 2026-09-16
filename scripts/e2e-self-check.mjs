@@ -5,11 +5,12 @@
  * 3) 收集页面 [PDD CS] 控制台输出
  * 4) 打开扩展 popup 页读取统计数字
  * 用法:node scripts/e2e-self-check.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs(extId 发现走 CDP /json/list,机制不同,保留原写法)
  */
 import { chromium } from '@playwright/test'
+import { sleep } from './lib.mjs'
 
 const CDP = 'http://127.0.0.1:9222'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const browser = await chromium.connectOverCDP(CDP)
 const ctx = browser.contexts()[0]

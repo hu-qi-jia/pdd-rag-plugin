@@ -11,19 +11,19 @@
  *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十四轮改循环):初始选中第一条,
  *    Tab 单键循环切换 —— 末条再按回绕到首条(Shift+Tab 反向已删,不再拦截;↑↓ 亦让位平台切换会话),
  *    Enter 填充**选中项**(非固定第一条)
- * 用法:node scripts/verify-ai-popup-2026-09-15.mjs
+ * 用法:node scripts/verify-ai-popup.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
 import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
+import path from 'node:path'
+import { CHROME, EXT, ROOT, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const DIR = ROOT + '\\build\\chrome-mv3-prod'
-const CS = readdirSync(DIR).find((f) => /^pdd-ai-button\..*\.js$/.test(f))
+const CS = readdirSync(EXT).find((f) => /^pdd-ai-button\..*\.js$/.test(f))
 if (!CS) {
   console.log('FAIL: 未找到 content script 产物,请先 build')
   process.exit(1)
 }
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   body { margin:0; background:#f5f5f5; font-family:"Segoe UI","Microsoft YaHei",sans-serif; }
@@ -56,10 +56,7 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
 <textarea id="replyTextarea" style="position:fixed; left:20px; bottom:20px; width:600px; height:60px"></textarea>
 </body></html>`
 
-const browser = await chromium.launch({
-  executablePath:
-    'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe',
-})
+const browser = await chromium.launch({ executablePath: CHROME })
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 
 // chrome 桩:记录发出的消息,按类型回执(候选固定 3 条:1 标准回答 + 2 历史)
@@ -128,7 +125,7 @@ await page.route('**/fixture.html', (route) =>
   route.fulfill({ contentType: 'text/html; charset=utf-8', body: FIXTURE }),
 )
 await page.goto('https://fixture.local/fixture.html')
-await page.addScriptTag({ path: `${DIR}\\${CS}` })
+await page.addScriptTag({ path: path.join(EXT, CS) })
 await sleep(1200)
 
 const results = []
@@ -389,7 +386,7 @@ check(
   JSON.stringify(wrapped),
 )
 
-await page.screenshot({ path: ROOT + '\\logs\\ui-0915-ai-popup.png' })
+await page.screenshot({ path: path.join(ROOT, 'logs', 'ui-0915-ai-popup.png') })
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)
 await browser.close()
 process.exit(results.every((r) => r.ok) ? 0 : 1)

@@ -6,18 +6,18 @@
  *          ② 与气泡可视外缘间距 12px(修复前按 <p> 内缘定位,视觉间距只剩 ~2px);
  *          ③ 与气泡垂直居中。
  * 用法:node scripts/verify-ai-button-geometry.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
 import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
+import path from 'node:path'
+import { CHROME, EXT, ROOT, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const DIR = ROOT + '\\build\\chrome-mv3-prod'
-const CS = readdirSync(DIR).find((f) => /^pdd-ai-button\..*\.js$/.test(f))
+const CS = readdirSync(EXT).find((f) => /^pdd-ai-button\..*\.js$/.test(f))
 if (!CS) {
   console.log('FAIL: 未找到 content script 产物,请先 build')
   process.exit(1)
 }
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** 真机结构:li.onemsg > .buyer-item > div[currentuid] > .msg-content > p.msg-content-box
  *  两行分别把气泡底色放在 .msg-content(常态)与更外层 div[currentuid](容错路径)。 */
@@ -43,10 +43,7 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   </div></li>
 </ul></div></body></html>`
 
-const browser = await chromium.launch({
-  executablePath:
-    'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe',
-})
+const browser = await chromium.launch({ executablePath: CHROME })
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 await page.addInitScript(() => {
   // content script 依赖的最小 chrome 桩(本用例不点击,不触发 sendMessage)
@@ -65,7 +62,7 @@ await page.route('**/fixture.html', (route) =>
   route.fulfill({ contentType: 'text/html; charset=utf-8', body: FIXTURE }),
 )
 await page.goto('https://fixture.local/fixture.html')
-await page.addScriptTag({ path: `${DIR}\\${CS}` })
+await page.addScriptTag({ path: path.join(EXT, CS) })
 await sleep(1500)
 
 const measure = () =>
@@ -141,7 +138,7 @@ for (const r of rows) {
   check('按钮与气泡垂直居中(偏差 < 1.5px)', centerDiff < 1.5, `${centerDiff.toFixed(1)}px`)
 }
 
-await page.screenshot({ path: ROOT + '\\logs\\ui-0915-ai-button.png', clip: { x: 0, y: 0, width: 640, height: 140 } })
+await page.screenshot({ path: path.join(ROOT, 'logs', 'ui-0915-ai-button.png'), clip: { x: 0, y: 0, width: 640, height: 140 } })
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)
 await browser.close()
 process.exit(results.every((r) => r.ok) ? 0 : 1)

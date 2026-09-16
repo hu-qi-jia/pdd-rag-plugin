@@ -6,66 +6,36 @@
  *  ④ GET_PANEL_DATA 返回顺序 = 最近设置靠前(与候选排序同口径)
  *  ⑤ 取消一条后再设第 4 条 → 成功(额度释放)
  *  ⑥ 清理:删掉本轮造的标准回答,不留测试数据
- * 用法:node scripts/verify-golden-multi-2026-09-15.mjs
+ * 用法:node scripts/verify-golden-multi.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { chromium } from '@playwright/test'
+import { launchExtContext, findExtensionId, openPopup, freshProfile, ROOT, sleep } from './lib.mjs'
+import { rmSync } from 'node:fs'
+import path from 'node:path'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
 // 每次运行独立 profile:避免陈旧 SW 脚本缓存与 profile 锁(跑完即删)
-const PROFILE = ROOT + '\\.diag-run-' + Date.now()
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const PROFILE = freshProfile()
 
 const Q = `多答案验收:这款支持7天无理由退换吗?${Date.now()}`
 const A = (n) => `多答案验收答复 ${n}`
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
-  timeout: 60000,
-  args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
-    '--no-first-run',
-    '--hide-crash-restore-bubble',
-    '--no-default-browser-check',
-  ],
-})
+const ctx = await launchExtContext(PROFILE)
 await sleep(5000)
-let extId = null
-for (let i = 0; i < 10 && !extId; i++) {
-  const sw = ctx.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://'))
-  if (sw) extId = new URL(sw.url()).host
-  if (!extId) await sleep(1000)
-}
+const extId = await findExtensionId(ctx)
 if (!extId) {
   console.log('FAIL: 扩展未加载')
   await ctx.close()
   process.exit(1)
 }
 
-const pop = await ctx.newPage()
-const pageErrors = []
-pop.on('pageerror', (e) => pageErrors.push(String(e)))
-// SW reload 后扩展页可能短暂不可达 → 重试打开
-let opened = false
-for (let i = 0; i < 12 && !opened; i++) {
-  try {
-    await pop.goto(`chrome-extension://${extId}/popup.html`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    })
-    opened = true
-  } catch {
-    await sleep(2000)
-  }
-}
-if (!opened) {
+const pop = await openPopup(ctx, extId)
+if (!pop) {
   console.log('FAIL: popup 打不开')
   await ctx.close()
   process.exit(1)
 }
+const pageErrors = []
+pop.on('pageerror', (e) => pageErrors.push(String(e)))
 await sleep(1500)
 
 const send = (type, payload) =>
@@ -122,7 +92,7 @@ check(
 const order1 = await panelOrder()
 check('文件夹页按最近设置靠前展示(3 → 2 → 1)', order1.join(',') === '3,2,1', `order=${order1.join(',')}`)
 check('同问题多条在面板上标注「同问题 3 条 · 已满」', await pop.locator('text=同问题 3 条 · 已满').count() > 0)
-await pop.screenshot({ path: ROOT + '\\logs\\ui-0915-golden-multi.png' })
+await pop.screenshot({ path: path.join(ROOT, 'logs', 'ui-0915-golden-multi.png') })
 
 // ── ⑤ 取消一条后额度释放 ──
 const del = await send('DELETE_GOLDEN', { id: r2.id })

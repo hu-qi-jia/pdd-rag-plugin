@@ -6,15 +6,12 @@
  * 4) 页面跳走(about:blank)触发 leave → 分段器关闭会话 → 入库
  * 5) 打开 popup 读统计(问答记录 > 0、客服回复 > 0)
  * 用法:node scripts/e2e-capture.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化(launch 参数组与样板不同,保留原写法)
  */
 import { chromium } from '@playwright/test'
+import { CHROME, EXT, LOGGED_IN_PROFILE, findExtensionId, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = 'E:\\个人项目\\拼多多客服检索工具\\.chrome-debug-profile'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const PROFILE = LOGGED_IN_PROFILE
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   executablePath: CHROME,
@@ -64,12 +61,7 @@ await page.goto('about:blank', { waitUntil: 'domcontentloaded' })
 await sleep(6000)
 
 // popup 统计
-let extId = null
-for (let i = 0; i < 10 && !extId; i++) {
-  const sw = ctx.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://'))
-  if (sw) extId = new URL(sw.url()).host
-  if (!extId) await sleep(1000)
-}
+const extId = await findExtensionId(ctx)
 if (!extId) {
   console.log('未找到扩展 SW')
 } else {

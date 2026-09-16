@@ -2,15 +2,13 @@
  * 修复登录态 profile 中扩展被禁用(unsupportedDeveloperExtension)的问题。
  * v2:每个调用加超时竞速;management.setEnabled;失败则截图留证。
  * 用法:node scripts/repair-ext2.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化(修复逻辑与样板差异大,仅换路径常量)
  */
 import { chromium } from '@playwright/test'
+import path from 'node:path'
+import { CHROME, EXT, LOGGED_IN_PROFILE, ROOT, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = 'E:\\个人项目\\拼多多客服检索工具\\.chrome-debug-profile'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const PROFILE = LOGGED_IN_PROFILE
 
 // 给任何 Promise 加超时,避免 WebUI API 挂死
 const withTimeout = (p, ms, tag) =>
@@ -87,7 +85,7 @@ if (ext && ext.state !== 'ENABLED') {
 
   if (ext2?.state !== 'ENABLED') {
     // 截图留证:看 WebUI 上是否有确认弹窗/开关状态
-    await page.screenshot({ path: ROOT + '\\logs\\extensions-page.png', fullPage: true })
+    await page.screenshot({ path: path.join(ROOT, 'logs', 'extensions-page.png'), fullPage: true })
     console.log('已截图 logs/extensions-page.png')
   }
 }

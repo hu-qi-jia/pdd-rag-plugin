@@ -4,55 +4,22 @@
  *   仅改正文不重嵌 → 空标题拒 → 停用不参与检索/启用恢复 → 层级 金标准>知识库 →
  *   导出携带 knowledge(剥向量)→ 幂等再导入 → 删除 → 清理。
  * 用法:node scripts/verify-kb.mjs
+ * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { chromium } from '@playwright/test'
+import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
 
-const ROOT = 'E:\\个人项目\\拼多多客服检索工具\\personal-ai-memory'
-const CHROME =
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
-const EXT = ROOT + '\\build\\chrome-mv3-prod'
-const PROFILE = ROOT + '\\.diag-fresh-profile'
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const PROFILE = persistentProfile('fresh-profile')
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
-  headless: false,
-  timeout: 60000,
-  args: [
-    `--disable-extensions-except=${EXT}`,
-    `--load-extension=${EXT}`,
-    '--no-first-run',
-    '--hide-crash-restore-bubble',
-    '--no-default-browser-check',
-  ],
-})
+const ctx = await launchExtContext(PROFILE)
 await sleep(5000)
-let extId = null
-for (let i = 0; i < 10 && !extId; i++) {
-  const sw = ctx.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://'))
-  if (sw) extId = new URL(sw.url()).host
-  if (!extId) await sleep(1000)
-}
+const extId = await findExtensionId(ctx)
 if (!extId) {
   console.log('FAIL: 扩展未加载')
   await ctx.close()
   process.exit(1)
 }
 
-let pop = null
-for (let i = 0; i < 12 && !pop; i++) {
-  await sleep(2000)
-  try {
-    const p = await ctx.newPage()
-    await p.goto(`chrome-extension://${extId}/popup.html`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    })
-    pop = p
-  } catch {
-    /* 重试 */
-  }
-}
+const pop = await openPopup(ctx, extId)
 if (!pop) {
   console.log('FAIL: popup 打不开')
   await ctx.close()

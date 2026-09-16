@@ -208,7 +208,7 @@ export function SettingsTab({
         <HotkeyRow
           tk={tk}
           label="候选切换键"
-          desc="推荐面板中切至下一候选;加 Shift 反向(2026-09-16 起 ↑↓ 已让位平台切换会话)"
+          desc=""
           allowPlainKey
           hotkey={draft.panelNavHotkey}
           onChange={(hk) => void persist({ ...draft, panelNavHotkey: hk })}
@@ -449,9 +449,9 @@ function HotkeyRow({
         <span style={{ fontSize: fontSize.caption, color: tk.accent, lineHeight: 1.5 }}>
           请按下新的快捷键(Esc 取消{allowPlainKey ? ';可用单键(如 Tab)' : ';需带 Ctrl/Alt/Shift'})
         </span>
-      ) : (
+      ) : desc ? (
         <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.5 }}>{desc}</span>
-      )}
+      ) : null}
     </div>
   )
 }

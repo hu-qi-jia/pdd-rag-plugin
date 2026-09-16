@@ -26,7 +26,6 @@ import {
   decideUiAction,
   mergeBuyerQuery,
   moveSelection,
-  panelNavKeys,
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
@@ -330,9 +329,9 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
 
 let popupEl: HTMLDivElement | null = null
 /**
- * 由快捷键唤起的推荐回复面板:Tab/Shift+Tab 移动选中项,Enter 填充**选中项**
- * (2026-09-16 第二十一轮,原为固定填第一条;点外部/Esc 关闭即解除)。
- * 仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
+ * 由快捷键唤起的推荐回复面板:导航键(默认 Tab,循环)移动选中项,Enter 填充**选中项**
+ * (2026-09-16 第二十一轮引入,第二十四轮:Shift+Tab 反向删除,末条回绕首条;
+ * 点外部/Esc 关闭即解除)。仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
  */
 let armedPanel: { items: Suggestion[]; selected: number } | null = null
 
@@ -544,7 +543,7 @@ function openPopup(
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
   foot.textContent = opts.keyboard
-    ? `${formatHotkey(panelNavKeys(hotkeySettings.panelNavHotkey).next)} 切换候选,Enter 填充;发送请手动点击`
+    ? `${formatHotkey(hotkeySettings.panelNavHotkey)} 切换候选(循环),Enter 填充;发送请手动点击`
     : '点击候选填入输入框;发送请手动点击'
   el.appendChild(foot)
 
@@ -705,22 +704,13 @@ document.addEventListener(
       closePopup()
       return
     }
-    // 面板已由快捷键唤起:导航键(默认 Tab/Shift+Tab)移动选中项,Enter = 填充**选中项**
-    // (第二十二轮:↑↓ 让位平台"切换会话",不再拦截)
-    if (armedPanel) {
-      const nav = panelNavKeys(hotkeySettings.panelNavHotkey)
-      if (matchesHotkey(ev, nav.next)) {
-        ev.preventDefault()
-        ev.stopPropagation()
-        movePanelSelection(1)
-        return
-      }
-      if (matchesHotkey(ev, nav.prev)) {
-        ev.preventDefault()
-        ev.stopPropagation()
-        movePanelSelection(-1)
-        return
-      }
+    // 面板已由快捷键唤起:导航键(默认 Tab,末条回绕首条)移动选中项,Enter = 填充**选中项**
+    // (第二十四轮:Shift+Tab 反向删除;↑↓ 让位平台"切换会话",均不拦截)
+    if (armedPanel && matchesHotkey(ev, hotkeySettings.panelNavHotkey)) {
+      ev.preventDefault()
+      ev.stopPropagation()
+      movePanelSelection(1)
+      return
     }
     if (
       armedPanel &&

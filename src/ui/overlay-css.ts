@@ -57,7 +57,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.body}px;
   color: ${tk.textMuted}; letter-spacing: -0.01em; }
 /* 滚动中段:唯一滚动容器(6px 细轨挂此) */
-.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 3px 0 5px; }
+.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 2px 0 4px; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
   width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
   justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
@@ -65,12 +65,14 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 候选行(v2.6.18 重设计):通栏矩形 → 内缩圆角软行(留白分组,无分隔线);
    悬浮与键盘选中共用同一软中性灰圆角填充(第二十三轮用户指定的中性灰口径;
    旧 3px 左描边属表格行语言,随通栏行一并移除) */
-.pddcs-cand { position: relative; margin: 4px 8px; padding: 10px 12px; border-radius: ${radius.lg}px;
+/* 候选行(v2.6.20 收紧):行距 2px(外边距塌缩)+ 行内 padding 8px,
+   条目间视觉间隙 24→18px,列表更紧凑;悬浮/选中语言不变 */
+.pddcs-cand { position: relative; margin: 2px 8px; padding: 8px 12px; border-radius: ${radius.lg}px;
   cursor: pointer; transition: background-color .12s ease; }
 .pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
 /* 折叠候选行:底边预留条位,右下角「同内容×n」不压正文 */
-.pddcs-cand-folded { padding-bottom: 26px; }
-.pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.pddcs-cand-folded { padding-bottom: 22px; }
+.pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 /* 类别徽标(v2.6.19 重设计,用户"明显一点"):6px 圆点 → 软底色 chip ——
    标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(色相同源 semantic,两表面不割裂),
    历史 = 中性灰软底灰字;10px caption 档不抢正文 */
@@ -101,7 +103,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 /* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略 */
-.pddcs-cand-q { margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
+.pddcs-cand-q { margin-bottom: 3px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 页脚常驻壳:hairline 上边 + 次级表面底,键位提示不再漂在正文后面 */
 .pddcs-popup-foot { flex: 0 0 auto; padding: 7px 14px; border-top: 1px solid ${tk.borderLight};

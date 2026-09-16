@@ -86,11 +86,12 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
   it('面板加宽至 360(CSS 与 JS 定位共用常量,单处维护)', () => {
     expect(POPUP_W).toBe(360)
   })
-  it('内缩圆角软行:行带内缩 margin 与圆角;悬浮与选中共用同一软中性灰填充', () => {
+  it('内缩圆角软行:行带内缩 margin 与圆角,v2.6.20 收紧为 8px 行内 padding;悬浮与选中共用同一软中性灰填充', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).toContain('border-radius')
-    expect(candRule).toContain('margin:')
+    expect(candRule).toContain('margin: 2px 8px')
+    expect(candRule).toContain('padding: 8px 12px')
     const fillRule = css.match(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
     expect(fillRule).toContain(lightTheme.selectedBg)
     expect(fillRule).not.toContain('inset 3px') // 左描边属旧表格语言,移除

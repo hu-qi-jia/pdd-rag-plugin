@@ -56,15 +56,12 @@ async function renderWith(folders: PanelFolder[]) {
 }
 
 describe('FoldersTab:文件夹重命名入口', () => {
-  it('父(根)文件夹的重命名钮常驻可见:不挂悬浮显隐类,普通文件夹都有', async () => {
+  it('父(根)文件夹的重命名钮默认可见:普通文件夹都有,且全树不再有悬浮显隐类', async () => {
     await renderWith([folder('f1', '售后'), folder('f2', '物流')])
     const pens = btns('重命名')
     expect(pens).toHaveLength(2)
-    // 常驻可见 = 所在操作行容器不带 pddcs-row-ops(悬浮才 opacity:1)
-    for (const b of pens) {
-      const opsRow = b.parentElement as HTMLElement
-      expect(opsRow.className).not.toContain('pddcs-row-ops')
-    }
+    // v2.6.31 起悬浮显隐机制整体退役:整棵树都不应再出现 .pddcs-row-ops
+    expect(container.querySelectorAll('.pddcs-row-ops')).toHaveLength(0)
   })
 
   it('点重命名钮 → 原位出现改名输入框(预填当前名),默认文件夹无此入口', async () => {

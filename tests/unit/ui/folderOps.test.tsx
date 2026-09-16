@@ -17,8 +17,9 @@ vi.mock('../../../src/shared/message-passing', () => ({
 const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
-const { FoldersTab } = await import('../../../src/popup/FoldersTab')
+const { FoldersTab, ICON_SIZE } = await import('../../../src/popup/FoldersTab')
 const { lightTheme } = await import('../../../src/ui/theme')
+const { controlH } = await import('../../../src/ui/design')
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -261,5 +262,44 @@ describe('FoldersTab:标准回答迁移文件夹', () => {
     await render()
     await click(btns('迁移到其他文件夹')[0])
     expect(container.querySelector<HTMLSelectElement>('select')?.value).toBe('uncategorized')
+  })
+})
+
+// ── 第四十四轮(v2.6.31):操作组默认可见 + 图标左缘与正文左缘对齐 ──────────────
+describe('FoldersTab:标准回答行操作组(常驻 + 左缘对齐)', () => {
+  it('四个图标钮默认可见:全树无 .pddcs-row-ops,且从钮到根节点没有 opacity:0', async () => {
+    panelData.goldens = [golden('g1')]
+    await render()
+    expect(container.querySelectorAll('.pddcs-row-ops')).toHaveLength(0)
+    for (const label of ['迁移到其他文件夹', '复制', '编辑', '删除(历史记录不受影响)']) {
+      const btn = btns(label)[0]
+      expect(btn, `${label} 按钮应存在`).toBeTruthy()
+      // 悬浮显隐退役 = 从按钮往上没有任何一层被 opacity:0 藏起来
+      for (let el: HTMLElement | null = btn; el; el = el.parentElement) {
+        expect(el.style.opacity).not.toBe('0')
+      }
+    }
+  })
+
+  it('操作组左缘 = 正文左缘:负 margin 抵消图标钮盒内的图标留白 (24−13)/2', async () => {
+    panelData.goldens = [golden('g1')]
+    await render()
+    const group = btns('迁移到其他文件夹')[0].parentElement as HTMLElement
+    expect(group.style.marginLeft).toBe(`${-(controlH.inline - ICON_SIZE) / 2}px`)
+    expect(group.style.marginLeft).toBe('-5.5px')
+    // 同排图标 13px:留白算式的输入,写死在断言里防止悄悄漂移
+    expect(btns('迁移到其他文件夹')[0].querySelector('svg')?.getAttribute('width')).toBe(
+      String(ICON_SIZE),
+    )
+    // 正文(问题)与操作组同处一个左内边距容器:组不再被 marginLeft:auto 顶到右边
+    expect(group.style.marginLeft).not.toBe('auto')
+  })
+
+  it('确认删除态是文字钮:靠左但 marginLeft 归 0(钮盒贴正文左缘,不再补偿图标留白)', async () => {
+    panelData.goldens = [golden('g1')]
+    await render()
+    await click(btns('删除(历史记录不受影响)')[0])
+    const group = textBtn('确认')!.parentElement as HTMLElement
+    expect(group.style.marginLeft).toBe('0px')
   })
 })

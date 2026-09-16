@@ -209,6 +209,40 @@ const selIdx = () =>
   })
 check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
 
+// ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明 / 灰选中 / 6px 细滚动条)──
+const visual = await page.evaluate(() => {
+  const popup = document.querySelector('.pddcs-popup')
+  const sel = document.querySelector('.pddcs-cand-selected')
+  const cs = popup ? getComputedStyle(popup) : null
+  const ss = sel ? getComputedStyle(sel) : null
+  const hasRule = (needle) =>
+    [...document.styleSheets].some((sheet) => {
+      try {
+        return [...sheet.cssRules].some((r) => r.cssText.includes(needle))
+      } catch {
+        return false
+      }
+    })
+  return {
+    bg: cs?.backgroundColor ?? '',
+    opacity: cs?.opacity ?? '',
+    selBg: ss?.backgroundColor ?? '',
+    selShadow: ss?.boxShadow ?? '',
+    thinRule: hasRule('.pddcs-popup::-webkit-scrollbar') && hasRule('width: 6px'),
+  }
+})
+check(
+  '面板背景不透明(rgb 无 alpha,opacity=1)',
+  /^rgb\(\d+, \d+, \d+\)$/.test(visual.bg) && visual.opacity === '1',
+  `bg=${visual.bg} opacity=${visual.opacity}`,
+)
+check(
+  '选中态为中性灰(非 accent 蓝)',
+  visual.selBg === 'rgba(0, 0, 0, 0.06)' && visual.selShadow.includes('rgba(0, 0, 0, 0.24)') && !visual.selBg.includes('13, 153, 255'),
+  `bg=${visual.selBg} shadow=${visual.selShadow}`,
+)
+check('面板滚动条为 6px 细轨(公共规格)', visual.thinRule, `thinRule=${visual.thinRule}`)
+
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
 })

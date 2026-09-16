@@ -1,6 +1,11 @@
 # 设计规范(Design System)
 
-> 版本 2.6.13 · 2026-09-16 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> 版本 2.6.14 · 2026-09-16 · 对齐 Figma 编辑器工具界面(与 pddddd 控制台同一设计语言;v2.0 的 Figma 营销官网风整体替换)
+> v2.6.14 增补:三处视觉修正(第二十三轮,2026-09-16 用户反馈)—— ①推荐面板**不透明**
+> (背景 openPopup 内联双保险 + `opacity:1`,防平台页面样式干扰);②选中态**弃蓝改灰**:
+> `accentBg` 令牌废弃,换 `selectedBg`/`selectedBar` 中性灰(浅色 rgba(0,0,0,.06)/.24,
+> 深色 rgba(255,255,255,.10)/.32);③**细滚动条公共化** `ui/scrollbar.ts#thinScrollbarCss`
+> (6px 悬浮显现,popup `.pddcs-scroll` 与聊天页 `.pddcs-popup` 同规格,8px→6px)
 > v2.6.13 增补:面板导航键 **Tab/Shift+Tab**(第二十二轮,2026-09-16 用户反馈"↑↓ 与切换会话
 > 冲突")—— ↑↓ 不再拦截、让位平台;新设置项「候选切换键」(`panelNavHotkey`,默认 Tab,
 > **可录纯单键**,上一候选固定 = 同键 + Shift 取反,`pddUiLogic#panelNavKeys`);
@@ -55,7 +60,8 @@
 > v2.3 增补:标准回答「一问题多条(上限 3)」的展示与操作口径(候选/记忆/文件夹三处)
 > v2.2 增补:控件等高铁律与 `controlH` 令牌、`Notice` 吸附顶部、聊天页按钮与气泡的真实外缘锚定
 > 代码真源:`src/ui/design.ts`(几何与字型)+ `src/ui/theme.ts`(配色)
-> 组件资产:`src/ui/components.tsx`(popup 复用);聊天页覆盖层 CSS 由 `pdd-ai-button.ts` 从同一令牌导入插值
+> 组件资产:`src/ui/components.tsx`(popup 复用)、`src/ui/scrollbar.ts`(细滚动条公共生成器,
+> v2.6.14:popup 滚动容器与聊天页推荐面板同规格);聊天页覆盖层 CSS 由 `pdd-ai-button.ts` 从同一令牌导入插值
 
 ---
 
@@ -272,8 +278,9 @@ v2.6.6 曾移底部操作行、v2.6.9 放回行内用 primary 钮,本轮按"挤�
   「标准回答优先」开关只影响排序,不影响配额。点击「AI回复」与快捷键唤起的面板**完全同构**。
 - **知识库阈值独立**(v2.6.11):知识库检索门槛由"与金标准同走一档"改为独立
   `kbThreshold`(默认 0.4,同档放宽),设置页「知识库阈值(放宽)」滑杆(0.2~0.8,步进 0.05)可调。
-- **键盘导航**(v2.6.12 引入,v2.6.13 改键,仅快捷键唤起的面板):打开即选中第一条
-  (高亮 = **accent 软底 `accentBg` + 3px accent 左描边**;`:hover` 同列防底色互盖);
+- **键盘导航**(v2.6.12 引入,v2.6.13 改键,v2.6.14 改灰,仅快捷键唤起的面板):打开即选中第一条
+  (高亮 = **中性灰软底 `selectedBg` + 3px 灰左描边 `selectedBar`**,用户指定弃用 accent 蓝;
+  `:hover` 同列防底色互盖);
   **Tab / Shift+Tab** 移动选中项(键 = 设置「候选切换键」,可自定义含纯单键;上一候选
   固定 = 同键 + Shift 取反,`pddUiLogic#panelNavKeys`),端点**夹取不回绕**
   (`pddUiLogic#moveSelection`),并 `scrollIntoView(nearest)` 滚进可视区;`Enter` 填充

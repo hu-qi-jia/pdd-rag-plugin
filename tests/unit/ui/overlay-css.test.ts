@@ -2,6 +2,7 @@
 // 现抽取为纯函数 buildOverlayCss(按 ThemeTokens 生成)+ parseThemeMode(容错解析存储值)。
 import { describe, it, expect } from 'vitest'
 import {
+  BADGE_PAD_X,
   buildOverlayCss,
   parseThemeMode,
   POPUP_W,
@@ -154,16 +155,17 @@ describe('buildOverlayCss:标签放大 + 操作钮图标化 + 列表收紧(2026-
     expect(css).toContain('.pddcs-badge.golden')
     expect(css).toContain('.pddcs-badge.knowledge')
   })
-  it('下方内容与徽标左缘同基线:行内左 padding 单点决定(徽标与正文都是它的子元素)', () => {
+  it('三处文字左缘同基线:徽标内边距 BADGE_PAD_X 单点决定下方正文的左缩进', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
-    expect(candRule).toContain('padding: 3px 12px') // 左右对称 → 徽标左缘 === 正文左缘
+    expect(candRule).toContain('padding: 3px 12px') // 行左右对称 12px → 徽标外框即整行左缘
     const topRule = css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]
-    expect(topRule).not.toContain('padding-left') // 行首行不得再加缩进,否则标签与正文错位
-    const qRule = css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]
-    const textRule = css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]
-    expect(qRule).not.toContain('padding-left')
-    expect(textRule).not.toContain('padding-left')
+    expect(topRule).not.toContain('padding-left') // 徽标所在行不得再加缩进
+    // v2.6.26 口径:正文对齐徽标**内文字**左缘 → 缩进量 = 徽标的水平内边距,同一个常量
+    expect(BADGE_PAD_X).toBe(9)
+    expect(css.match(/\.pddcs-badge \{[^}]*\}/)![0]).toContain(`padding: 3px ${BADGE_PAD_X}px`)
+    expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
+    expect(css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
   })
   it('操作钮图标化:文字迷你钮规则移除,改 24px 图标钮(星标/复制)', () => {
     const css = buildOverlayCss(lightTheme)
@@ -203,10 +205,12 @@ describe('buildOverlayCss:词条留白重配 + 折叠数归位(2026-09-16 第三
     expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
     expect(css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]).toContain('padding: 1px 0 3px')
   })
-  it('徽标左缘基线不受重配影响(左右 padding 仍对称 12px,标签/原问题/正文同线)', () => {
+  it('文字左缘基线不受重配影响(行左右 padding 仍 12px;引子/正文缩进 = 徽标内边距)', () => {
     const css = buildOverlayCss(lightTheme)
     expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
     expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).not.toContain('padding-left')
+    expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
+    expect(css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
   })
   it('同内容×n 在徽标右侧常驻:不再 absolute/悬浮才显,折叠条位预留规则整体删除', () => {
     const css = buildOverlayCss(lightTheme)

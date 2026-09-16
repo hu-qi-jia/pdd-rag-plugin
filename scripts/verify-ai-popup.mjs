@@ -12,11 +12,14 @@
  *    Tab 单键循环切换 —— 末条再按回绕到首条(Shift+Tab 反向已删,不再拦截;↑↓ 亦让位平台切换会话),
  *    Enter 填充**选中项**(非固定第一条)
  *  ⑥ 图标钮几何(2026-09-16 第三十七轮 v2.6.24 用户四调):徽标放大到 11.5px、
- *    徽标/原问题/正文**同一条左基线**(按 rect 量)、两枚 24px 图标钮右移 6px、相邻行间距 ≤2px
+ *    徽标/原问题/正文**文字**同一条左基线(按 rect 量)、两枚 24px 图标钮右移 6px、相邻行间距 ≤2px
  *  ⑦ 词条留白重配(第三十八轮 v2.6.25 用户"标签/原问题/回答间距各 +2px,但词条整体高度不要变化;
  *    词条的默认高度减小一点;同内容移动至标签的右侧"):两处行内间距按 rect 量到 4px、
  *    行内竖向总留白(a_pad + 两处间距 + b_pad)= **14px**(上版 16px,净减 2px)、
  *    「同内容×n」在徽标右侧同一行且常驻(position static / opacity 1)、折叠不再撑高词条
+ *  ⑧ 文字左基线改锚点(第三十九轮 v2.6.26 用户"原问题和回答的文本左侧和标签文字的左侧对齐"):
+ *    正文缩进量 = 徽标水平内边距(9px),故断言改量「rect 左缘 + 自身 padding-left」——
+ *    上版量的是徽标外框左缘(442),本版须落在内文字左缘(451);行整体左缘不变
  * 用法:node scripts/verify-ai-popup.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
@@ -402,17 +405,23 @@ const geo = await page.evaluate(() => {
   const rs = getComputedStyle(row)
   const tRect = top.getBoundingClientRect()
   const qRect = q.getBoundingClientRect()
+  const qs = getComputedStyle(q)
+  const textRect = text.getBoundingClientRect()
+  const ts = getComputedStyle(text)
   const actRect = actions.getBoundingClientRect()
   const r0 = rows[0].getBoundingClientRect()
   const r1 = rows[1].getBoundingClientRect()
   const iconRect = btns[0]?.getBoundingClientRect()
+  // 「文字左缘」= 元素 rect 左缘 + 自身左内边距(padding 在 border-box 内侧,rect 量不到文本起点)
+  const inkLeft = (rect, style) => +(rect.left + parseFloat(style.paddingLeft)).toFixed(2)
   return {
     badgeFont: bs.fontSize,
     badgePadX: bs.paddingLeft,
     badgeRadius: bs.borderRadius,
     badgeLeft: +bRect.left.toFixed(2),
-    qLeft: +q.getBoundingClientRect().left.toFixed(2),
-    textLeft: +text.getBoundingClientRect().left.toFixed(2),
+    badgeInkLeft: inkLeft(bRect, bs),
+    qInkLeft: inkLeft(qRect, qs),
+    textInkLeft: inkLeft(textRect, ts),
     btnCount: btns.length,
     btnSize: iconRect ? `${iconRect.width}x${iconRect.height}` : '',
     rowRight: +rowRect.right.toFixed(2),
@@ -420,7 +429,7 @@ const geo = await page.evaluate(() => {
     rowGap: +(r1.top - r0.bottom).toFixed(2),
     // 第三十八轮 v2.6.25:标签→原问题、原问题→回答两处行内间距(按相邻块 rect 差量,含外边距塌缩后的实际值)
     gapBadgeQ: +(qRect.top - tRect.bottom).toFixed(2),
-    gapQText: +(text.getBoundingClientRect().top - qRect.bottom).toFixed(2),
+    gapQText: +(textRect.top - qRect.bottom).toFixed(2),
     rowPadTop: rs.paddingTop,
     rowPadBottom: rs.paddingBottom,
     rowH: +rowRect.height.toFixed(2),
@@ -431,10 +440,13 @@ check(
   geo.badgeFont === '11.5px' && geo.badgePadX === '9px' && geo.badgeRadius === '6px',
   JSON.stringify({ font: geo.badgeFont, padX: geo.badgePadX, radius: geo.badgeRadius }),
 )
+// v2.6.26 用户口径改定:对齐的是徽标**内文字**左缘,而非徽标外框
+// (徽标外框 left=442、内文字 left=451;正文须落在 451 这一条上)
 check(
-  '下方内容与标签左缘对齐(徽标 / 原问题 / 正文同一条左基线)',
-  Math.abs(geo.badgeLeft - geo.qLeft) <= 0.5 && Math.abs(geo.badgeLeft - geo.textLeft) <= 0.5,
-  `badge=${geo.badgeLeft} q=${geo.qLeft} text=${geo.textLeft}`,
+  '原问题/回答文字左缘 = 标签文字左缘(三处文字同一条左基线)',
+  Math.abs(geo.badgeInkLeft - geo.qInkLeft) <= 0.5 &&
+    Math.abs(geo.badgeInkLeft - geo.textInkLeft) <= 0.5,
+  `标签文字=${geo.badgeInkLeft} 原问题=${geo.qInkLeft} 回答=${geo.textInkLeft}(徽标外框=${geo.badgeLeft})`,
 )
 check(
   '操作钮图标化:两枚 24×24 图标钮(星标 + 复制)',

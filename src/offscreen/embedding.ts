@@ -10,16 +10,18 @@
  * (2026-09-16 工程审查③-V4:自 background/ 迁入 offscreen/ —— 本模块实际运行
  *  上下文是 offscreen 页;MODEL_NAME/EMBEDDING_VERSION 契约常量拆到
  *  shared/embedding-model.ts,SW 侧只引常量,transformers 不再进后台包。)
+ *
+ * (2026-09-17 第四十七轮:模型**内置**扩展包(扩展内 model/,ADR 0005)——
+ *  运行时纯本地加载,零远程请求;hf-mirror 仅存在于构建期脚本 scripts/model.mjs。
+ *  加载失败只可能源于本地文件缺失/损坏,文案指向「重新安装扩展」。)
  */
 
 import { pipeline, env, type FeatureExtractionPipeline } from '@xenova/transformers'
 import { MODEL_NAME } from '../shared/embedding-model'
+import { configureLocalModelEnv, toLocalModelErrorMessage } from './model-env'
 
-// 允许远程下载模型文件,首次使用时拉取并由浏览器缓存(扩展存储内)。
-// NOTE: huggingface.co 在本网络不可达;改用 hf-mirror.com 国内镜像(已验证可达)。
-env.allowLocalModels = false
-env.allowRemoteModels = true
-env.remoteHost = 'https://hf-mirror.com'
+// 模型文件随包内置(扩展内 model/),运行时零远程请求。
+configureLocalModelEnv(env, (p) => chrome.runtime.getURL(p))
 
 // 强制单线程 WASM 推理:多线程 ONNX 以 blob: URL 起 worker,
 // 被扩展 CSP 拦截(script-src 'self' 'wasm-unsafe-eval' 不含 blob:)。
@@ -64,7 +66,7 @@ async function getOrLoadPipeline(): Promise<FeatureExtractionPipeline> {
     return _pipe
   } catch (err) {
     _modelFailed = true
-    _lastModelError = err instanceof Error ? err.message : String(err)
+    _lastModelError = toLocalModelErrorMessage(err instanceof Error ? err.message : String(err))
     _retryAt = Date.now() + FAIL_COOLDOWN_MS
     _loadPromise = null
     throw err

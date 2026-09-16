@@ -44,6 +44,12 @@ import {
   buildOverlayCss,
   parseThemeMode,
 } from '../ui/overlay-css'
+import {
+  COPY_ICON,
+  LOADER_ICON,
+  STAR_FILLED_ICON,
+  STAR_ICON,
+} from '../ui/overlay-icons'
 import { controlH, spacing } from '../ui/design'
 import { getThemeTokens, type ThemeMode } from '../ui/theme'
 
@@ -370,11 +376,28 @@ function badge(kind: Suggestion['kind']): HTMLSpanElement {
   return b
 }
 
-function miniBtn(label: string): HTMLButtonElement {
+/**
+ * 图标操作钮(第三十七轮 v2.6.24,用户指定"设置标准回答用星图标、复制用图标替代")——
+ * 24px 方钮 + 13px lucide 图标(与 popup 行悬浮图标钮同档同语言);
+ * 无文字,语义落在 `title` 与 `aria-label` 上;`data-action` 供验收脚本稳定定位
+ * (原先靠按钮文字选元素,文案一改脚本就断)。
+ */
+function iconBtn(icon: string, label: string, action: string): HTMLButtonElement {
   const b = document.createElement('button')
-  b.className = 'pddcs-mini'
-  b.textContent = label
+  b.type = 'button'
+  b.className = 'pddcs-icon-btn'
+  b.dataset.action = action
+  b.innerHTML = icon
+  b.title = label
+  b.setAttribute('aria-label', label)
   return b
+}
+
+/** 请求在途:图标原地换转圈(替代原「设置中… / 取消中…」文字反馈);收尾由 renderActions 重建 */
+function setBusy(btn: HTMLButtonElement, on: boolean): void {
+  btn.disabled = on
+  btn.classList.toggle('pddcs-icon-btn-busy', on)
+  if (on) btn.innerHTML = LOADER_ICON
 }
 
 function candidateRow(s: Suggestion, query: string): HTMLDivElement {
@@ -391,9 +414,15 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   top.className = 'pddcs-cand-top'
   top.appendChild(badge(s.kind))
   // 得分数字对客服没有决策价值,不再展示(2026-09-15 用户要求);同内容折叠数保留
-  // (v2.6.19:折叠数移至行右下角悬浮才显,行加 folded 类预留条位,见 append 处)
+  // (v2.6.25:自"行右下角悬浮才显"回到行首行、紧贴徽标右侧并常驻 —— 见 overlay-css 注释)
   const foldCount = s.foldCount ?? 1
-  if (foldCount > 1) row.classList.add('pddcs-cand-folded')
+  if (foldCount > 1) {
+    const fold = document.createElement('span')
+    fold.className = 'pddcs-fold'
+    fold.textContent = `同内容×${foldCount}`
+    fold.title = `该问题下有 ${foldCount} 条相同内容的答复(已合并为一条候选)`
+    top.appendChild(fold)
+  }
   const actions = document.createElement('div')
   actions.className = 'pddcs-cand-actions'
   top.appendChild(actions)
@@ -401,8 +430,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
 
   /** 设为标准回答(每问上限见 MAX_GOLDENS_PER_QUESTION,刷新后同问题多条按时间倒序) */
   const addGolden = async (btn: HTMLButtonElement): Promise<void> => {
-    btn.disabled = true
-    btn.textContent = '设置中…'
+    setBusy(btn, true)
     try {
       const resp = await chrome.runtime.sendMessage({
         type: 'ADD_GOLDEN',
@@ -434,8 +462,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   const cancelGolden = async (btn: HTMLButtonElement): Promise<void> => {
     const id = goldenId
     if (!id) return
-    btn.disabled = true
-    btn.textContent = '取消中…'
+    setBusy(btn, true)
     try {
       const resp = await chrome.runtime.sendMessage({
         type: 'DELETE_GOLDEN',
@@ -454,20 +481,29 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
     renderActions()
   }
 
-  /** 操作钮:按 goldenId 在「设置标准回答 / 取消标准回答」之间翻转 */
+  /**
+   * 操作钮(第三十七轮 v2.6.24,用户"设置标准回答用星图标替代、复制用图标替代"):
+   *  - 星标 = 设为标准回答:未设 → 描边灰星,已设 → **实心金星**(与原琥珀徽标同源语义),点击翻转;
+   *  - 复制 = 复制图标(无状态)。
+   * 无文字后语义全靠 title/aria-label 承载(悬浮可见,无障碍可读)。
+   */
   function renderActions(): void {
     actions.textContent = ''
     const isGolden = goldenId !== null
-    const goldBtn = miniBtn(isGolden ? '取消标准回答' : '设置标准回答')
-    goldBtn.title = isGolden
-      ? '取消后该回复不再作为标准回答(历史问答记录不受影响)'
-      : `将当前问题 + 该回复设为标准回答(每个问题最多 ${MAX_GOLDENS_PER_QUESTION} 条)`
-    if (isGolden) goldBtn.classList.add('pddcs-mini-danger')
+    const goldBtn = iconBtn(
+      isGolden ? STAR_FILLED_ICON : STAR_ICON,
+      isGolden
+        ? '取消标准回答(取消后该回复不再作为标准回答,历史问答记录不受影响)'
+        : `设为标准回答(当前问题 + 该回复,每个问题最多 ${MAX_GOLDENS_PER_QUESTION} 条)`,
+      'golden',
+    )
+    goldBtn.classList.add('pddcs-icon-btn-star')
+    if (isGolden) goldBtn.classList.add('pddcs-icon-btn-golden')
     goldBtn.addEventListener('click', (ev) => {
       ev.stopPropagation()
       void (isGolden ? cancelGolden(goldBtn) : addGolden(goldBtn))
     })
-    const copyBtn = miniBtn('复制')
+    const copyBtn = iconBtn(COPY_ICON, '复制该条答复文本', 'copy')
     copyBtn.addEventListener('click', (ev) => {
       ev.stopPropagation()
       void copyText(s.text).then((ok) =>
@@ -491,14 +527,6 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   text.className = 'pddcs-cand-text'
   text.textContent = s.text
   row.appendChild(text)
-
-  // 同内容折叠数:行右下角悬浮才显(v2.6.19 用户指定;原在徽标旁常驻)
-  if (foldCount > 1) {
-    const fold = document.createElement('span')
-    fold.className = 'pddcs-fold'
-    fold.textContent = `同内容×${foldCount}`
-    row.appendChild(fold)
-  }
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {

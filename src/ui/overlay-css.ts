@@ -7,8 +7,9 @@
  * (2026-09-16 工程审查③-V2:自 utils/ 迁入 ui/,与令牌/尺寸/滚动条同层)
  */
 import type { ThemeMode, ThemeTokens } from './theme'
-import { controlH, fontFamily, fontSize, motion, radius, semantic, spacing } from './design'
+import { controlH, fontFamily, fontSize, radius, semantic, spacing } from './design'
 import { thinScrollbarCss } from './scrollbar'
+import { ICON_BTN_SIZE } from './overlay-icons'
 
 /** 与 popup 主题上下文(theme-context)共用的存储键 */
 export const THEME_STORAGE_KEY = 'pddcs:theme'
@@ -56,8 +57,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-popup-head { display: flex; align-items: center; flex: 0 0 auto; padding: 10px 14px 9px;
   border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.body}px;
   color: ${tk.textMuted}; letter-spacing: -0.01em; }
-/* 滚动中段:唯一滚动容器(6px 细轨挂此) */
-.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 2px 0 4px; }
+/* 滚动中段:唯一滚动容器(6px 细轨挂此);上下贴边 2/4→1/3px(v2.6.24 与行距一并收紧) */
+.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 1px 0 3px; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
   width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
   justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
@@ -65,45 +66,66 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 候选行(v2.6.18 重设计):通栏矩形 → 内缩圆角软行(留白分组,无分隔线);
    悬浮与键盘选中共用同一软中性灰圆角填充(第二十三轮用户指定的中性灰口径;
    旧 3px 左描边属表格行语言,随通栏行一并移除) */
-/* 候选行(v2.6.20 收紧):行距 2px(外边距塌缩)+ 行内 padding 8px,
-   条目间视觉间隙 24→18px,列表更紧凑;悬浮/选中语言不变 */
-.pddcs-cand { position: relative; margin: 2px 8px; padding: 8px 12px; border-radius: ${radius.lg}px;
+/* 候选行(v2.6.20 收紧 → v2.6.24 再收紧 → v2.6.25 重配内外留白):
+   v2.6.25 用户"标签/原问题/回答之间间距各 +2px,但词条整体高度不要变化;词条的默认高度减小一点"——
+   两处行内间距 2→4px(+4px),行内上下 padding 6→3px(−6px),
+   行内竖向总留白 16→14px → **净减 2px**:信息之间更松,词条反而更矮;
+   行内**左** padding 12px 不动:它是"徽标左缘 = 正文左缘"的对齐基线(见下) */
+.pddcs-cand { position: relative; margin: 1px 8px; padding: 3px 12px; border-radius: ${radius.lg}px;
   cursor: pointer; transition: background-color .12s ease; }
 .pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
-/* 折叠候选行:底边预留条位,右下角「同内容×n」不压正文 */
-.pddcs-cand-folded { padding-bottom: 22px; }
+/* 行首行:徽标居左 → 折叠数紧随徽标 → 操作图标钮居右(margin-left:auto 顶到行末);
+   行内左 padding 是公共基线 —— 徽标左缘与下方「原问题 / 正文」左缘同一条线
+   (v2.6.24 用户指定"下方内容和标签左侧对齐";正文均为块级子元素,不额外缩进);
+   下间距 2→4px 见 v2.6.25 留白重配 */
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-/* 类别徽标(v2.6.19 重设计,用户"明显一点"):6px 圆点 → 软底色 chip ——
-   标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(色相同源 semantic,两表面不割裂),
-   历史 = 中性灰软底灰字;10px caption 档不抢正文 */
-.pddcs-badge { display: inline-flex; align-items: center; padding: 1px 7px;
-  border-radius: ${radius.sm}px; font-size: 10px; font-weight: 500;
+/* 类别徽标(v2.6.19 chip 化 → v2.6.24 放大):用户"标准回答、历史、知识库标签比例增大"——
+   10px / 内边距 1px 7px → **11.5px(secondary 档)/ 3px 9px**,圆角 4→6px,
+   与 24px 图标钮同行时是一眼可辨的类别标签;
+   配色不变:标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(semantic 同源,两表面不割裂),
+   历史 = 中性灰软底灰字 */
+.pddcs-badge { display: inline-flex; align-items: center; padding: 3px 9px;
+  border-radius: ${radius.md}px; font-size: ${fontSize.secondary}px; font-weight: 500;
   background: ${tk.selectedBg}; color: ${tk.textMuted}; }
 .pddcs-badge.golden { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
 .pddcs-badge.knowledge { background: rgba(20, 174, 92, 0.12); color: ${semantic.knowledge}; }
-/* 同内容折叠数(v2.6.19,用户指定):移至行右下角,悬浮才显 */
-.pddcs-fold { position: absolute; right: 10px; bottom: 6px; color: ${tk.textTertiary};
-  font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-.pddcs-cand:hover .pddcs-fold { opacity: 1; }
-/* 操作钮(v2.6.18):悬浮/选中才显 —— 静止时行内只有徽标+回显+正文,
-   9 行候选不再顶着一排常驻灰字小钮;布局占位不变,显现无跳动 */
-.pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px;
+/* 同内容折叠数(v2.6.19 行右下角悬浮才显 → v2.6.25 用户"同内容移动至标签的右侧"):
+   回到行首行、紧贴徽标右侧,与徽标共用行首行的 align-items 中线;
+   随之**常驻显示**(右下角那版是浮动覆盖物,才需要悬浮才显来避让正文),
+   absolute 定位与折叠行的底边条位预留规则一并删除 —— 折叠与否不再改变词条高度 */
+.pddcs-fold { color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; line-height: 1;
+  white-space: nowrap; }
+/* 操作钮(v2.6.18 悬浮显现;v2.6.24 文字 → 图标):静止时行内只有徽标 + 回显 + 正文,
+   悬浮/选中才显两枚图标钮;margin-right -6px = 按用户"按钮向右移动一点"
+   把这组钮自行内边距(12px)推向面板右缘(仍留在悬浮底色块内) */
+.pddcs-cand-actions { margin-left: auto; margin-right: -6px; display: flex; gap: 2px;
   opacity: 0; pointer-events: none; transition: opacity .12s ease; }
 .pddcs-cand:hover .pddcs-cand-actions, .pddcs-cand-selected .pddcs-cand-actions {
   opacity: 1; pointer-events: auto; }
-.pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: ${radius.sm}px;
-  cursor: pointer; font-size: 10.5px; padding: 2px 8px; color: ${tk.textMuted}; font-weight: 500;
+/* 图标操作钮(第三十七轮 v2.6.24):24px(controlH.inline)方钮 + 13px lucide 图标 ——
+   与 popup 行悬浮图标钮同档同语言(透明底 → 悬浮浅灰,颜色由 currentColor 继承) */
+.pddcs-icon-btn { width: ${ICON_BTN_SIZE}px; height: ${ICON_BTN_SIZE}px; flex: 0 0 auto; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; border: none;
+  border-radius: ${radius.sm}px; background: transparent; color: ${tk.textTertiary}; cursor: pointer;
   transition: background-color .1s ease, color .1s ease; }
-.pddcs-mini:hover { background: ${tk.borderLight}; color: ${tk.text}; }
-/* 危险型迷你钮(取消标准回答):悬浮转红,与图标钮的危险态同语言 */
-.pddcs-mini-danger { color: ${tk.errorText}; }
-.pddcs-mini-danger:hover { background: ${tk.errorBg}; color: ${tk.errorText}; }
+.pddcs-icon-btn:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
+.pddcs-icon-btn:disabled { opacity: .5; cursor: default; }
+/* 星标钮(设为 / 取消标准回答):悬浮走语义金(与琥珀徽标、popup 金标同源);
+   已设态 = **实心金星**,一眼看出该条已被提升为标准回答,点击即取消 */
+.pddcs-icon-btn-star:hover { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
+.pddcs-icon-btn-golden { color: ${semantic.golden}; }
+.pddcs-icon-btn-golden:hover { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
+/* 请求在途:图标原地转圈(替代原「设置中… / 取消中…」文字反馈) */
+.pddcs-icon-btn-busy svg { animation: pddcs-spin .7s linear infinite; }
+@keyframes pddcs-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pddcs-icon-btn-busy svg { animation: none; } }
 /* 回答正文 = 面板唯一主层(v2.6.17):13.5px + 1.6 行高,与其余 11.5/10.5 灰字拉开两档 */
 .pddcs-cand-text { font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-/* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略 */
-.pddcs-cand-q { margin-bottom: 3px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
+/* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略;
+   左缘与上方徽标左缘同基线(同为行内左 padding 12px 起),下间距 2→4px(v2.6.25 留白重配) */
+.pddcs-cand-q { margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 页脚常驻壳:hairline 上边 + 次级表面底,键位提示不再漂在正文后面 */
 .pddcs-popup-foot { flex: 0 0 auto; padding: 7px 14px; border-top: 1px solid ${tk.borderLight};

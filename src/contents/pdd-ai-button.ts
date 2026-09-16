@@ -76,6 +76,8 @@ function applyOverlayTheme(theme: OverlayThemeMode): void {
     document.head.appendChild(style)
   }
   style.textContent = buildOverlayCss(getThemeTokens(theme))
+  // 面板开着时切主题:同步内联背景(见 openPopup 的不透明双保险)
+  if (popupEl) popupEl.style.backgroundColor = getThemeTokens(theme).bg
 }
 
 /** Lucide "sparkles" 图标已按用户要求移除(2026-09-15):按钮为纯文字胶囊 */
@@ -510,6 +512,9 @@ function openPopup(
   const overlay = ensureOverlay()
   const el = document.createElement('div')
   el.className = 'pddcs-popup'
+  // 不透明双保险(第二十三轮,用户反馈面板似半透明):本样式注入平台页面,
+  // 类样式可能被页面级 !important 规则盖掉;内联背景优先级最高,直观兜底
+  el.style.backgroundColor = getThemeTokens(currentTheme).bg
 
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'

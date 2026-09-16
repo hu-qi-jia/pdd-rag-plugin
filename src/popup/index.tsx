@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
 import { controlH, fontFamily, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
+import { thinScrollbarCss } from '../ui/scrollbar'
 import {
   BookOpenIcon,
   FolderIcon,
@@ -51,17 +52,9 @@ html, body { margin: 0; padding: 0; background: transparent !important; }
   transition: border-color .12s ease;
 }
 
-/* ── 滚动条:细、悬浮才出现(滑块色随主题令牌注入,暗色下必须走浅色)── */
-.pddcs-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.pddcs-scroll:hover { scrollbar-color: var(--pddcs-scroll-thumb) transparent; }
-.pddcs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.pddcs-scroll::-webkit-scrollbar-thumb {
-  background: transparent; border-radius: 9999px; border: 2px solid transparent;
-  background-clip: content-box; min-height: 36px;
-}
-.pddcs-scroll:hover::-webkit-scrollbar-thumb {
-  background: var(--pddcs-scroll-thumb); background-clip: content-box;
-}
+/* ── 滚动条:细、悬浮才出现(第二十三轮抽为公共生成器 ui/scrollbar.ts,
+      与聊天页推荐面板同一规格;滑块色随主题令牌注入,暗色下必须走浅色)── */
+${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
 
 /* ── 导航图标按钮:任何状态下都只有图标本身,无背景块(2026-09-15 用户要求)── */
 .pddcs-rail-btn {

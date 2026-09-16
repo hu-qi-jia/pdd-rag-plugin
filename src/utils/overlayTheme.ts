@@ -7,6 +7,7 @@
  */
 import type { ThemeTokens } from '../ui/theme'
 import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
+import { thinScrollbarCss } from '../ui/scrollbar'
 
 /** 与 popup 主题上下文(theme-context)共用的存储键 */
 export const THEME_STORAGE_KEY = 'pddcs:theme'
@@ -40,11 +41,13 @@ export function buildOverlayCss(tk: ThemeTokens): string {
 .pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
 
-/* 候选弹窗 — 工具风浮层卡片 */
+/* 候选弹窗 — 工具风浮层卡片;opacity 显式置 1(第二十三轮:用户反馈面板似半透明,
+   本样式注入平台页面,防御页面级 opacity/filter 干扰;背景另行内联双保险) */
 .pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px)); overflow: auto;
   pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
-  box-shadow: ${tk.shadow};
+  box-shadow: ${tk.shadow}; opacity: 1;
   font-size: ${fontSize.body}px; color: ${tk.text}; }
+${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 .pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
   border-bottom: 1px solid ${tk.borderLight}; font-weight: 600; font-size: ${fontSize.title}px; position: sticky; top: 0;
   background: ${tk.bg}; letter-spacing: -0.01em; }
@@ -55,11 +58,11 @@ export function buildOverlayCss(tk: ThemeTokens): string {
 .pddcs-cand { padding: 10px 14px; border-bottom: 1px solid ${tk.borderLight}; cursor: pointer;
   transition: background-color .1s ease, box-shadow .1s ease; }
 .pddcs-cand:hover { background: ${tk.btnHoverBg}; }
-/* 键盘选中态(v2.6.13 加强:accent 软底 + 3px 左描边,原 btnHoverBg 底太淡难辨);
+/* 键盘选中态(v2.6.14 用户指定中性灰:灰软底 + 3px 灰左描边,不再用 accent 蓝);
    :hover 同列避免悬浮底色盖掉选中底色(specificity 同级时后者胜);
    悬浮会把选中态一并带过去(mouseenter 写同一 state),两套高亮不打架 */
-.pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.accentBg};
-  box-shadow: inset 3px 0 0 ${tk.accent}; }
+.pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg};
+  box-shadow: inset 3px 0 0 ${tk.selectedBar}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .pddcs-badge { display: inline-flex; align-items: center; border-radius: ${radius.sm}px;
   font-size: 10px; font-weight: 600; padding: 2px 7px; }

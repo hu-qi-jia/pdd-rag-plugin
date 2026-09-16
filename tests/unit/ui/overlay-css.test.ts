@@ -1,7 +1,7 @@
 // 覆盖层主题单测(2026-09-15 评审 设计1):聊天页覆盖层 CSS 原写死浅色令牌,
 // 现抽取为纯函数 buildOverlayCss(按 ThemeTokens 生成)+ parseThemeMode(容错解析存储值)。
 import { describe, it, expect } from 'vitest'
-import { buildOverlayCss, parseThemeMode, THEME_STORAGE_KEY } from '../../../src/utils/overlayTheme'
+import { buildOverlayCss, parseThemeMode, THEME_STORAGE_KEY } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
 import { semantic } from '../../../src/ui/design'
 

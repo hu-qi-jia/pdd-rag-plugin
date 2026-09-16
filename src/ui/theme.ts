@@ -1,4 +1,5 @@
-import type { ThemeMode } from './theme-context'
+/** 主题模式;定义在令牌层(theme),上下文与覆盖层共用,避免 UI 层互相倒挂 */
+export type ThemeMode = 'light' | 'dark'
 
 /**
  * 设计令牌 — 对齐 Figma 编辑器工具界面配色(与 pddddd 控制台同一体系)。

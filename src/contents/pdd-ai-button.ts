@@ -12,7 +12,7 @@
  *    (鼠标悬浮同步选中,两套高亮共用一态)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
  *  - 主题:覆盖层跟随 popup 的主题设置(storage pddcs:theme + onChanged 实时切换,
- *    2026-09-15 设计1;样式生成纯逻辑见 utils/overlayTheme.ts)
+ *    2026-09-15 设计1;样式生成纯逻辑见 ui/overlay-css.ts)
  *
  * 边界(不逾越):
  *  - 只填充官方输入框 textarea#replyTextarea(原生 value setter + input 事件,
@@ -43,10 +43,9 @@ import {
   POPUP_W,
   buildOverlayCss,
   parseThemeMode,
-  type OverlayThemeMode,
-} from '../utils/overlayTheme'
+} from '../ui/overlay-css'
 import { controlH, spacing } from '../ui/design'
-import { getThemeTokens } from '../ui/theme'
+import { getThemeTokens, type ThemeMode } from '../ui/theme'
 
 export const config: PlasmoCSConfig = {
   matches: ['https://mms.pinduoduo.com/chat-merchant/*'],
@@ -64,9 +63,9 @@ const MAX_QUERY_CHARS = 800
 // ─── 覆盖层与样式(主题跟随 popup 设置,2026-09-15 设计1)───────────────────────
 
 /** 当前主题;样式整体由 buildOverlayCss 按令牌生成,切换即重建 */
-let currentTheme: OverlayThemeMode = 'light'
+let currentTheme: ThemeMode = 'light'
 
-function applyOverlayTheme(theme: OverlayThemeMode): void {
+function applyOverlayTheme(theme: ThemeMode): void {
   currentTheme = theme
   let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null
   if (!style) {

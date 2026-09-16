@@ -1,9 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { loadFromChrome, saveToChrome, subscribeChromeStorage } from '../utils/chrome-storage'
+import type { ThemeMode } from './theme'
 
 const STORAGE_KEY = 'pddcs:theme'
-
-export type ThemeMode = 'light' | 'dark'
 
 interface ThemeContextValue {
   theme: ThemeMode

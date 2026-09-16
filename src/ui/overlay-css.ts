@@ -4,18 +4,17 @@
  * popup 里切深色后聊天页面板仍是白的。现把 CSS 抽成按 ThemeTokens 生成的纯函数,
  * 内容脚本负责读 chrome.storage(pddcs:theme)+ onChanged 实时重建。
  * 本模块保持纯逻辑(不触碰 chrome/DOM),供内容脚本与单测共用。
+ * (2026-09-16 工程审查③-V2:自 utils/ 迁入 ui/,与令牌/尺寸/滚动条同层)
  */
-import type { ThemeTokens } from '../ui/theme'
-import { controlH, fontFamily, fontSize, radius, semantic, spacing } from '../ui/design'
-import { thinScrollbarCss } from '../ui/scrollbar'
+import type { ThemeMode, ThemeTokens } from './theme'
+import { controlH, fontFamily, fontSize, radius, semantic, spacing } from './design'
+import { thinScrollbarCss } from './scrollbar'
 
 /** 与 popup 主题上下文(theme-context)共用的存储键 */
 export const THEME_STORAGE_KEY = 'pddcs:theme'
 
-export type OverlayThemeMode = 'light' | 'dark'
-
 /** 存储值容错解析:非法/缺失一律回退浅色 */
-export function parseThemeMode(value: unknown): OverlayThemeMode {
+export function parseThemeMode(value: unknown): ThemeMode {
   return value === 'dark' ? 'dark' : 'light'
 }
 

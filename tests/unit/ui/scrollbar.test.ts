@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { thinScrollbarCss, SCROLLBAR_WIDTH } from '../../../src/ui/scrollbar'
-import { buildOverlayCss } from '../../../src/utils/overlayTheme'
+import { buildOverlayCss } from '../../../src/ui/overlay-css'
 import { lightTheme } from '../../../src/ui/theme'
 
 describe('thinScrollbarCss:统一规格生成', () => {

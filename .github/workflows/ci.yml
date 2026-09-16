@@ -34,3 +34,43 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # 数据层 e2e:真实扩展上下文(SW + offscreen 本地推理)跑纯数据断言,
+  # 不截图不验 UI 像素;模型经 hf-mirror 下载(约 25MB)+ WASM 推理,给足超时。
+  e2e:
+    name: Data-layer E2E · verify-*
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: verify-kb
+        run: node scripts/verify-kb.mjs
+
+      - name: verify-p3
+        run: node scripts/verify-p3.mjs
+
+      - name: verify-golden-multi
+        run: node scripts/verify-golden-multi.mjs
+
+      - name: verify-settings
+        run: node scripts/verify-settings.mjs

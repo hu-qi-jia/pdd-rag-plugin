@@ -27,7 +27,7 @@ import { CHROME, EXT, LOGGED_IN_PROFILE, sleep } from './lib.mjs'
 const PROFILE = LOGGED_IN_PROFILE
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
-  executablePath: CHROME,
+  ...(CHROME ? { executablePath: CHROME } : {}),
   headless: false,
   args: [
     `--disable-extensions-except=${EXT}`,

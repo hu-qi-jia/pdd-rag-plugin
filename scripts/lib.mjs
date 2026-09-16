@@ -13,10 +13,9 @@ import path from 'node:path'
 export const ROOT = path.resolve(import.meta.dirname, '..')
 /** 扩展构建产物目录(pnpm build 后生成) */
 export const EXT = path.join(ROOT, 'build', 'chrome-mv3-prod')
-/** Chromium:默认本机 ms-playwright 缓存,可用环境变量 PDD_E2E_CHROME 覆盖 */
-export const CHROME =
-  process.env.PDD_E2E_CHROME ??
-  'C:\\Users\\胡起嘉\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe'
+/** Chromium 可执行文件:仅当设 PDD_E2E_CHROME 时显式指定(真机联调/特殊浏览器);
+ *  默认 null → Playwright 自带注册表解析(本机缓存与 CI 同机制,不再硬编码绝对路径) */
+export const CHROME = process.env.PDD_E2E_CHROME ?? null
 /** 真机已登录 profile(父目录,复用 cookie;DPAPI 绑定本机账户) */
 export const LOGGED_IN_PROFILE = path.resolve(ROOT, '..', '.chrome-debug-profile')
 /** 常驻诊断 profile(仓库内,模型缓存可复用;已 gitignore) */
@@ -29,7 +28,9 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 /** 加载扩展启动 Chromium(各脚本原有 launch 参数组的统一版) */
 export async function launchExtContext(profile, { headless = false, timeout = 60000 } = {}) {
   return chromium.launchPersistentContext(profile, {
-    executablePath: CHROME,
+    // 指定 PDD_E2E_CHROME 用之;否则 channel: 'chromium'(完整 chromium,新无头模式,
+    // 支持 --load-extension——默认的 headless shell 不加载扩展)
+    ...(CHROME ? { executablePath: CHROME } : { channel: 'chromium' }),
     headless,
     timeout,
     args: [

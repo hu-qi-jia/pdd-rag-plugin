@@ -25,10 +25,9 @@ export interface ThemeTokens {
   separator: string
   accent: string
   accentHover: string
-  /** 列表/面板行选中底色(中性灰软底;v2.6.14 用户指定弃用蓝色软底) */
+  /** 列表/面板行选中底色(中性灰软底;v2.6.14 用户指定弃用蓝色软底;
+   *  v2.6.18 起同时用作候选行悬浮底,左描边令牌 selectedBar 随重设计移除) */
   selectedBg: string
-  /** 行选中左描边色(比底色深一档的中性灰,结构感不抢色) */
-  selectedBar: string
   btnBg: string
   btnBorder: string
   btnHoverBg: string
@@ -66,7 +65,6 @@ export const lightTheme: ThemeTokens = {
   accent: '#0d99ff',
   accentHover: '#0b87e0',
   selectedBg: 'rgba(0,0,0,0.06)',
-  selectedBar: 'rgba(0,0,0,0.24)',
   btnBg: '#ffffff',
   btnBorder: '#d4d4d4',
   btnHoverBg: '#fafafa',
@@ -102,7 +100,6 @@ export const darkTheme: ThemeTokens = {
   accent: '#4cb3ff',
   accentHover: '#6bc4ff',
   selectedBg: 'rgba(255,255,255,0.10)',
-  selectedBar: 'rgba(255,255,255,0.32)',
   btnBg: '#2c2c2c',
   btnBorder: '#3b3d40',
   btnHoverBg: '#383b3d',

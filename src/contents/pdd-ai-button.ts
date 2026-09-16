@@ -339,21 +339,17 @@ function applySelection(): void {
   const rows = popupEl.querySelectorAll('.pddcs-cand')
   rows.forEach((r, i) => r.classList.toggle('pddcs-cand-selected', i === armedPanel!.selected))
   // 长面板(候选至多 9 条)可能出滚动条:选中项始终滚进可视区。
-  // 滚动校正(v2.6.17 第二十六轮):sticky 头部悬浮在滚动视口上沿,scrollIntoView(nearest)
-  // 会把行对齐到容器顶 → 行被头部盖住(用户反馈"回绕到首条出现折叠")。
-  // 改手动滚动,上下界都按头部实高校正;回绕到首条时 scrollTop 自然归 0(滚回最上)。
+  // v2.6.18 三段式后滚动容器是 .pddcs-popup-body,头/脚已移出滚动视口,不再需要
+  // 头部实高补偿(v2.6.17 的 sticky 遮挡问题随结构消失),headH 传 0;
+  // scrollForSelection 算术不变(含单测):选中首条 → 直接归零(回绕即回顶)。
+  const body = popupEl.querySelector('.pddcs-popup-body')
   const row = rows[armedPanel.selected]
-  if (row instanceof HTMLElement) {
-    // 滚动校正算术见 pdd/ui-logic#scrollForSelection(含单测):
-    // 选中首条 → 直接归零(第二十六轮用户指定"回绕到首条滚到最上方");
-    // 被 sticky 头遮住上滚、超出容器底下滚
-    const head = popupEl.querySelector('.pddcs-popup-head')
-    const headH = head ? head.getBoundingClientRect().height : 0
-    popupEl.scrollTop = scrollForSelection(
-      popupEl.scrollTop,
-      popupEl.getBoundingClientRect(),
+  if (body instanceof HTMLElement && row instanceof HTMLElement) {
+    body.scrollTop = scrollForSelection(
+      body.scrollTop,
+      body.getBoundingClientRect(),
       row.getBoundingClientRect(),
-      headH,
+      0,
       armedPanel.selected,
     )
   }
@@ -536,6 +532,9 @@ function openPopup(
   head.appendChild(close)
   el.appendChild(head)
 
+  // v2.6.18 三段式:滚动只发生在 body 中段,头/脚常驻成面板外壳(页脚键位提示不再滚走)
+  const body = document.createElement('div')
+  body.className = 'pddcs-popup-body'
   for (const [i, s] of items.entries()) {
     const row = candidateRow(s, query)
     row.dataset.idx = String(i)
@@ -547,8 +546,9 @@ function openPopup(
         applySelection()
       })
     }
-    el.appendChild(row)
+    body.appendChild(row)
   }
+  el.appendChild(body)
 
   const foot = document.createElement('div')
   foot.className = 'pddcs-popup-foot'
@@ -570,8 +570,6 @@ function openPopup(
     foot.textContent = '点击候选填入输入框;发送请手动点击'
   }
   el.appendChild(foot)
-
-  overlay.appendChild(el)
 
   // 定位:水平方向按钮右侧优先,放不下换左侧,越界回缩;
   // 垂直方向必须按弹窗**实高**夹在视口内(几何算术见 pdd/ui-logic#popupPosition,含单测)

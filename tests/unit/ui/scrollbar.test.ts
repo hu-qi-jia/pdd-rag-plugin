@@ -22,9 +22,9 @@ describe('thinScrollbarCss:统一规格生成', () => {
 })
 
 describe('buildOverlayCss × thinScrollbarCss:聊天页推荐面板复用同一规格', () => {
-  it('面板滚动条走公共生成器(6px 细轨,滑块色 = scrollThumb 令牌)', () => {
+  it('面板滚动条走公共生成器(6px 细轨,滑块色 = scrollThumb 令牌;挂在滚动中段 body 上)', () => {
     const css = buildOverlayCss(lightTheme)
-    expect(css).toContain('.pddcs-popup::-webkit-scrollbar { width: 6px')
+    expect(css).toContain('.pddcs-popup-body::-webkit-scrollbar { width: 6px')
     expect(css).toContain(lightTheme.scrollThumb)
   })
 })

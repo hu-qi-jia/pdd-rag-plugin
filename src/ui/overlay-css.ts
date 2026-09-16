@@ -7,7 +7,7 @@
  * (2026-09-16 工程审查③-V2:自 utils/ 迁入 ui/,与令牌/尺寸/滚动条同层)
  */
 import type { ThemeMode, ThemeTokens } from './theme'
-import { controlH, fontFamily, fontSize, radius, semantic, spacing } from './design'
+import { controlH, fontFamily, fontSize, motion, radius, semantic, spacing } from './design'
 import { thinScrollbarCss } from './scrollbar'
 
 /** 与 popup 主题上下文(theme-context)共用的存储键 */
@@ -18,8 +18,8 @@ export function parseThemeMode(value: unknown): ThemeMode {
   return value === 'dark' ? 'dark' : 'light'
 }
 
-/** 候选弹窗宽度(CSS 与 JS 定位共用,单处维护) */
-export const POPUP_W = 340
+/** 候选弹窗宽度(CSS 与 JS 定位共用,单处维护;v2.6.18 340→360,给 13.5px 中文正文松一档) */
+export const POPUP_W = 360
 
 export function buildOverlayCss(tk: ThemeTokens): string {
   return `
@@ -40,31 +40,34 @@ export function buildOverlayCss(tk: ThemeTokens): string {
 .pddcs-ai-btn .pddcs-ai-btn-label { white-space: nowrap; }
 .pddcs-ai-btn:disabled { opacity: .55; cursor: wait; }
 
-/* 候选弹窗 — 工具风浮层卡片;opacity 显式置 1(第二十三轮:用户反馈面板似半透明,
-   本样式注入平台页面,防御页面级 opacity/filter 干扰;背景另行内联双保险) */
-.pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px)); overflow: auto;
-  pointer-events: auto; background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
+/* 候选弹窗(v2.6.18 重设计):三段式浮层壳 —— 头/页脚常驻成"外壳",中段 body 是唯一滚动区;
+   overflow: hidden 负责把 body 的滚动条裁进圆角;opacity 显式 1(第二十三轮防页面样式干扰,
+   背景另行内联双保险);入场 160ms 淡入上移 */
+.pddcs-popup { position: fixed; width: ${POPUP_W}px; max-height: min(62vh, calc(100vh - 16px));
+  display: flex; flex-direction: column; overflow: hidden; pointer-events: auto;
+  background: ${tk.bg}; border: 1px solid ${tk.border}; border-radius: ${radius.xl}px;
   box-shadow: ${tk.shadow}; opacity: 1;
-  font-size: ${fontSize.body}px; color: ${tk.text}; }
-${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
-/* 头部极简(v2.6.17 第二十六轮):小号中灰 500 字重让位给候选正文,标题不再是面板里最大的字 */
-.pddcs-popup-head { display: flex; align-items: center; padding: 11px 14px;
+  font-size: ${fontSize.body}px; color: ${tk.text};
+  animation: pddcs-pop-in .16s cubic-bezier(0.2, 0, 0, 1); }
+@keyframes pddcs-pop-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .pddcs-popup { animation: none; } }
+${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
+/* 头部常驻壳(字号极简口径 v2.6.17 不变;sticky 取消 —— 头已移出滚动视口,不再遮挡行) */
+.pddcs-popup-head { display: flex; align-items: center; flex: 0 0 auto; padding: 10px 14px 9px;
   border-bottom: 1px solid ${tk.borderLight}; font-weight: 500; font-size: ${fontSize.body}px;
-  color: ${tk.textMuted}; position: sticky; top: 0;
-  background: ${tk.bg}; letter-spacing: -0.01em; }
+  color: ${tk.textMuted}; letter-spacing: -0.01em; }
+/* 滚动中段:唯一滚动容器(6px 细轨挂此) */
+.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; padding: 3px 0 5px; }
 .pddcs-popup-close { margin-left: auto; border: none; background: none; cursor: pointer;
   width: 24px; height: 24px; border-radius: ${radius.sm}px; display: flex; align-items: center;
   justify-content: center; color: ${tk.textTertiary}; font-size: 15px; transition: background-color .12s ease; }
 .pddcs-popup-close:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
-/* 候选行(v2.6.16 第二十五轮 ChatGPT 化):去 1px 行分隔线,靠留白 + 悬浮底色分组 */
-.pddcs-cand { padding: 12px 14px; cursor: pointer;
-  transition: background-color .1s ease, box-shadow .1s ease; }
-.pddcs-cand:hover { background: ${tk.btnHoverBg}; }
-/* 键盘选中态(v2.6.14 用户指定中性灰:灰软底 + 3px 灰左描边,不再用 accent 蓝);
-   :hover 同列避免悬浮底色盖掉选中底色(specificity 同级时后者胜);
-   悬浮会把选中态一并带过去(mouseenter 写同一 state),两套高亮不打架 */
-.pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg};
-  box-shadow: inset 3px 0 0 ${tk.selectedBar}; }
+/* 候选行(v2.6.18 重设计):通栏矩形 → 内缩圆角软行(留白分组,无分隔线);
+   悬浮与键盘选中共用同一软中性灰圆角填充(第二十三轮用户指定的中性灰口径;
+   旧 3px 左描边属表格行语言,随通栏行一并移除) */
+.pddcs-cand { margin: 4px 8px; padding: 10px 12px; border-radius: ${radius.lg}px; cursor: pointer;
+  transition: background-color .12s ease; }
+.pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 /* 类别徽标(v2.6.16 降级):色块 chip → 6px 小圆点 + 灰字,信息在视觉噪音降;
    圆点色与 popup 金标 ★ 同源(semantic 金/绿),两表面色系不割裂;历史 = 中性灰点 */
@@ -75,7 +78,12 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 .pddcs-badge.golden::before { background: ${semantic.golden}; }
 .pddcs-badge.knowledge::before { background: ${semantic.knowledge}; }
 .pddcs-fold { color: ${tk.textTertiary}; font-size: 10px; }
-.pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px; }
+/* 操作钮(v2.6.18):悬浮/选中才显 —— 静止时行内只有徽标+回显+正文,
+   9 行候选不再顶着一排常驻灰字小钮;布局占位不变,显现无跳动 */
+.pddcs-cand-actions { margin-left: auto; display: flex; gap: 4px;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+.pddcs-cand:hover .pddcs-cand-actions, .pddcs-cand-selected .pddcs-cand-actions {
+  opacity: 1; pointer-events: auto; }
 .pddcs-mini { border: 1px solid transparent; background: transparent; border-radius: ${radius.sm}px;
   cursor: pointer; font-size: 10.5px; padding: 2px 8px; color: ${tk.textMuted}; font-weight: 500;
   transition: background-color .1s ease, color .1s ease; }
@@ -90,11 +98,13 @@ ${thinScrollbarCss('.pddcs-popup', tk.scrollThumb)}
 /* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略 */
 .pddcs-cand-q { margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pddcs-popup-foot { padding: 8px 14px; color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; }
+/* 页脚常驻壳:hairline 上边 + 次级表面底,键位提示不再漂在正文后面 */
+.pddcs-popup-foot { flex: 0 0 auto; padding: 7px 14px; border-top: 1px solid ${tk.borderLight};
+  background: ${tk.bgSecondary}; color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; }
 /* 键位键帽(v2.6.16):与 popup 设置页 HotkeyRow 的 <kbd> 同语言(灰底细边圆角等宽字) */
 .pddcs-kbd { display: inline-block; margin: 0 2px; padding: 1px 6px;
   border: 1px solid ${tk.border}; border-radius: ${radius.sm}px;
-  background: ${tk.bgSecondary}; color: ${tk.textMuted};
+  background: ${tk.bg}; color: ${tk.textMuted};
   font-size: 10px; line-height: 1.4; font-family: ui-monospace, Consolas, monospace; }
 
 /* 轻提示 — 近黑 toast(两主题下都深底白字,可读性不随主题切换) */

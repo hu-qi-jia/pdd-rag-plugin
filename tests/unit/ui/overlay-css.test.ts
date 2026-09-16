@@ -1,7 +1,12 @@
 // 覆盖层主题单测(2026-09-15 评审 设计1):聊天页覆盖层 CSS 原写死浅色令牌,
 // 现抽取为纯函数 buildOverlayCss(按 ThemeTokens 生成)+ parseThemeMode(容错解析存储值)。
 import { describe, it, expect } from 'vitest'
-import { buildOverlayCss, parseThemeMode, THEME_STORAGE_KEY } from '../../../src/ui/overlay-css'
+import {
+  buildOverlayCss,
+  parseThemeMode,
+  POPUP_W,
+  THEME_STORAGE_KEY,
+} from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
 import { semantic } from '../../../src/ui/design'
 
@@ -26,11 +31,10 @@ describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
 })
 
 describe('buildOverlayCss:ChatGPT 化视觉(2026-09-16 第二十五轮,1+2+3+6,不割裂)', () => {
-  it('候选行去分隔线靠留白分组(padding 12px 14px,无 border-bottom)', () => {
+  it('候选行去分隔线靠留白分组(无 border-bottom)', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).not.toContain('border-bottom')
-    expect(candRule).toContain('padding: 12px 14px')
   })
   it('徽标降级:色块 chip → 6px 小圆点(::before)+ 灰字,金/绿语义点同源 popup', () => {
     const css = buildOverlayCss(lightTheme)
@@ -76,6 +80,47 @@ describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六
   })
   it('死规则清理:score 元素早已移除,规则不再生成', () => {
     expect(buildOverlayCss(lightTheme)).not.toContain('.pddcs-score')
+  })
+})
+
+describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', () => {
+  it('面板加宽至 360(CSS 与 JS 定位共用常量,单处维护)', () => {
+    expect(POPUP_W).toBe(360)
+  })
+  it('内缩圆角软行:行带内缩 margin 与圆角;悬浮与选中共用同一软中性灰填充', () => {
+    const css = buildOverlayCss(lightTheme)
+    const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
+    expect(candRule).toContain('border-radius')
+    expect(candRule).toContain('margin:')
+    const fillRule = css.match(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
+    expect(fillRule).toContain(lightTheme.selectedBg)
+    expect(fillRule).not.toContain('inset 3px') // 左描边属旧表格语言,移除
+  })
+  it('操作钮悬浮/选中才显:静止 opacity 0 + pointer-events none,悬浮或选中显现', () => {
+    const css = buildOverlayCss(lightTheme)
+    const actRule = css.match(/\.pddcs-cand-actions \{[^}]*\}/)![0]
+    expect(actRule).toContain('opacity: 0')
+    expect(actRule).toContain('pointer-events: none')
+    expect(css).toMatch(/\.pddcs-cand:hover \.pddcs-cand-actions[^{]*\{[^}]*opacity: 1/)
+    expect(css).toMatch(/\.pddcs-cand-selected \.pddcs-cand-actions[^{]*\{[^}]*opacity: 1/)
+  })
+  it('三段式壳:popup 为 flex 列只负责裁圆角,滚动移交 body,页脚常驻带 hairline', () => {
+    const css = buildOverlayCss(lightTheme)
+    const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
+    expect(popupRule).toContain('display: flex')
+    expect(popupRule).not.toContain('overflow: auto') // 滚动不再在面板根上
+    const bodyRule = css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]
+    expect(bodyRule).toContain('flex: 1')
+    expect(bodyRule).toContain('overflow-y: auto')
+    const footRule = css.match(/\.pddcs-popup-foot \{[^}]*\}/)![0]
+    expect(footRule).toContain('border-top')
+  })
+  it('入场动效:160ms 级淡入上移, prefers-reduced-motion 关闭', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css).toContain('@keyframes pddcs-pop-in')
+    const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
+    expect(popupRule).toContain('animation: pddcs-pop-in')
+    expect(css).toContain('prefers-reduced-motion')
   })
 })
 

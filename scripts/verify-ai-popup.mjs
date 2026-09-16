@@ -56,7 +56,11 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
 <textarea id="replyTextarea" style="position:fixed; left:20px; bottom:20px; width:600px; height:60px"></textarea>
 </body></html>`
 
-const browser = await chromium.launch({ executablePath: CHROME })
+// 与 lib.mjs 同一约定:设 PDD_E2E_CHROME 用之,否则走完整 chromium(channel)
+// (新无头完整 chromium 支持扩展与本脚本;默认 headless shell 不加载扩展)
+const browser = await chromium.launch({
+  ...(CHROME ? { executablePath: CHROME } : { channel: 'chromium' }),
+})
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 
 // chrome 桩:记录发出的消息,按类型回执(候选固定 3 条:1 标准回答 + 2 历史)
@@ -154,7 +158,10 @@ check('标准回答候选的操作钮是「取消标准回答」', first[0]?.act
 check('历史候选的操作钮是「设置标准回答」', first[1]?.actions.includes('设置标准回答'), JSON.stringify(first[1]?.actions))
 
 // ── ① 取消标准回答 ──
-await page.locator('.pddcs-mini', { hasText: '取消标准回答' }).first().click()
+// v2.6.18 起操作钮悬浮/选中才显(pointer-events none → auto):先 hover 行再点钮,
+// 与真实用户路径一致(鼠标必然先划过行),Playwright 的 hit-target 预检也才可通过
+await page.locator('.pddcs-cand').nth(0).hover()
+await page.locator('.pddcs-cand').nth(0).locator('.pddcs-mini', { hasText: '取消标准回答' }).click()
 await sleep(500)
 const del = await sentOf('DELETE_GOLDEN')
 check('点取消 → 发出 DELETE_GOLDEN 且 id 为该候选的标准回答 id', del.length === 1 && del[0].payload?.id === 'gd-1', JSON.stringify(del))
@@ -162,6 +169,7 @@ const afterCancel = await rows()
 check('取消成功 → 原位翻回「设置标准回答」', afterCancel[0]?.actions.includes('设置标准回答'), JSON.stringify(afterCancel[0]?.actions))
 
 // ── ② 把历史候选设为标准回答 ──
+await page.locator('.pddcs-cand').nth(1).hover()
 await page.locator('.pddcs-cand').nth(1).locator('.pddcs-mini', { hasText: '设置标准回答' }).click()
 await sleep(500)
 const add = await sentOf('ADD_GOLDEN')
@@ -179,6 +187,7 @@ check('设置成功 → 原位翻为「取消标准回答」(无需重开面板)
 await page.evaluate(() => {
   window.__forceLimit = true
 })
+await page.locator('.pddcs-cand').nth(2).hover()
 await page.locator('.pddcs-cand').nth(2).locator('.pddcs-mini', { hasText: '设置标准回答' }).click()
 await sleep(500)
 const toast = await page.evaluate(() => document.querySelector('.pddcs-toast')?.textContent ?? '')
@@ -208,7 +217,9 @@ const selIdx = () =>
   })
 check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
 
-// ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明/灰选中/细滚动条;第二十五轮:ChatGPT 化)──
+// ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明/灰选中/细滚动条;第二十五轮:ChatGPT 化;
+//      第三十二轮:内缩圆角行/操作钮悬浮显现/三段式壳)──
+await page.mouse.move(5, 5) // 鼠标移出面板,保证"静止态"断言不被 hover 污染
 const visual = await page.evaluate(() => {
   const popup = document.querySelector('.pddcs-popup')
   const sel = document.querySelector('.pddcs-cand-selected')
@@ -229,8 +240,26 @@ const visual = await page.evaluate(() => {
     opacity: cs?.opacity ?? '',
     selBg: ss?.backgroundColor ?? '',
     selShadow: ss?.boxShadow ?? '',
-    thinRule: hasRule('.pddcs-popup::-webkit-scrollbar') && hasRule('width: 6px'),
+    thinRule: hasRule('.pddcs-popup-body::-webkit-scrollbar') && hasRule('width: 6px'),
     candBorder: cand ? getComputedStyle(cand).borderBottomWidth : '',
+    candRadius: cand ? getComputedStyle(cand).borderRadius : '',
+    bodyOverflowY: (() => {
+      const b = document.querySelector('.pddcs-popup-body')
+      return b ? getComputedStyle(b).overflowY : ''
+    })(),
+    footBorderTop: (() => {
+      const f = document.querySelector('.pddcs-popup-foot')
+      return f ? getComputedStyle(f).borderTopWidth : ''
+    })(),
+    actionsOpacity: (() => {
+      // 键盘面板首行是选中态(操作钮显),取**非选中行**验证静止隐藏(鼠标已移开,无 hover)
+      const a = document.querySelector('.pddcs-cand:not(.pddcs-cand-selected) .pddcs-cand-actions')
+      return a ? getComputedStyle(a).opacity : ''
+    })(),
+    actionsPointerEvents: (() => {
+      const a = document.querySelector('.pddcs-cand:not(.pddcs-cand-selected) .pddcs-cand-actions')
+      return a ? getComputedStyle(a).pointerEvents : ''
+    })(),
     candTextFont: document.querySelector('.pddcs-cand-text')
       ? getComputedStyle(document.querySelector('.pddcs-cand-text')).fontSize
       : '',
@@ -255,11 +284,11 @@ check(
   `bg=${visual.bg} opacity=${visual.opacity}`,
 )
 check(
-  '选中态为中性灰(非 accent 蓝)',
-  visual.selBg === 'rgba(0, 0, 0, 0.06)' && visual.selShadow.includes('rgba(0, 0, 0, 0.24)') && !visual.selBg.includes('13, 153, 255'),
+  '选中态为中性灰软填充(去 3px 左描边,非 accent 蓝)',
+  visual.selBg === 'rgba(0, 0, 0, 0.06)' && visual.selShadow === 'none' && !visual.selBg.includes('13, 153, 255'),
   `bg=${visual.selBg} shadow=${visual.selShadow}`,
 )
-check('面板滚动条为 6px 细轨(公共规格)', visual.thinRule, `thinRule=${visual.thinRule}`)
+check('面板滚动条为 6px 细轨(公共规格,挂滚动中段 body)', visual.thinRule, `thinRule=${visual.thinRule}`)
 check(
   '候选行无分隔线(border-bottom-width=0,留白分组)',
   visual.candBorder === '0px',
@@ -284,6 +313,21 @@ check(
 )
 check('底部来源行移除(并入顶部回显)', visual.srcGone, `srcGone=${visual.srcGone}`)
 check('头部极简(12.5px 小字)', visual.headFont === '12.5px', `headFont=${visual.headFont}`)
+check(
+  '候选行为内缩圆角软行(圆角 8px,无通栏直角)',
+  visual.candRadius === '8px',
+  `candRadius=${visual.candRadius}`,
+)
+check(
+  '操作钮静止隐藏,悬浮/选中才显(opacity 0 + pointer-events none)',
+  visual.actionsOpacity === '0' && visual.actionsPointerEvents === 'none',
+  `opacity=${visual.actionsOpacity} pe=${visual.actionsPointerEvents}`,
+)
+check(
+  '三段式壳:滚动移交 body,页脚常驻带 hairline 上边',
+  visual.bodyOverflowY === 'auto' && visual.footBorderTop === '1px',
+  `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop}`,
+)
 
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
@@ -353,13 +397,13 @@ for (let i = 0; i < 8; i += 1) {
   await sleep(80)
 }
 const scrolled = await page.evaluate(() => {
-  const p = document.querySelector('.pddcs-popup')
+  const body = document.querySelector('.pddcs-popup-body')
   const sel = document.querySelector('.pddcs-cand-selected')
   const head = document.querySelector('.pddcs-popup-head')
   return {
     count: document.querySelectorAll('.pddcs-cand').length,
     selected: [...document.querySelectorAll('.pddcs-cand')].indexOf(sel),
-    scrollTop: p.scrollTop,
+    scrollTop: body ? body.scrollTop : 0,
     headBottom: head.getBoundingClientRect().bottom,
     selTop: sel.getBoundingClientRect().top,
   }
@@ -370,12 +414,12 @@ await page.evaluate(() => {
 })
 await sleep(200)
 const wrapped = await page.evaluate(() => {
-  const p = document.querySelector('.pddcs-popup')
+  const body = document.querySelector('.pddcs-popup-body')
   const sel = document.querySelector('.pddcs-cand-selected')
   const head = document.querySelector('.pddcs-popup-head')
   return {
     selected: [...document.querySelectorAll('.pddcs-cand')].indexOf(sel),
-    scrollTop: p.scrollTop,
+    scrollTop: body ? body.scrollTop : 0,
     headBottom: head.getBoundingClientRect().bottom,
     selTop: sel.getBoundingClientRect().top,
   }

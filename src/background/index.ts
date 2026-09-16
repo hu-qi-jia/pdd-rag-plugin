@@ -20,57 +20,17 @@ import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { hashText } from "../utils/text";
 import {
+  DEFAULT_SETTINGS,
   SELF_TEST_SESSION_KEY,
   type QaRecord,
   type ReplyRecord,
 } from "../types/memory";
 import type {
-  GetStatsRequest,
-  GetStatsResponse,
-  GetSuggestionsRequest,
-  GetSuggestionsResponse,
-  PingEmbedRequest,
+  ExtensionMessage,
+  ExtensionMessageResponse,
   PingEmbedResponse,
-  PddIngestRequest,
   SelfTestWriteRequest,
   SelfTestWriteResponse,
-  AddGoldenRequest,
-  AddGoldenResponse,
-  GetMemoryListRequest,
-  GetMemoryListResponse,
-  DeleteQaRequest,
-  DeleteQaResponse,
-  ClearMemoryDataRequest,
-  ClearMemoryDataResponse,
-  GetPanelDataRequest,
-  GetPanelDataResponse,
-  UpdateGoldenRequest,
-  UpdateGoldenResponse,
-  DeleteGoldenRequest,
-  DeleteGoldenResponse,
-  CreateFolderRequest,
-  CreateFolderResponse,
-  RenameFolderRequest,
-  RenameFolderResponse,
-  DeleteFolderRequest,
-  DeleteFolderResponse,
-  FlattenFoldersRequest,
-  FlattenFoldersResponse,
-  CreateKbRequest,
-  CreateKbResponse,
-  UpdateKbRequest,
-  UpdateKbResponse,
-  DeleteKbRequest,
-  DeleteKbResponse,
-  UploadKbDocRequest,
-  UploadKbDocResponse,
-  UpdateSettingsRequest,
-  UpdateSettingsResponse,
-  ExportDataRequest,
-  ExportDataResponse,
-  ImportDataRequest,
-  ImportDataResponse,
-  FillInputRequest,
   FillInputResponse,
 } from "../types/messages";
 import { searchSuggestions } from "./search";
@@ -101,40 +61,19 @@ import { saveSettings } from "./settings";
 const LEGACY_DB_NAME = "AIMemoryDB";
 const TTL_ALARM_NAME = "pddcs-daily-ttl";
 
-// ─── 处理器 ────────────────────────────────────────────────────────────────────
+// ─── 处理器(只返回 payload;响应包装与错误兜底统一交给 route)──────────────────
 
 /** 嵌入链路自检:经 offscreen 嵌入样本文本,返回模型名与向量维度 */
-async function handlePingEmbed(): Promise<PingEmbedResponse> {
+async function pingEmbedPayload(): Promise<PingEmbedResponse["payload"]> {
   const started = Date.now();
-  try {
-    const embedding = await embedViaOffscreen(
-      "亲,请问这款商品支持7天无理由退换吗?可以开发票吗?",
-    );
-    return {
-      type: "PING_EMBED_RESPONSE",
-      payload: {
-        success: true,
-        model: MODEL_NAME,
-        dimensions: embedding.length,
-        elapsedMs: Date.now() - started,
-      },
-    };
-  } catch (err) {
-    return {
-      type: "PING_EMBED_RESPONSE",
-      payload: { success: false, error: String(err) },
-    };
-  }
-}
-
-async function handleGetStats(): Promise<GetStatsResponse> {
-  const [stats, settings] = await Promise.all([
-    db.getStats(),
-    loadSettings(),
-  ]);
+  const embedding = await embedViaOffscreen(
+    "亲,请问这款商品支持7天无理由退换吗?可以开发票吗?",
+  );
   return {
-    type: "GET_STATS_RESPONSE",
-    payload: { ...stats, settings, embeddingModel: MODEL_NAME },
+    success: true,
+    model: MODEL_NAME,
+    dimensions: embedding.length,
+    elapsedMs: Date.now() - started,
   };
 }
 
@@ -142,476 +81,303 @@ async function handleGetStats(): Promise<GetStatsResponse> {
  * 自检示例数据:write = 落一条完整问答(问题+回复,触发真实嵌入回填);
  * clean = 按 SELF_TEST_SESSION_KEY 一键清除。
  */
-async function handleSelfTestWrite(
+async function selfTestWritePayload(
   message: SelfTestWriteRequest,
-): Promise<SelfTestWriteResponse> {
-  try {
-    if (message.payload.action === "clean") {
-      const deletedCount = await db.clearSelfTestRecords();
-      return {
-        type: "SELF_TEST_WRITE_RESPONSE",
-        payload: { success: true, deletedCount },
-      };
-    }
-
-    const now = Date.now();
-    const qaId = `st-${now}`;
-    const question =
-      "亲,这个手机壳支持 iPhone 14 吗?有没有黑色的?";
-    const answer =
-      "支持的,兼容 iPhone 14 / 14 Plus / 14 Pro / 14 Pro Max 全系;黑色款现货,今天下单最快明天发货。";
-
-    const qa: QaRecord = {
-      id: qaId,
-      sessionKey: SELF_TEST_SESSION_KEY,
-      buyerIdTail: "9999",
-      question,
-      questionHash: hashText(question),
-      questionTs: now,
-      hasEmbedding: 0,
-      replyCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const reply: ReplyRecord = {
-      id: `st-r-${now}`,
-      qaId,
-      text: answer,
-      contentHash: hashText(answer),
-      msgId: `selftest-${now}`,
-      ts: now + 1000,
-      hasEmbedding: 0,
-    };
-    await db.addQaRecord(qa);
-    await db.addReply(reply);
-    queueEmbedding("qa", qaId, question);
-    return {
-      type: "SELF_TEST_WRITE_RESPONSE",
-      payload: { success: true, qaId },
-    };
-  } catch (err) {
-    return {
-      type: "SELF_TEST_WRITE_RESPONSE",
-      payload: { success: false, error: String(err) },
-    };
+): Promise<SelfTestWriteResponse["payload"]> {
+  if (message.payload.action === "clean") {
+    const deletedCount = await db.clearSelfTestRecords();
+    return { success: true, deletedCount };
   }
+
+  const now = Date.now();
+  const qaId = `st-${now}`;
+  const question =
+    "亲,这个手机壳支持 iPhone 14 吗?有没有黑色的?";
+  const answer =
+    "支持的,兼容 iPhone 14 / 14 Plus / 14 Pro / 14 Pro Max 全系;黑色款现货,今天下单最快明天发货。";
+
+  const qa: QaRecord = {
+    id: qaId,
+    sessionKey: SELF_TEST_SESSION_KEY,
+    buyerIdTail: "9999",
+    question,
+    questionHash: hashText(question),
+    questionTs: now,
+    hasEmbedding: 0,
+    replyCount: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const reply: ReplyRecord = {
+    id: `st-r-${now}`,
+    qaId,
+    text: answer,
+    contentHash: hashText(answer),
+    msgId: `selftest-${now}`,
+    ts: now + 1000,
+    hasEmbedding: 0,
+  };
+  await db.addQaRecord(qa);
+  await db.addReply(reply);
+  queueEmbedding("qa", qaId, question);
+  return { success: true, qaId };
 }
 
 /** 金标准卡"填充":转发文本到聊天页 content(只填官方输入框,绝不发送) */
-async function handleFillInput(
-  message: FillInputRequest,
-): Promise<FillInputResponse> {
-  const fail = (error: string): FillInputResponse => ({
-    type: "FILL_INPUT_RESPONSE",
-    payload: { success: false, error },
+async function fillToChatPage(
+  text: string,
+): Promise<FillInputResponse["payload"]> {
+  if (!text) return { success: false, error: "填充内容为空" };
+  const tabs = await chrome.tabs.query({
+    url: "https://mms.pinduoduo.com/chat-merchant/*",
   });
-  try {
-    const text = String(message.payload?.text ?? "");
-    if (!text) return fail("填充内容为空");
-    const tabs = await chrome.tabs.query({
-      url: "https://mms.pinduoduo.com/chat-merchant/*",
-    });
-    if (tabs.length === 0) return fail("未找到打开的聊天页");
-    const tab = tabs.find((t) => t.active) ?? tabs[0];
-    if (tab.id === undefined) return fail("聊天页不可达");
-    const resp = (await chrome.tabs.sendMessage(tab.id, {
-      type: "PDD_FILL_INPUT",
-      payload: { text },
-    })) as { payload?: { success?: boolean; error?: string } } | undefined;
-    if (!resp?.payload?.success) {
-      return fail(resp?.payload?.error ?? "页面未就绪,请刷新聊天页后重试");
-    }
-    return { type: "FILL_INPUT_RESPONSE", payload: { success: true } };
-  } catch (err) {
-    return fail(String(err));
+  if (tabs.length === 0) return { success: false, error: "未找到打开的聊天页" };
+  const tab = tabs.find((t) => t.active) ?? tabs[0];
+  if (tab.id === undefined) return { success: false, error: "聊天页不可达" };
+  const resp = (await chrome.tabs.sendMessage(tab.id, {
+    type: "PDD_FILL_INPUT",
+    payload: { text },
+  })) as { payload?: { success?: boolean; error?: string } } | undefined;
+  if (!resp?.payload?.success) {
+    return {
+      success: false,
+      error: resp?.payload?.error ?? "页面未就绪,请刷新聊天页后重试",
+    };
   }
+  return { success: true };
 }
 
-// ─── 消息路由 ───────────────────────────────────────────────────────────────────
+// ─── 消息路由(类型化映射表,第二十七轮重构)────────────────────────────────────
+//
+// 契约:响应消息 type = `${请求 type}_RESPONSE`,payload 形状见 types/messages.ts。
+// route() 统一"异步执行 → 包装响应 → 错误兜底":处理器只声明 happy path 的
+// payload,错误 payload 就地写在第二个参数 —— 取代原 24 分支 switch 的
+// .then/.catch 样板与逐 case 的 as 强转(类型由映射表按键自动收窄)。
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message?.type) {
-    case "PING_EMBED":
-      handlePingEmbed()
-        .then(sendResponse)
-        .catch((err) =>
-          sendResponse({
-            type: "PING_EMBED_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true; // 保持通道等待异步响应
+type RequestOf<K extends ExtensionMessage["type"]> = Extract<
+  ExtensionMessage,
+  { type: K }
+>;
+type ResponseOf<K extends ExtensionMessage["type"]> = Extract<
+  ExtensionMessageResponse,
+  { type: `${K}_RESPONSE` }
+>;
+type PayloadOf<K extends ExtensionMessage["type"]> = ResponseOf<K>["payload"];
 
-    case "GET_STATS":
-      handleGetStats()
-        .then(sendResponse)
-        .catch((err) =>
-          sendResponse({
-            type: "GET_STATS_RESPONSE",
-            payload: {
-              qaCount: 0,
-              replyCount: 0,
-              goldenCount: 0,
-              folderCount: 0,
-              knowledgeCount: 0,
-              settings: {
-                directFillEnabled: false,
-                simThreshold: 0.5,
-                goldenThreshold: 0.4,
-                kbThreshold: 0.4,
-                retentionDays: 90,
-                goldenPriorityEnabled: true,
-              },
-              embeddingModel: MODEL_NAME,
-              error: String(err),
-            } as GetStatsResponse["payload"] & { error?: string },
-          }),
-        );
-      return true;
+type Handler<K extends ExtensionMessage["type"]> = (
+  message: RequestOf<K>,
+  senderTabId: number | undefined,
+) => Promise<ResponseOf<K>>;
 
-    case "SELF_TEST_WRITE":
-      handleSelfTestWrite(message as SelfTestWriteRequest)
-        .then(sendResponse)
-        .catch((err) =>
-          sendResponse({
-            type: "SELF_TEST_WRITE_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+/** 组装单个处理器:happy path + 错误兜底统一包装成完整响应消息。
+ *  requestType 显式传参:K 在值位置拿不到,顺带让响应类型与请求键在运行时可见。 */
+function route<K extends ExtensionMessage["type"]>(
+  requestType: K,
+  run: (
+    message: RequestOf<K>,
+    senderTabId: number | undefined,
+  ) => Promise<PayloadOf<K>>,
+  onError: (err: unknown) => PayloadOf<K>,
+): Handler<K> {
+  return async (message, senderTabId) => {
+    const responseType = `${requestType}_RESPONSE` as ResponseOf<K>["type"];
+    try {
+      return {
+        type: responseType,
+        payload: await run(message, senderTabId),
+      } as unknown as ResponseOf<K>;
+    } catch (err) {
+      return {
+        type: responseType,
+        payload: onError(err),
+      } as unknown as ResponseOf<K>;
+    }
+  };
+}
 
-    case "PDD_INGEST":
-      handlePddIngest(
-        message as PddIngestRequest,
-        (sender as { tab?: { id?: number } }).tab?.id,
-      )
-        .then(sendResponse)
-        .catch((err) =>
-          sendResponse({
-            type: "PDD_INGEST_RESPONSE",
-            payload: { queued: 0, skipped: 0, error: String(err) },
-          }),
-        );
-      return true;
+const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
+  PING_EMBED: route("PING_EMBED", pingEmbedPayload, (err) => ({
+    success: false,
+    error: String(err),
+  })),
 
-    case "GET_SUGGESTIONS":
-      searchSuggestions((message as GetSuggestionsRequest).payload.query)
-        .then((out) =>
-          sendResponse({
-            type: "GET_SUGGESTIONS_RESPONSE",
-            payload: out,
-          } as GetSuggestionsResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "GET_SUGGESTIONS_RESPONSE",
-            payload: { suggestions: [], error: String(err) },
-          }),
-        );
-      return true;
+  GET_STATS: route(
+    "GET_STATS",
+    async () => {
+      const [stats, settings] = await Promise.all([db.getStats(), loadSettings()]);
+      return { ...stats, settings, embeddingModel: MODEL_NAME };
+    },
+    (err) => ({
+      qaCount: 0,
+      replyCount: 0,
+      goldenCount: 0,
+      folderCount: 0,
+      knowledgeCount: 0,
+      settings: { ...DEFAULT_SETTINGS },
+      embeddingModel: MODEL_NAME,
+      error: String(err),
+    }),
+  ),
 
-    case "ADD_GOLDEN":
-      addGoldenFromSuggestion((message as AddGoldenRequest).payload)
-        .then((out) =>
-          sendResponse({
-            type: "ADD_GOLDEN_RESPONSE",
-            payload: out,
-          } as AddGoldenResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "ADD_GOLDEN_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  SELF_TEST_WRITE: route("SELF_TEST_WRITE", selfTestWritePayload, (err) => ({
+    success: false,
+    error: String(err),
+  })),
 
-    case "GET_MEMORY_LIST":
-      getMemoryList(message as GetMemoryListRequest)
-        .then((out) =>
-          sendResponse({
-            type: "GET_MEMORY_LIST_RESPONSE",
-            payload: out,
-          } as GetMemoryListResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "GET_MEMORY_LIST_RESPONSE",
-            payload: { items: [], error: String(err) },
-          }),
-        );
-      return true;
+  // 注意:handlePddIngest 返回完整响应消息(历史约定),此处解包 payload
+  PDD_INGEST: route(
+    "PDD_INGEST",
+    async (message, senderTabId) => (await handlePddIngest(message, senderTabId)).payload,
+    (err) => ({ queued: 0, skipped: 0, error: String(err) }),
+  ),
 
-    case "DELETE_QA":
-      deleteQa(message as DeleteQaRequest)
-        .then((out) =>
-          sendResponse({ type: "DELETE_QA_RESPONSE", payload: out } as DeleteQaResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "DELETE_QA_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+  GET_SUGGESTIONS: route(
+    "GET_SUGGESTIONS",
+    (message) => searchSuggestions(message.payload.query),
+    (err) => ({ suggestions: [], error: String(err) }),
+  ),
 
-    case "CLEAR_MEMORY_DATA":
-      clearMemoryData(message as ClearMemoryDataRequest)
-        .then((out) =>
-          sendResponse({
-            type: "CLEAR_MEMORY_DATA_RESPONSE",
-            payload: out,
-          } as ClearMemoryDataResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "CLEAR_MEMORY_DATA_RESPONSE",
-            payload: { success: false, deletedQa: 0, error: String(err) },
-          }),
-        );
-      return true;
+  ADD_GOLDEN: route(
+    "ADD_GOLDEN",
+    (message) => addGoldenFromSuggestion(message.payload),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "GET_PANEL_DATA":
-      getPanelData(message as GetPanelDataRequest)
-        .then((out) =>
-          sendResponse({
-            type: "GET_PANEL_DATA_RESPONSE",
-            payload: out,
-          } as GetPanelDataResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "GET_PANEL_DATA_RESPONSE",
-            payload: { folders: [], goldens: [], knowledge: [], error: String(err) },
-          }),
-        );
-      return true;
+  GET_MEMORY_LIST: route(
+    "GET_MEMORY_LIST",
+    (message) => getMemoryList(message),
+    (err) => ({ items: [], total: 0, hasMore: false, error: String(err) }),
+  ),
 
-    case "FLATTEN_FOLDERS":
-      flattenFolders(message as FlattenFoldersRequest)
-        .then((out) =>
-          sendResponse({
-            type: "FLATTEN_FOLDERS_RESPONSE",
-            payload: out,
-          } as FlattenFoldersResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "FLATTEN_FOLDERS_RESPONSE",
-            payload: { success: false, flattened: 0, error: String(err) },
-          }),
-        );
-      return true;
+  DELETE_QA: route(
+    "DELETE_QA",
+    (message) => deleteQa(message),
+    (err) => ({ success: false, error: String(err) }),
+  ),
 
-    case "CREATE_KB":
-      createKnowledge((message as CreateKbRequest).payload)
-        .then((out) =>
-          sendResponse({
-            type: "CREATE_KB_RESPONSE",
-            payload: out,
-          } as CreateKbResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "CREATE_KB_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  CLEAR_MEMORY_DATA: route(
+    "CLEAR_MEMORY_DATA",
+    (message) => clearMemoryData(message),
+    (err) => ({ success: false, deletedQa: 0, error: String(err) }),
+  ),
 
-    case "UPDATE_KB":
-      updateKnowledgeWithReembed((message as UpdateKbRequest).payload)
-        .then((out) =>
-          sendResponse({
-            type: "UPDATE_KB_RESPONSE",
-            payload: out,
-          } as UpdateKbResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "UPDATE_KB_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  GET_PANEL_DATA: route(
+    "GET_PANEL_DATA",
+    (message) => getPanelData(message),
+    (err) => ({ folders: [], goldens: [], knowledge: [], error: String(err) }),
+  ),
 
-    case "DELETE_KB":
-      deleteKnowledge((message as DeleteKbRequest).payload.id)
-        .then(() =>
-          sendResponse({
-            type: "DELETE_KB_RESPONSE",
-            payload: { success: true },
-          } as DeleteKbResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "DELETE_KB_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+  FLATTEN_FOLDERS: route(
+    "FLATTEN_FOLDERS",
+    (message) => flattenFolders(message),
+    (err) => ({ success: false, flattened: 0, error: String(err) }),
+  ),
 
-    case "UPLOAD_KB_DOC":
-      importKbDocument((message as UploadKbDocRequest).payload)
-        .then((out) =>
-          sendResponse({
-            type: "UPLOAD_KB_DOC_RESPONSE",
-            payload: out,
-          } as UploadKbDocResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "UPLOAD_KB_DOC_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  CREATE_KB: route(
+    "CREATE_KB",
+    (message) => createKnowledge(message.payload),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "UPDATE_GOLDEN":
-      updateGoldenWithReembed((message as UpdateGoldenRequest).payload)
-        .then((out) =>
-          sendResponse({
-            type: "UPDATE_GOLDEN_RESPONSE",
-            payload: out,
-          } as UpdateGoldenResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "UPDATE_GOLDEN_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  UPDATE_KB: route(
+    "UPDATE_KB",
+    (message) => updateKnowledgeWithReembed(message.payload),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "DELETE_GOLDEN":
-      deleteGolden((message as DeleteGoldenRequest).payload.id)
-        .then(() =>
-          sendResponse({
-            type: "DELETE_GOLDEN_RESPONSE",
-            payload: { success: true },
-          } as DeleteGoldenResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "DELETE_GOLDEN_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+  DELETE_KB: route(
+    "DELETE_KB",
+    async (message) => {
+      await deleteKnowledge(message.payload.id);
+      return { success: true };
+    },
+    (err) => ({ success: false, error: String(err) }),
+  ),
 
-    case "CREATE_FOLDER":
-      createFolder(message as CreateFolderRequest)
-        .then((out) =>
-          sendResponse({
-            type: "CREATE_FOLDER_RESPONSE",
-            payload: out,
-          } as CreateFolderResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "CREATE_FOLDER_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  UPLOAD_KB_DOC: route(
+    "UPLOAD_KB_DOC",
+    (message) => importKbDocument(message.payload),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "RENAME_FOLDER":
-      renameFolder(message as RenameFolderRequest)
-        .then((out) =>
-          sendResponse({
-            type: "RENAME_FOLDER_RESPONSE",
-            payload: out,
-          } as RenameFolderResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "RENAME_FOLDER_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+  UPDATE_GOLDEN: route(
+    "UPDATE_GOLDEN",
+    (message) => updateGoldenWithReembed(message.payload),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "DELETE_FOLDER":
-      deleteFolder(message as DeleteFolderRequest)
-        .then((out) =>
-          sendResponse({
-            type: "DELETE_FOLDER_RESPONSE",
-            payload: out,
-          } as DeleteFolderResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "DELETE_FOLDER_RESPONSE",
-            payload: { success: false, error: String(err) },
-          }),
-        );
-      return true;
+  DELETE_GOLDEN: route(
+    "DELETE_GOLDEN",
+    async (message) => {
+      await deleteGolden(message.payload.id);
+      return { success: true };
+    },
+    (err) => ({ success: false, error: String(err) }),
+  ),
 
-    case "UPDATE_SETTINGS":
-      (async () => {
-        await saveSettings((message as UpdateSettingsRequest).payload ?? {});
-        return await loadSettings();
-      })()
-        .then((settings) =>
-          sendResponse({
-            type: "UPDATE_SETTINGS_RESPONSE",
-            payload: { settings },
-          } as UpdateSettingsResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "UPDATE_SETTINGS_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  CREATE_FOLDER: route(
+    "CREATE_FOLDER",
+    (message) => createFolder(message),
+    (err) => ({ error: String(err) }),
+  ),
 
-    case "EXPORT_DATA":
-      exportData(message as ExportDataRequest)
-        .then((out) =>
-          sendResponse({
-            type: "EXPORT_DATA_RESPONSE",
-            payload: out,
-          } as ExportDataResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "EXPORT_DATA_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  RENAME_FOLDER: route(
+    "RENAME_FOLDER",
+    (message) => renameFolder(message),
+    (err) => ({ success: false, error: String(err) }),
+  ),
 
-    case "IMPORT_DATA":
-      importData(message as ImportDataRequest)
-        .then((out) =>
-          sendResponse({
-            type: "IMPORT_DATA_RESPONSE",
-            payload: out,
-          } as ImportDataResponse),
-        )
-        .catch((err) =>
-          sendResponse({
-            type: "IMPORT_DATA_RESPONSE",
-            payload: { error: String(err) },
-          }),
-        );
-      return true;
+  DELETE_FOLDER: route(
+    "DELETE_FOLDER",
+    (message) => deleteFolder(message),
+    (err) => ({ success: false, error: String(err) }),
+  ),
 
-    case "FILL_INPUT":
-      handleFillInput(message as FillInputRequest)
-        .then(sendResponse)
-        .catch((err) =>
-          sendResponse({
-            type: "FILL_INPUT_RESPONSE",
-            payload: { success: false, error: String(err) },
-          } satisfies FillInputResponse),
-        );
-      return true;
+  UPDATE_SETTINGS: route(
+    "UPDATE_SETTINGS",
+    async (message) => {
+      await saveSettings(message.payload ?? {});
+      return { settings: await loadSettings() };
+    },
+    (err) => ({ error: String(err) }),
+  ),
 
-    default:
-      return false;
-  }
+  EXPORT_DATA: route(
+    "EXPORT_DATA",
+    (message) => exportData(message),
+    (err) => ({ error: String(err) }),
+  ),
+
+  IMPORT_DATA: route(
+    "IMPORT_DATA",
+    (message) => importData(message),
+    (err) => ({ error: String(err) }),
+  ),
+
+  FILL_INPUT: route(
+    "FILL_INPUT",
+    (message) => fillToChatPage(String(message.payload?.text ?? "")),
+    (err) => ({ success: false, error: String(err) }),
+  ),
+};
+
+chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
+  // 信任边界唯一一次 cast:chrome 类型层把消息当 any,形状契约由 types/messages.ts 保证。
+  // 查表值宽化为统一签名(运行时按键分发,TS 传不过去"键 ↔ 消息类型"的对应关系)——
+  // 全文件仅此一处 cast,映射表内部零强转;| undefined 保留未知消息的 default 分支语义。
+  const message = rawMessage as ExtensionMessage | undefined;
+  if (!message?.type) return false;
+  const handler = handlers[message.type] as
+    | ((
+        message: ExtensionMessage,
+        senderTabId: number | undefined,
+      ) => Promise<ExtensionMessageResponse>)
+    | undefined;
+  if (!handler) return false; // 未知消息:不占用响应通道(与原 default 一致)
+  handler(message, sender.tab?.id)
+    .then(sendResponse)
+    .catch((err) => console.error("[PDD CS] message handler failed:", err));
+  return true; // 保持通道等待异步响应
 });
 
 // ─── 保留期清理(TTL) ───────────────────────────────────────────────────────────

@@ -38,6 +38,8 @@ export interface GetStatsResponse {
     knowledgeCount: number
     settings: PddSettings
     embeddingModel: string
+    /** 读取失败兜底时的错误说明(成功路径无) */
+    error?: string
   }
 }
 

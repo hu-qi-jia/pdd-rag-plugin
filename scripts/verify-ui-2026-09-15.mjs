@@ -109,15 +109,15 @@ const projectHeader = () =>
 const before = await projectHeader()
 const statsBefore = (await send('GET_STATS')).goldenCount
 
-// ── ① 记忆页:点击设置标准回答 ──
-const btn = pop.locator('button', { hasText: '设置标准回答' }).first()
+// ── ① 记忆页:点击设为标准(第十九轮:mini 幽灵钮;已设变琥珀 ★ 徽标)──
+const btn = pop.locator('button', { hasText: '设为标准' }).first()
 await btn.click()
 await sleep(2200)
 const after = await projectHeader()
 const statsAfter = (await send('GET_STATS')).goldenCount
-const doneMarker = await pop.locator('text=已设为标准回答').count()
+const doneMarker = await pop.locator('[title="该回复已设为标准回答;可在文件夹页取消"]').count()
 
-check('点击后按钮原位变为「已设为标准回答」', doneMarker > 0, `命中 ${doneMarker} 处`)
+check('点击后按钮原位变为「标准回答」徽标', doneMarker > 0, `命中 ${doneMarker} 处`)
 
 // ── 记忆页:每个问题的折叠按钮(2026-09-15 用户反馈"目前没有")──
 const expandedBefore = await pop.locator('button[aria-expanded="true"]').count()

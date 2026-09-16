@@ -69,7 +69,7 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
     await renderWith([
       { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, replies: [reply('r1')] },
     ])
-    const goldenBtns = btns('设置标准回答')
+    const goldenBtns = btns('设为标准')
     expect(goldenBtns).toHaveLength(1)
     // 回复行容器同时包含回复文本与按钮
     expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
@@ -85,13 +85,13 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
         replies: [reply('r1'), reply('r2')],
       },
     ])
-    const goldenBtns = btns('设置标准回答')
+    const goldenBtns = btns('设为标准')
     expect(goldenBtns).toHaveLength(2)
     expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
     expect(goldenBtns[1].parentElement!.textContent).toContain('回复r2')
   })
 
-  it('已设金标:回复行内显示「已设为标准回答」徽标而非按钮', async () => {
+  it('已设金标:回复行内显示「标准回答」琥珀徽标而非按钮', async () => {
     await renderWith([
       {
         id: 'qa-3',
@@ -101,8 +101,17 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
         replies: [reply('r1', 'gd-1')],
       },
     ])
-    expect(btns('设置标准回答')).toHaveLength(0)
-    expect(container.textContent).toContain('已设为标准回答')
+    expect(btns('设为标准')).toHaveLength(0)
+    expect(container.textContent).toContain('标准回答')
+  })
+
+  it('金标控件为 mini 尺寸(24px 高、caption 字号),减少对内容区的挤压(第十九轮)', async () => {
+    await renderWith([
+      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, replies: [reply('r1')] },
+    ])
+    const b = btns('设为标准')[0]
+    expect(b.style.height).toBe('24px')
+    expect(b.style.fontSize).toBe('10.5px')
   })
 })
 

@@ -23,8 +23,8 @@ import {
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
-import { CheckIcon, ChevronDownIcon, TrashIcon } from '../ui/icons'
+import { controlH, fontSize, fontWeight, motion, radius, semantic, spacing } from '../ui/design'
+import { ChevronDownIcon, StarIcon, TrashIcon } from '../ui/icons'
 
 export function MemoryListTab({
   tk,
@@ -178,36 +178,69 @@ export function MemoryListTab({
     setConfirmDeleteId(null)
   }
 
-  /** 回复的金标控件:已设 → 徽标;未设 → 主钮(原位「设置中…」反馈保留) */
+  /**
+   * 回复的金标控件(第十九轮降权重设计):已设 → 琥珀 ★ 徽标;未设 → mini 幽灵钮。
+   * 原 Btn primary(黑底白字 body 字号,~100px)逐行重复时视觉权重压过内容区;
+   * 降为 caption 字号 + 细边幽灵钮(≈74px)保留文字可发现性,占宽前后一致,
+   * 点击变徽标无布局跳动。纯图标方案否决:本项目两次踩"隐蔽入口不可发现"坑。
+   */
   const goldenControl = (item: MemoryListItem, r: MemoryReplyItem) =>
     goldenReplyIds.has(r.id) ? (
       <span
         title="该回复已设为标准回答;可在文件夹页取消"
         style={{
-          height: controlH.form,
+          height: controlH.inline,
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 4,
+          gap: 3,
           flexShrink: 0,
+          padding: `0 ${spacing.md}px`,
+          borderRadius: radius.sm,
+          backgroundColor: semantic.goldenBg,
+          color: semantic.golden,
           fontSize: fontSize.caption,
           fontWeight: fontWeight.medium,
-          color: tk.successText,
           whiteSpace: 'nowrap',
         }}
       >
-        <CheckIcon size={12} strokeWidth={2.4} />
-        已设为标准回答
+        <StarIcon size={11} strokeWidth={2} style={{ fill: 'currentColor' }} />
+        标准回答
       </span>
     ) : (
-      <Btn
-        tk={tk}
-        variant="primary"
+      <button
+        type="button"
+        title="将此问题与回复设为标准回答"
         disabled={busyReplyId === r.id}
         onClick={() => void setGolden(item, r.id, r.text)}
-        title="将此问题与回复设为标准回答"
+        style={{
+          height: controlH.inline,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          flexShrink: 0,
+          padding: `0 ${spacing.md}px`,
+          borderRadius: radius.sm,
+          border: `1px solid ${tk.inputBorder}`,
+          backgroundColor: 'transparent',
+          color: tk.textMuted,
+          fontSize: fontSize.caption,
+          whiteSpace: 'nowrap',
+          cursor: 'pointer',
+          transition: `color ${motion.fast}, border-color ${motion.fast}, background-color ${motion.fast}`,
+        }}
+        onMouseEnter={(e) => {
+          if (busyReplyId === r.id) return
+          e.currentTarget.style.color = tk.accent
+          e.currentTarget.style.borderColor = tk.accent
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = tk.textMuted
+          e.currentTarget.style.borderColor = tk.inputBorder
+        }}
       >
-        {busyReplyId === r.id ? '设置中…' : '设置标准回答'}
-      </Btn>
+        <StarIcon size={11} strokeWidth={2} />
+        {busyReplyId === r.id ? '设置中…' : '设为标准'}
+      </button>
     )
 
   return (

@@ -33,7 +33,11 @@ const POPUP_WIDTH = size.popupWidth
 const POPUP_HEIGHT = size.popupHeight
 
 const RESET_CSS = `
-html, body { margin: 0; padding: 0; background: transparent !important; }
+/* v2.6.32:文档底 = 面板底色(跟随主题)。popup 外框有 24px 圆角,窗口四角被切出来的区域
+   显示的就是这层底 —— 原来写 transparent !important,浅色下露出 Chrome 的默认白看不出,
+   深色主题下会露出四个白角块。变量由 App 挂到 <html> 上(html/body 是根 div 的父级,
+   读不到挂在内层 div 的 CSS 变量)。 */
+html, body { margin: 0; padding: 0; background: var(--pddcs-page-bg, #ffffff) !important; }
 * { box-sizing: border-box; }
 
 /* ── 按钮(工具风直角控件;高度固定为表单档,保证与同排输入框等高)───── */
@@ -175,6 +179,11 @@ function App() {
     void refreshStats()
   }, [refreshStats])
 
+  /** 文档底色跟随主题(v2.6.32):圆角切出的四角显示的就是它,深色下不能留白 */
+  useEffect(() => {
+    document.documentElement.style.setProperty('--pddcs-page-bg', tk.bg)
+  }, [tk.bg])
+
   const railBtn = (active: boolean): React.CSSProperties => ({
     // 图标状态只靠颜色与描边粗细表达,无任何背景块(2026-09-15 用户要求:
     // "仅展示图标即可,图标后不需要有背景" —— 含悬浮态)
@@ -197,8 +206,10 @@ function App() {
         height: POPUP_HEIGHT,
         display: 'flex',
         overflow: 'hidden',
+        // v2.6.32 去掉 boxShadow:popup 是原生窗口、外面没有可"浮起"的背景,
+        // 阴影唯一可见的部分恰好溢进 24px 圆角切出的四角,看着像一圈半透明边框(见 DESIGN §九)。
+        // 浮层阴影留给聊天页推荐面板(`tk.shadow` 仍由 overlay-css 使用)。
         borderRadius: radius.xxl,
-        boxShadow: tk.shadow,
         fontFamily,
         backgroundColor: tk.bg,
         color: tk.text,

@@ -8,7 +8,8 @@
  *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回「设置标准回答」
  *  ③ 历史候选 → 点「设置标准回答」发 ADD_GOLDEN,成功后原位翻为「取消标准回答」
  *  ④ 达到每问上限时 → 提示且不误报成功
- *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮):初始选中第一条,↑↓ 夹取移动,
+ *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十二轮改键):初始选中第一条,
+ *    Tab/Shift+Tab 夹取移动(↑↓ 已让位平台切换会话,不再拦截),
  *    Enter 填充**选中项**(非固定第一条)
  * 用法:node scripts/verify-ai-popup-2026-09-15.mjs
  */
@@ -199,7 +200,7 @@ await sleep(900)
 const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
 const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
 check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
-check('面板脚注提示 ↑↓ 选择 + Enter 填充', hkFoot.includes('↑↓ 选择') && hkFoot.includes('Enter 填充'), hkFoot)
+check('面板脚注提示 Tab 切换候选 + Enter 填充', hkFoot.includes('Tab 切换候选') && hkFoot.includes('Enter 填充'), hkFoot)
 
 const selIdx = () =>
   page.evaluate(() => {
@@ -209,21 +210,26 @@ const selIdx = () =>
 check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
 
 await page.evaluate(() => {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
 })
 await sleep(200)
-check('↓ → 选中第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
+check('Tab → 选中第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+})
+await sleep(200)
+check('连按 Tab 到末尾夹取(3 条面板停在第 3 条)', (await selIdx()) === 2, `selected=${await selIdx()}`)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+})
+await sleep(200)
+check('Shift+Tab → 回到第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
 })
 await sleep(200)
-check('连按 ↓ 到末尾夹取(3 条面板停在第 3 条)', (await selIdx()) === 2, `selected=${await selIdx()}`)
-await page.evaluate(() => {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
-})
-await sleep(200)
-check('↑ → 回到第二条', (await selIdx()) === 1, `selected=${await selIdx()}`)
+check('↑↓ 不再拦截(让位平台切换会话,选中不动)', (await selIdx()) === 1, `selected=${await selIdx()}`)
 
 // 面板不溢出视口:顶部 ≥ 8 且底部 ≤ 视口高 - 8
 const fit = await page.evaluate(() => {

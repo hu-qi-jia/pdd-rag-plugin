@@ -228,15 +228,18 @@ await sleep(600)
 const settingsSummary = (await projectHeader())
 check('设置页不展示统计', settingsSummary.trim() === '', JSON.stringify(settingsSummary))
 
-// ── 设置页:快捷键展示与录入入口 ──
+// ── 设置页:快捷键展示与录入入口(第二十二轮起两行:唤起键 + 候选切换键)──
 const hkText = await pop.evaluate(() => document.querySelector('kbd')?.textContent ?? '')
 check('设置页展示快捷键(默认 Ctrl + Enter)', hkText === 'Ctrl + Enter', hkText)
+const kbdTexts = await pop.evaluate(() => [...document.querySelectorAll('kbd')].map((k) => k.textContent))
+check('候选切换键行存在且默认 Tab(第二十二轮)', kbdTexts.includes('Tab'), JSON.stringify(kbdTexts))
 const modifyBtn = pop.locator('button', { hasText: '修改' })
-check('快捷键可进入录入(有「修改」按钮)', (await modifyBtn.count()) === 1)
+check('两行快捷键都可进入录入(有 2 个「修改」按钮)', (await modifyBtn.count()) === 2)
 // ── 快捷键行几何(第十七轮):kbd 与「修改」钮等高(等高铁律),修改推至行右 ──
+// 按行取(第二十二轮起两行):第一个「修改」钮所在行的 kbd 与该钮
 const hkGeo = await pop.evaluate(() => {
-  const kbdEl = document.querySelector('kbd')
   const mod = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('修改'))
+  const kbdEl = mod?.closest('div[style]')?.parentElement?.querySelector('kbd')
   if (!kbdEl || !mod) return null
   const k = kbdEl.getBoundingClientRect()
   const m = mod.getBoundingClientRect()
@@ -244,7 +247,7 @@ const hkGeo = await pop.evaluate(() => {
 })
 check('快捷键 kbd 与「修改」钮等高', hkGeo !== null && hkGeo.kH === hkGeo.mH, hkGeo ? `${hkGeo.kH}/${hkGeo.mH}px` : 'missing')
 check('「修改」钮在快捷键展示右侧', hkGeo !== null && hkGeo.mLeft > hkGeo.kRight, hkGeo ? `kbd.right=${hkGeo.kRight} btn.left=${hkGeo.mLeft}` : '')
-await modifyBtn.click()
+await modifyBtn.first().click()
 await sleep(300)
 const recHint = await pop.evaluate(() => document.body.innerText.includes('请按下新的快捷键'))
 check('点修改 → 进入录入态(等待新组合键)', recHint)

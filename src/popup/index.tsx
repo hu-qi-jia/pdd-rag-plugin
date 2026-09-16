@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react'
+import logoPng from '~assets/icon.png'
 import { ThemeProvider, useTheme } from '../ui/theme-context'
 import { getThemeTokens, type ThemeTokens } from '../ui/theme'
 import { controlH, fontFamily, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
@@ -214,6 +215,19 @@ function App() {
           borderRight: `1px solid ${tk.borderLight}`,
         }}
       >
+        {/* 品牌标(v2.6.22 用户指定):与扩展图标同源,置于导航栏顶部 */}
+        <img
+          src={logoPng}
+          alt=""
+          width={24}
+          height={24}
+          style={{
+            display: 'block',
+            borderRadius: 6,
+            border: `1px solid ${tk.border}`,
+            marginBottom: spacing.lg,
+          }}
+        />
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}

@@ -44,3 +44,85 @@ export function moveSelection(current: number, delta: number, count: number): nu
   if (count <= 0) return 0;
   return (((current + delta) % count) + count) % count;
 }
+
+// ─── 覆盖层几何(第三十一轮自 pdd-ai-button.ts 内联算术提取,逐式等价)────────
+// 输入一律是 getBoundingClientRect 语义的矩形(视口坐标),DOM/设计系统无关。
+
+export interface RectLike {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  height: number;
+}
+
+/** 视口内边距(popupPosition / aiButtonX 的贴边最小距离) */
+const VIEWPORT_PAD = 8;
+/** aiButtonX 左侧极限夹位 */
+const EDGE_MIN = 4;
+/** 容器上下留白(aiButtonY 夹位) */
+const CONTAINER_PAD = 2;
+/** 行可视判定的 1px 容差(压线不算滚出) */
+const EDGE_TOLERANCE = 1;
+/** 弹窗与锚的间距 */
+const POPUP_GAP = 8;
+/** 弹窗顶与锚顶的偏移 */
+const POPUP_ANCHOR_OFFSET = 4;
+
+/** 行矩形在消息容器可视区内?滚出上/下沿(含 1px 容差)或高度为 0 → false */
+export function isRowVisible(row: RectLike, cont: RectLike): boolean {
+  if (row.height <= 0) return false;
+  return row.bottom > cont.top + EDGE_TOLERANCE && row.top < cont.bottom - EDGE_TOLERANCE;
+}
+
+/** AI 按钮 x:气泡右缘外 gap;右侧放不下移到气泡左侧;左右都放不下夹 4px */
+export function aiButtonX(anchor: RectLike, btnW: number, viewportW: number, gap: number): number {
+  if (anchor.right + gap + btnW <= viewportW - VIEWPORT_PAD) return anchor.right + gap;
+  return Math.max(EDGE_MIN, anchor.left - btnW - gap);
+}
+
+/** AI 按钮 y:气泡垂直居中,夹在消息容器可视区内(上下各留 2px) */
+export function aiButtonY(anchor: RectLike, cont: RectLike, btnH: number): number {
+  return Math.min(
+    Math.max(anchor.top + anchor.height / 2 - btnH / 2, cont.top + CONTAINER_PAD),
+    cont.bottom - btnH - CONTAINER_PAD,
+  );
+}
+
+/**
+ * 候选弹窗位置:水平锚右侧优先 → 放不下换左侧 → 左缘越界回缩进视口;
+ * 垂直按弹窗实高夹在视口内(旧实现写死内边距导致低屏气泡面板溢出,已修)。
+ */
+export function popupPosition(
+  anchor: RectLike,
+  popupW: number,
+  popupH: number,
+  viewportW: number,
+  viewportH: number,
+): { x: number; y: number } {
+  let x = anchor.right + POPUP_GAP;
+  if (x + popupW > viewportW - VIEWPORT_PAD) x = anchor.left - popupW - POPUP_GAP;
+  if (x < VIEWPORT_PAD)
+    x = Math.max(VIEWPORT_PAD, Math.min(viewportW - popupW - VIEWPORT_PAD, anchor.left));
+  const maxTop = Math.max(VIEWPORT_PAD, viewportH - popupH - VIEWPORT_PAD);
+  const y = Math.max(VIEWPORT_PAD, Math.min(anchor.top - POPUP_ANCHOR_OFFSET, maxTop));
+  return { x, y };
+}
+
+/**
+ * 选中行滚进可视区的 scrollTop 校正:首条直接归零(回绕回顶,避开浮点残差);
+ * 行被 sticky 头部遮住上滚差值;行超出容器底下滚差值;其余不动。
+ */
+export function scrollForSelection(
+  scrollTop: number,
+  cont: RectLike,
+  row: RectLike,
+  headH: number,
+  selected: number,
+): number {
+  if (selected === 0) return 0;
+  const topLimit = cont.top + headH;
+  if (row.top < topLimit) return scrollTop - (topLimit - row.top);
+  if (row.bottom > cont.bottom) return scrollTop + (row.bottom - cont.bottom);
+  return scrollTop;
+}

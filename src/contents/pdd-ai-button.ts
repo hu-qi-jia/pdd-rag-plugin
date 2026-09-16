@@ -23,9 +23,14 @@
 import type { PlasmoCSConfig } from 'plasmo'
 import type { Suggestion, UiSettings } from '../types/messages'
 import {
+  aiButtonX,
+  aiButtonY,
   decideUiAction,
+  isRowVisible,
   mergeBuyerQuery,
   moveSelection,
+  popupPosition,
+  scrollForSelection,
   type UiAction,
 } from '../pdd/ui-logic'
 import { findBubbleElement } from '../pdd/bubble-anchor'
@@ -204,9 +209,8 @@ function scanButtons(): void {
   for (const li of document.querySelectorAll(ROW_SEL)) {
     if (buyerRowText(li) === null) continue
     const rect = li.getBoundingClientRect()
-    if (rect.height <= 0) continue
     // 行滚出消息容器可视区(校准实测 y 可为负)→ 不挂按钮
-    if (rect.bottom <= cont.top + 1 || rect.top >= cont.bottom - 1) continue
+    if (!isRowVisible(rect, cont)) continue
     wanted.add(li)
 
     let btn = rowBtns.get(li)
@@ -228,16 +232,10 @@ function scanButtons(): void {
     const bubble = resolveBubble(li)
     const anchor = bubble?.getBoundingClientRect() ?? rect
     const bw = btn.offsetWidth || AI_BTN_W
-    // x:气泡右缘外 12px(真间隙);放不下则移到气泡左侧
-    const x =
-      anchor.right + BTN_GAP + bw <= window.innerWidth - 8
-        ? anchor.right + BTN_GAP
-        : Math.max(4, anchor.left - bw - BTN_GAP)
-    // y:气泡垂直居中(按钮高 26 → 偏移 13),夹在消息容器可视区内
-    const y = Math.min(
-      Math.max(anchor.top + anchor.height / 2 - controlH.form / 2, cont.top + 2),
-      cont.bottom - controlH.form - 2,
-    )
+    // x:气泡右缘外 BTN_GAP(真间隙);放不下则移到气泡左侧
+    // y:气泡垂直居中,夹在消息容器可视区内(几何算术见 pdd/ui-logic,含单测)
+    const x = aiButtonX(anchor, bw, window.innerWidth, BTN_GAP)
+    const y = aiButtonY(anchor, cont, controlH.form)
     btn.style.left = `${Math.round(x)}px`
     btn.style.top = `${Math.round(y)}px`
   }
@@ -346,19 +344,18 @@ function applySelection(): void {
   // 改手动滚动,上下界都按头部实高校正;回绕到首条时 scrollTop 自然归 0(滚回最上)。
   const row = rows[armedPanel.selected]
   if (row instanceof HTMLElement) {
-    // 选中首条 → 滚动条直接归零(第二十六轮用户指定"回绕到首条滚到最上方";
-    // 也避开浮点残差导致 scrollTop 停在 1px 的毛刺)
-    if (armedPanel.selected === 0) {
-      popupEl.scrollTop = 0
-      return
-    }
+    // 滚动校正算术见 pdd/ui-logic#scrollForSelection(含单测):
+    // 选中首条 → 直接归零(第二十六轮用户指定"回绕到首条滚到最上方");
+    // 被 sticky 头遮住上滚、超出容器底下滚
     const head = popupEl.querySelector('.pddcs-popup-head')
     const headH = head ? head.getBoundingClientRect().height : 0
-    const cRect = popupEl.getBoundingClientRect()
-    const rRect = row.getBoundingClientRect()
-    const topLimit = cRect.top + headH
-    if (rRect.top < topLimit) popupEl.scrollTop -= topLimit - rRect.top
-    else if (rRect.bottom > cRect.bottom) popupEl.scrollTop += rRect.bottom - cRect.bottom
+    popupEl.scrollTop = scrollForSelection(
+      popupEl.scrollTop,
+      popupEl.getBoundingClientRect(),
+      row.getBoundingClientRect(),
+      headH,
+      armedPanel.selected,
+    )
   }
 }
 
@@ -577,20 +574,15 @@ function openPopup(
   overlay.appendChild(el)
 
   // 定位:水平方向按钮右侧优先,放不下换左侧,越界回缩;
-  // 垂直方向必须按弹窗**实高**夹在视口内(旧逻辑写死 window.innerHeight - 120,
-  // 靠近屏幕下方的气泡会让面板溢出屏幕,只能看到一部分)
+  // 垂直方向必须按弹窗**实高**夹在视口内(几何算术见 pdd/ui-logic#popupPosition,含单测)
   const a = anchor.getBoundingClientRect()
-  let x = a.right + 8
-  if (x + POPUP_W > window.innerWidth - 8) x = a.left - POPUP_W - 8
-  if (x < 8) x = Math.max(8, Math.min(window.innerWidth - POPUP_W - 8, a.left))
-  el.style.left = `${Math.round(x)}px`
   el.style.visibility = 'hidden'
   overlay.appendChild(el)
   // 实高向上取整:offsetHeight 是取整后的整数,会丢掉亚像素(如 336.125 → 336),
   // 差的 0.1px 恰好让面板底边压线溢出;getBoundingClientRect 保留小数
   const h = Math.ceil(el.getBoundingClientRect().height)
-  const maxTop = Math.max(8, window.innerHeight - h - 8)
-  const y = Math.max(8, Math.min(a.top - 4, maxTop))
+  const { x, y } = popupPosition(a, POPUP_W, h, window.innerWidth, window.innerHeight)
+  el.style.left = `${Math.round(x)}px`
   el.style.top = `${Math.round(y)}px`
   el.style.visibility = ''
   popupEl = el
@@ -674,9 +666,7 @@ function latestBuyerRow(): Element | null {
   let latest: Element | null = null
   for (const li of document.querySelectorAll(ROW_SEL)) {
     if (buyerRowText(li) === null) continue
-    const r = li.getBoundingClientRect()
-    if (r.height <= 0) continue
-    if (r.bottom <= cont.top + 1 || r.top >= cont.bottom - 1) continue
+    if (!isRowVisible(li.getBoundingClientRect(), cont)) continue
     latest = li // 行按时间序排列,取最后一条可见的
   }
   return latest

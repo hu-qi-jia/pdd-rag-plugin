@@ -11,11 +11,13 @@ import {
   planFolderImports,
   planMemoryImports,
   planKnowledgeImports,
-  type ExportedGolden,
-  type ExportedQa,
-  type ExportedReply,
-  type ExportedKnowledge,
 } from '../../../src/background/transferPlan'
+import type {
+  ExportedGolden,
+  ExportedQa,
+  ExportedReply,
+  ExportedKnowledge,
+} from '../../../src/types/transfer'
 import type {
   GoldenRecord,
   QaRecord,

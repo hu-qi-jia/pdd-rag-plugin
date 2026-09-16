@@ -15,74 +15,18 @@ import type {
   ReplyRecord,
 } from '../types/memory'
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../types/memory'
+// 导出线上形状(信封/剥离向量后的记录)是纯类型,2026-09-16 工程审查③移入 types/transfer,
+// types 层不再反向依赖 background
+import type {
+  ExportEnvelope,
+  ExportedGolden,
+  ExportedKnowledge,
+  ExportedQa,
+  ExportedReply,
+} from '../types/transfer'
 import { hashText } from '../utils/text'
 
 export const EXPORT_VERSION = '2.0'
-
-/** 导出金标准(向量剥离,导入端统一重嵌) */
-export interface ExportedGolden {
-  id: string
-  folderId: string | null
-  question: string
-  answer: string
-  questionHash: string
-  hasEmbedding: number
-  sourceRecordId?: string
-  sourceReplyId?: string
-  createdAt: number
-  updatedAt: number
-}
-
-/** 导出问答记录(问题向量剥离) */
-export interface ExportedQa {
-  id: string
-  sessionKey: string
-  buyerIdTail?: string
-  question: string
-  questionHash: string
-  questionTs: number
-  hasEmbedding: number
-  replyCount: number
-  createdAt: number
-  updatedAt: number
-}
-
-/** 导出回复(预留向量字段剥离) */
-export interface ExportedReply {
-  id: string
-  qaId: string
-  text: string
-  contentHash: string
-  msgId?: string
-  ts: number
-  hasEmbedding: number
-}
-
-/** 导出知识库条目(向量剥离;enabled/source/docId 原样保留) */
-export interface ExportedKnowledge {
-  id: string
-  title: string
-  content: string
-  questionHash: string
-  hasEmbedding: number
-  enabled: number
-  source?: 'manual' | 'doc'
-  docId?: string
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ExportEnvelope {
-  version: string
-  exportedAt: number
-  settings: PddSettings
-  folders: FolderRecord[]
-  goldens: ExportedGolden[]
-  /** 知识库:人工精选数据,与金标准同级,始终导出(不受 includeMemory 门控) */
-  knowledge?: ExportedKnowledge[]
-  qaRecords?: ExportedQa[]
-  replies?: ExportedReply[]
-}
 
 const stripGolden = (g: GoldenRecord): ExportedGolden => ({
   id: g.id,

@@ -2,7 +2,7 @@
 // P0 只保留底座所需(自检/统计);P1 捕获、P2 检索、P3 金标准 CRUD 消息随阶段扩展。
 
 import type { PddRole, PddSettings } from './memory'
-import type { ExportEnvelope } from '../background/transferPlan'
+import type { ExportEnvelope } from './transfer'
 
 // ─── PING_EMBED:嵌入链路自检(popup → SW)───────────────────────────────────────
 // SW 经 offscreen 嵌入一段样本文本,返回模型名与向量维度 —— P0 验收用。

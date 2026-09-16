@@ -5,7 +5,7 @@ import 'fake-indexeddb/auto'
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
-import type { ExportEnvelope } from '../../../src/background/transferPlan'
+import type { ExportEnvelope } from '../../../src/types/transfer'
 import { hashText } from '../../../src/utils/text'
 import { DEFAULT_SETTINGS } from '../../../src/types/memory'
 

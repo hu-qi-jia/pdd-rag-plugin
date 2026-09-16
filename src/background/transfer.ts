@@ -14,8 +14,8 @@ import {
   planGoldenImports,
   planKnowledgeImports,
   planMemoryImports,
-  type ExportEnvelope,
 } from "./transferPlan";
+import type { ExportEnvelope } from "../types/transfer";
 import { MAX_GOLDENS_PER_QUESTION } from "./goldens";
 import type { ExportDataRequest, ImportDataRequest } from "../types/messages";
 

@@ -18,6 +18,26 @@
 
 只记录与填充,不替客服发送;数据仅存本机,不上传任何服务器。
 
+## 项目结构
+
+```
+src/
+├── background/   # Service Worker:消息路由、DB(Dexie)、检索、捕获落盘、设置、导入导出
+├── offscreen/    # offscreen 页(embedding.ts 本地推理引擎);页面壳在 tabs/offscreen.tsx
+├── contents/     # 内容脚本:pdd-ai-button(AI 按钮+候选弹窗+填充)、pdd-chat-capture(捕获桥)
+├── popup/        # 弹窗 UI(React):统计 / 记忆 / 文件夹 / 知识库 / 设置五页签;logic.ts 为纯逻辑 Model 层
+├── ui/           # 设计系统:theme 令牌 / design 尺寸 / components(Toggle·Slider·Card)/ overlay-css
+├── shared/       # 跨上下文基础设施:text、mdText、chunkText、hotkey、message-passing、chrome-storage、常量
+├── pdd/          # 拼多多平台领域纯逻辑:dom-parser、bubble-anchor、ui-logic、segmenter(分段状态机)
+└── types/        # 纯类型:memory(存储 schema)、messages/(24 对消息按域拆分)、transfer(导入导出信封)
+tests/
+└── unit/{background,popup,ui,shared,pdd}/   # vitest 单测,目录与 src 对应
+scripts/          # 数据层 e2e 验收脚本(Playwright 真实扩展上下文)+ lib.mjs 公共底座
+docs/             # 设计文档(唯一事实源)、DESIGN.md、ADR、工作状态日志
+```
+
+分层约定:`types/` 只放类型;运行时常量在 `shared/constants.ts`;平台纯逻辑进 `pdd/`,通用基础设施进 `shared/`,UI 组件与令牌进 `ui/` —— 任何目录都不做杂物抽屉。
+
 ## 开发
 
 ```bash
@@ -27,9 +47,15 @@ pnpm build   # 产物在 build/chrome-mv3-prod
 pnpm test    # vitest 单测
 ```
 
+### 验证
+
+- **单测**:`pnpm test`(vitest,覆盖检索计划、分段状态机、DB 契约、面板纯逻辑、组件行为);
+- **数据层 e2e**:`node scripts/verify-kb.mjs` / `verify-p3.mjs` / `verify-golden-multi.mjs` / `verify-settings.mjs` —— 在真实扩展上下文(SW + popup)跑纯数据断言,不开窗口、不截图;
+- `scripts/e2e-chromium.mjs` 为真机联调探针(需登录态,见脚本头说明)。
+
 - 技术栈:Plasmo + React + TypeScript + Dexie(IndexedDB)+ Xenova Transformers(offscreen 本地嵌入)
 - 设计规范:`docs/DESIGN.md`;总体设计:`docs/拼多多客服快捷回复工具-设计文档.md`;架构决策:`docs/adr/`
-- 工作状态日志:`docs/工作状态-*.md`
+- 工作状态日志:`docs/工作状态-*.md`;变更记录:`CHANGELOG.md`
 
 ## License
 

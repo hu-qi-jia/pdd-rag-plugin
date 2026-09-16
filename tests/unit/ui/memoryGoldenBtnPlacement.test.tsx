@@ -1,7 +1,8 @@
-// 记忆卡片「设置标准回答」按钮位置单测(2026-09-15 用户要求):
-// 单回复卡片 → 按钮移到底部操作行、紧挨「删除」右侧(回复行内不再出现);
-// 多回复卡片 → 逐回复各自携带按钮(放底部无法区分对应哪条回复);
-// 已设金标 → 原按钮位置显示「已设为标准回答」徽标(同样跟随 placement 规则)。
+// 记忆卡片操作布局单测(2026-09-15 第十八轮用户要求):
+// ①「设置标准回答」放回每个回答条目后方(单/多回复口径统一,不再按回复数分流);
+// ②「删除」移至问题行折叠钮左侧、以垃圾桶图标展示(原底部文字按钮行整体移除,
+//    确认条改为点图标后在问题行下方出现);
+// 已设金标 → 原按钮位置显示「已设为标准回答」徽标。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -57,24 +58,24 @@ async function renderWith(items: MemoryListItem[]) {
   await act(async () => {})
 }
 
-describe('MemoryListTab:「设置标准回答」按钮位置', () => {
-  it('单回复卡片:按钮在底部操作行、与「删除」同容器,回复行内不再出现', async () => {
+const click = async (el: HTMLElement) => {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条回答后方)', () => {
+  it('单回复卡片:按钮在该回复行内(与回复文本同容器)', async () => {
     await renderWith([
       { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, replies: [reply('r1')] },
     ])
     const goldenBtns = btns('设置标准回答')
     expect(goldenBtns).toHaveLength(1)
-    const delBtn = btns('删除')[0]
-    expect(delBtn).not.toBeUndefined()
-    // 与删除按钮同一个操作行容器 = 紧挨其右侧
-    expect(goldenBtns[0].parentElement).toBe(delBtn.parentElement)
-    // 且在删除按钮之后(DOM 顺序 = 视觉右侧)
-    expect(Array.from(delBtn.parentElement!.children).indexOf(goldenBtns[0])).toBeGreaterThan(
-      Array.from(delBtn.parentElement!.children).indexOf(delBtn),
-    )
+    // 回复行容器同时包含回复文本与按钮
+    expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
   })
 
-  it('多回复卡片:每条回复各带按钮(留在回复行内),底部操作行只有「删除」', async () => {
+  it('多回复卡片:每条回复各带按钮', async () => {
     await renderWith([
       {
         id: 'qa-2',
@@ -86,12 +87,11 @@ describe('MemoryListTab:「设置标准回答」按钮位置', () => {
     ])
     const goldenBtns = btns('设置标准回答')
     expect(goldenBtns).toHaveLength(2)
-    const delBtn = btns('删除')[0]
-    // 两个按钮都不在删除所在的底部操作行
-    for (const b of goldenBtns) expect(b.parentElement).not.toBe(delBtn.parentElement)
+    expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
+    expect(goldenBtns[1].parentElement!.textContent).toContain('回复r2')
   })
 
-  it('单回复已设金标:底部操作行显示「已设为标准回答」徽标而非按钮', async () => {
+  it('已设金标:回复行内显示「已设为标准回答」徽标而非按钮', async () => {
     await renderWith([
       {
         id: 'qa-3',
@@ -103,5 +103,53 @@ describe('MemoryListTab:「设置标准回答」按钮位置', () => {
     ])
     expect(btns('设置标准回答')).toHaveLength(0)
     expect(container.textContent).toContain('已设为标准回答')
+  })
+})
+
+describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () => {
+  it('删除是问题行内的图标钮(title 标识),位于折叠钮左侧,不再有「删除」文字按钮', async () => {
+    await renderWith([
+      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, replies: [reply('r1')] },
+    ])
+    // 旧底部文字按钮已不存在(图标钮无文字)
+    expect(btns('删除')).toHaveLength(0)
+    const del = container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement
+    const chevron = container.querySelector('button[aria-expanded]') as HTMLButtonElement
+    expect(del).toBeTruthy()
+    expect(chevron).toBeTruthy()
+    // 同一问题行,删除在折叠钮左侧(DOM 顺序在前 = 视觉左侧)
+    expect(del.parentElement).toBe(chevron.parentElement)
+    const kids = Array.from(del.parentElement!.children)
+    expect(kids.indexOf(del)).toBeLessThan(kids.indexOf(chevron))
+    // 图标钮与折叠钮同尺寸(等高铁律;jsdom 下比对内联样式)
+    expect(del.style.height).toBe(chevron.style.height)
+    expect(del.style.width).toBe(chevron.style.width)
+  })
+
+  it('点删除图标 → 问题行下方出确认条;取消可退出;确认调 DELETE_QA', async () => {
+    mockedSend
+      .mockResolvedValueOnce(
+        page([{ id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, replies: [reply('r1')] }]),
+      )
+      .mockResolvedValueOnce({
+        type: 'DELETE_QA_RESPONSE',
+        payload: { success: true },
+      } as never)
+      .mockResolvedValueOnce(page([]))
+    await renderWith([
+      { id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, replies: [reply('r1')] },
+    ])
+    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement)
+    expect(container.textContent).toContain('删除该问答及其全部回复?')
+    // 取消 → 确认条消失,未发删除请求
+    await click(btns('取消')[0])
+    expect(container.textContent).not.toContain('删除该问答及其全部回复?')
+    expect(mockedSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DELETE_QA' }))
+    // 再点图标 → 确认 → 发 DELETE_QA
+    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement)
+    await click(btns('确认')[0])
+    expect(mockedSend).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'DELETE_QA', payload: { id: 'qa-9' } }),
+    )
   })
 })

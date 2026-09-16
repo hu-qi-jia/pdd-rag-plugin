@@ -24,7 +24,7 @@ import {
   type NoticeMsg,
 } from '../ui/components'
 import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
-import { CheckIcon, ChevronDownIcon } from '../ui/icons'
+import { CheckIcon, ChevronDownIcon, TrashIcon } from '../ui/icons'
 
 export function MemoryListTab({
   tk,
@@ -266,6 +266,39 @@ export function MemoryListTab({
                 </div>
               </div>
 
+              {/* 删除入口(第十八轮):折叠钮左侧的垃圾桶图标钮;确认条在问题行下方 */}
+              <button
+                type="button"
+                title="删除该问答(需确认)"
+                onClick={() => setConfirmDeleteId(item.id)}
+                style={{
+                  flexShrink: 0,
+                  width: controlH.inline,
+                  height: controlH.inline,
+                  marginTop: 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: radius.sm,
+                  backgroundColor: 'transparent',
+                  color: tk.textTertiary,
+                  cursor: 'pointer',
+                  transition: `background-color ${motion.fast}, color ${motion.fast}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = tk.errorBg
+                  e.currentTarget.style.color = tk.errorText
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                  e.currentTarget.style.color = tk.textTertiary
+                }}
+              >
+                <TrashIcon size={13} strokeWidth={2.2} />
+              </button>
+
               <button
                 type="button"
                 title={expanded ? '折叠该问题' : '展开该问题'}
@@ -311,6 +344,19 @@ export function MemoryListTab({
               </button>
             </div>
 
+            {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现 */}
+            {confirmDeleteId === item.id && (
+              <div style={{ marginTop: spacing.md, display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: fontSize.caption + 0.5, color: tk.errorText }}>删除该问答及其全部回复?</span>
+                <Btn tk={tk} variant="danger" onClick={() => void deleteQa(item.id)}>
+                  确认
+                </Btn>
+                <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
+                  取消
+                </Btn>
+              </div>
+            )}
+
             {/* 展开区:回复列表(与问题文字同左基线,不再给折叠钮留缩进) */}
             {expanded && (
               <div
@@ -347,32 +393,11 @@ export function MemoryListTab({
                     >
                       {r.text}
                     </div>
-                    {/* 金标控件:仅多回复卡片留在回复行内(放底部无法区分对应哪条回复);
-                        单回复卡片移到底部操作行(2026-09-15 用户要求) */}
-                    {item.replies.length > 1 && goldenControl(item, r)}
+                    {/* 金标控件:每条回复行内各自携带(2026-09-15 第十八轮用户要求放回
+                        回答条目后方;单/多回复口径统一) */}
+                    {goldenControl(item, r)}
                   </div>
                 ))}
-                {/* 底部操作行:删除(内联二次确认)+ 单回复卡片的金标控件(删除右侧) */}
-                <div style={{ borderTop: `1px solid ${tk.separator}`, paddingTop: spacing.md, display: 'flex', gap: spacing.sm, alignItems: 'center' }}>
-                  {confirmDeleteId === item.id ? (
-                    <>
-                      <span style={{ fontSize: fontSize.caption + 0.5, color: tk.errorText }}>删除该问答及其全部回复?</span>
-                      <Btn tk={tk} variant="danger" onClick={() => void deleteQa(item.id)}>
-                        确认
-                      </Btn>
-                      <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
-                        取消
-                      </Btn>
-                    </>
-                  ) : (
-                    <>
-                      <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(item.id)}>
-                        删除
-                      </Btn>
-                      {item.replies.length === 1 && goldenControl(item, item.replies[0])}
-                    </>
-                  )}
-                </div>
               </div>
             )}
           </Card>

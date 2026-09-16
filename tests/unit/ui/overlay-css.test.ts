@@ -86,12 +86,12 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
   it('面板加宽至 360(CSS 与 JS 定位共用常量,单处维护)', () => {
     expect(POPUP_W).toBe(360)
   })
-  it('内缩圆角软行:行带内缩 margin 与圆角,v2.6.20 收紧为 8px 行内 padding;悬浮与选中共用同一软中性灰填充', () => {
+  it('内缩圆角软行:行带内缩 margin 与圆角,v2.6.25 为 margin 1px / padding 3px 12px;悬浮与选中共用同一软中性灰填充', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).toContain('border-radius')
-    expect(candRule).toContain('margin: 2px 8px')
-    expect(candRule).toContain('padding: 8px 12px')
+    expect(candRule).toContain('margin: 1px 8px')
+    expect(candRule).toContain('padding: 3px 12px')
     const fillRule = css.match(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
     expect(fillRule).toContain(lightTheme.selectedBg)
     expect(fillRule).not.toContain('inset 3px') // 左描边属旧表格语言,移除
@@ -130,15 +130,93 @@ describe('buildOverlayCss:面板细节四调(2026-09-16 第三十三轮 v2.6.19)
     const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
     expect(popupRule).toContain('border-radius: 12px')
   })
-  it('同内容×n 移至行右下角悬浮才显(absolute 定位 + 静止透明);折叠行预留条位不压正文', () => {
+  it('同内容×n 移到徽标右侧常驻(v2.6.25 用户"同内容移动至标签的右侧"):不再 absolute/不再悬浮才显,折叠条位预留规则删除', () => {
     const css = buildOverlayCss(lightTheme)
     const foldRule = css.match(/\.pddcs-fold \{[^}]*\}/)![0]
-    expect(foldRule).toContain('position: absolute')
-    expect(foldRule).toContain('right: 10px')
-    expect(foldRule).toContain('bottom: 6px')
-    expect(foldRule).toContain('opacity: 0')
-    expect(css).toMatch(/\.pddcs-cand:hover \.pddcs-fold[^{]*\{[^}]*opacity: 1/)
-    expect(css).toContain('.pddcs-cand-folded')
+    expect(foldRule).not.toContain('position: absolute')
+    expect(foldRule).not.toContain('opacity: 0')
+    expect(foldRule).toContain('white-space: nowrap')
+    expect(foldRule).toContain(`color: ${lightTheme.textTertiary}`)
+    // 行首行不再是右浮动覆盖物:悬浮显隐钩子与折叠条位都撤掉
+    expect(css).not.toContain('.pddcs-cand:hover .pddcs-fold')
+    expect(css).not.toContain('.pddcs-cand-folded')
+  })
+})
+
+describe('buildOverlayCss:标签放大 + 操作钮图标化 + 列表收紧(2026-09-16 第三十七轮 v2.6.24)', () => {
+  it('类别徽标放大(用户"标签比例增大"):11.5px secondary 档 + 3px 9px 内边距 + 6px 圆角', () => {
+    const css = buildOverlayCss(lightTheme)
+    const badgeRule = css.match(/\.pddcs-badge \{[^}]*\}/)![0]
+    expect(badgeRule).toContain('font-size: 11.5px')
+    expect(badgeRule).toContain('padding: 3px 9px')
+    expect(badgeRule).toContain('border-radius: 6px')
+    // 三态配色不变(金/绿/中性灰软底)
+    expect(css).toContain('.pddcs-badge.golden')
+    expect(css).toContain('.pddcs-badge.knowledge')
+  })
+  it('下方内容与徽标左缘同基线:行内左 padding 单点决定(徽标与正文都是它的子元素)', () => {
+    const css = buildOverlayCss(lightTheme)
+    const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
+    expect(candRule).toContain('padding: 3px 12px') // 左右对称 → 徽标左缘 === 正文左缘
+    const topRule = css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]
+    expect(topRule).not.toContain('padding-left') // 行首行不得再加缩进,否则标签与正文错位
+    const qRule = css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]
+    const textRule = css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]
+    expect(qRule).not.toContain('padding-left')
+    expect(textRule).not.toContain('padding-left')
+  })
+  it('操作钮图标化:文字迷你钮规则移除,改 24px 图标钮(星标/复制)', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css).not.toContain('.pddcs-mini')
+    const btnRule = css.match(/\.pddcs-icon-btn \{[^}]*\}/)![0]
+    expect(btnRule).toContain('width: 24px')
+    expect(btnRule).toContain('height: 24px')
+    expect(btnRule).toContain('color:') // currentColor 继承,图标 SVG 不写死颜色
+    // 星标三态:未设悬浮金、已设实心金
+    expect(css).toContain('.pddcs-icon-btn-star:hover')
+    expect(css).toContain('.pddcs-icon-btn-golden')
+    expect(css).toContain('rgba(184, 134, 11, 0.14)')
+    // 在途转圈(替代「设置中…」文字)
+    expect(css).toContain('.pddcs-icon-btn-busy svg')
+    expect(css).toContain('@keyframes pddcs-spin')
+  })
+  it('图标钮颜色随主题走令牌(深色取深色 textTertiary),金色星态主题无关(semantic)', () => {
+    const dark = buildOverlayCss(darkTheme)
+    expect(dark.match(/\.pddcs-icon-btn \{[^}]*\}/)![0]).toContain(
+      `color: ${darkTheme.textTertiary}`,
+    )
+    expect(dark).toContain('.pddcs-icon-btn-golden { color: #b8860b; }')
+  })
+  it('按钮右移:操作钮组负外边距 6px,从行内边距推向面板右缘', () => {
+    const css = buildOverlayCss(lightTheme)
+    const actRule = css.match(/\.pddcs-cand-actions \{[^}]*\}/)![0]
+    expect(actRule).toContain('margin-right: -6px')
+    expect(actRule).toContain('margin-left: auto')
+  })
+})
+
+describe('buildOverlayCss:词条留白重配 + 折叠数归位(2026-09-16 第三十八轮 v2.6.25)', () => {
+  it('留白重配(用户"标签/原问题/回答间距各 +2px,词条反而要更矮"):两处行内间距 4px、上下 padding 压到 3px', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).toContain('margin-bottom: 4px')
+    expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain('margin-bottom: 4px')
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
+    expect(css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]).toContain('padding: 1px 0 3px')
+  })
+  it('徽标左缘基线不受重配影响(左右 padding 仍对称 12px,标签/原问题/正文同线)', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
+    expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).not.toContain('padding-left')
+  })
+  it('同内容×n 在徽标右侧常驻:不再 absolute/悬浮才显,折叠条位预留规则整体删除', () => {
+    const css = buildOverlayCss(lightTheme)
+    const foldRule = css.match(/\.pddcs-fold \{[^}]*\}/)![0]
+    expect(foldRule).not.toContain('position: absolute')
+    expect(foldRule).not.toContain('opacity: 0')
+    expect(foldRule).toContain('white-space: nowrap')
+    expect(foldRule).toContain(`color: ${lightTheme.textTertiary}`)
+    expect(css).not.toContain('.pddcs-cand:hover .pddcs-fold')
+    expect(css).not.toContain('.pddcs-cand-folded') // 折叠与否不再改变词条高度
   })
 })
 

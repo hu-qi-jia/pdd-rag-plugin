@@ -4,13 +4,9 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import Dexie from 'dexie'
 import { PddDatabase } from '../../../src/background/db'
-import {
-  UNCATEGORIZED_FOLDER_ID,
-  SELF_TEST_SESSION_KEY,
-  type QaRecord,
-  type ReplyRecord,
-} from '../../../src/types/memory'
-import { hashText } from '../../../src/utils/text'
+import { UNCATEGORIZED_FOLDER_ID, SELF_TEST_SESSION_KEY } from '../../../src/shared/constants'
+import type { QaRecord, ReplyRecord } from '../../../src/types/memory'
+import { hashText } from '../../../src/shared/text'
 
 let testDb: PddDatabase
 

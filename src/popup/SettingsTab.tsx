@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
-import { sendMessage } from '../utils/message-passing'
+import { sendMessage } from '../shared/message-passing'
 import type {
   ClearMemoryDataResponse,
   ExportDataResponse,
@@ -18,7 +18,7 @@ import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, type NoticeMsg } from '../ui/components'
 import { controlH, fontSize, fontWeight, spacing } from '../ui/design'
 import { DownloadIcon, PencilIcon, UploadIcon } from '../ui/icons'
-import { formatHotkey, isModifierOnly } from '../utils/hotkey'
+import { formatHotkey, isModifierOnly } from '../shared/hotkey'
 
 export function SettingsTab({
   tk,

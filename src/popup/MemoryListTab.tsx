@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
-import { sendMessage } from '../utils/message-passing'
+import { sendMessage } from '../shared/message-passing'
 import type {
   AddGoldenResponse,
   DeleteQaResponse,
@@ -13,7 +13,7 @@ import type {
   MemoryReplyItem,
 } from '../types/messages'
 import { filterQaRecords, remainingDays } from './logic'
-import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
+import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
 import {
   Btn,
   Card,

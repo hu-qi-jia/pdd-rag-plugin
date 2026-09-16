@@ -11,8 +11,8 @@ import { db } from "./db";
 import { queueEmbedding } from "./offscreen";
 import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "./pddSegmenter";
 import { loadSettings } from "./settings";
-import { hashText, normalizeText } from "../utils/text";
-import type { QaRecord, ReplyRecord } from "../types/memory";
+import { hashText, normalizeText } from "../shared/text";
+import type { QaRecord, ReplyRecord } from '../types/memory';
 import type { PddIngestRequest, PddIngestResponse } from "../types/messages";
 
 const MS_PER_DAY = 86_400_000;

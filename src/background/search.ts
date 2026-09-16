@@ -14,8 +14,8 @@ import {
   type Suggestion,
 } from "./retrieval";
 import { loadSettings } from "./settings";
-import { normalizeText } from "../utils/text";
-import type { GoldenRecord, KnowledgeRecord } from "../types/memory";
+import { normalizeText } from "../shared/text";
+import type { GoldenRecord, KnowledgeRecord } from '../types/memory';
 import type { UiSettings } from "../types/messages";
 
 export interface SearchOutcome {

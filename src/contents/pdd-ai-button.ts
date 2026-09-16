@@ -29,14 +29,9 @@ import {
   type UiAction,
 } from '../utils/pddUiLogic'
 import { findBubbleElement } from '../utils/pddBubbleAnchor'
-import {
-  DEFAULT_HOTKEY,
-  DEFAULT_SETTINGS,
-  MAX_GOLDENS_PER_QUESTION,
-  SETTINGS_STORAGE_KEY,
-  type PddSettings,
-} from '../types/memory'
-import { formatHotkey, isModifierOnly, matchesHotkey } from '../utils/hotkey'
+import { DEFAULT_HOTKEY, DEFAULT_SETTINGS, MAX_GOLDENS_PER_QUESTION, SETTINGS_STORAGE_KEY } from '../shared/constants'
+import type { PddSettings } from '../types/memory'
+import { formatHotkey, isModifierOnly, matchesHotkey } from '../shared/hotkey'
 
 import {
   THEME_STORAGE_KEY,

@@ -11,7 +11,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
-import { sendMessage } from '../utils/message-passing'
+import { sendMessage } from '../shared/message-passing'
 import type {
   CreateFolderResponse,
   DeleteFolderResponse,
@@ -24,10 +24,9 @@ import type {
   RenameFolderResponse,
   UpdateGoldenResponse,
 } from '../types/messages'
-import { UNCATEGORIZED_FOLDER_ID } from '../types/memory'
+import { UNCATEGORIZED_FOLDER_ID, MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
 import { buildFolderTree, countGoldensByQuestion, type FolderNode } from './logic'
-import { hashText } from '../utils/text'
-import { MAX_GOLDENS_PER_QUESTION } from '../types/memory'
+import { hashText } from '../shared/text'
 import { CreateBtn, EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
 import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
 import {

@@ -12,7 +12,7 @@
  *  - 折叠现实来源 = 不同问答下相同回复文本 / 金标准与历史同文本
  *    (同一条问答内部已在捕获时按 contentHash 幂等)。
  */
-import { hashText } from '../utils/text'
+import { hashText } from '../shared/text'
 import type { Suggestion } from '../types/messages'
 
 export type { Suggestion }

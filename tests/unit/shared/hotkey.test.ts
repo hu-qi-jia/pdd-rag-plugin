@@ -3,9 +3,8 @@
  * (2026-09-15:推荐回复快捷键,默认 Ctrl+Enter,可在设置中录入自定义组合。)
  */
 import { describe, it, expect } from 'vitest'
-import { formatHotkey, isModifierOnly, matchesHotkey } from '../../../src/utils/hotkey'
-import { DEFAULT_HOTKEY } from '../../../src/types/memory'
-
+import { formatHotkey, isModifierOnly, matchesHotkey } from '../../../src/shared/hotkey'
+import { DEFAULT_HOTKEY } from '../../../src/shared/constants'
 const ev = (p: { ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean; key: string }) => ({
   ctrlKey: p.ctrlKey ?? false,
   altKey: p.altKey ?? false,

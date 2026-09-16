@@ -8,10 +8,10 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { GetMemoryListResponse, MemoryListItem, MemoryReplyItem } from '../../../src/types/messages'
 
-vi.mock('../../../src/utils/message-passing', () => ({
+vi.mock('../../../src/shared/message-passing', () => ({
   sendMessage: vi.fn(),
 }))
-const { sendMessage } = await import('../../../src/utils/message-passing')
+const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')

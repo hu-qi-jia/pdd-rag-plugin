@@ -18,13 +18,9 @@ import {
 import { processPendingEmbeddings } from "./syncEmbeddings";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
-import { hashText } from "../utils/text";
-import {
-  DEFAULT_SETTINGS,
-  SELF_TEST_SESSION_KEY,
-  type QaRecord,
-  type ReplyRecord,
-} from "../types/memory";
+import { hashText } from "../shared/text";
+import { DEFAULT_SETTINGS, SELF_TEST_SESSION_KEY } from '../shared/constants';
+import type { QaRecord, ReplyRecord } from '../types/memory';
 import type {
   ExtensionMessage,
   ExtensionMessageResponse,

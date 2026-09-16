@@ -14,19 +14,9 @@
  * hasEmbedding 三态:0=待嵌(启动扫描重试) 1=已嵌 -1=嵌入失败(记录 errors,下次启动扫描重试)
  */
 import Dexie, { type Table } from "dexie";
-import type {
-  ErrorLog,
-  FolderRecord,
-  GoldenRecord,
-  KnowledgeRecord,
-  QaRecord,
-  ReplyRecord,
-} from "../types/memory";
-import {
-  SELF_TEST_SESSION_KEY,
-  UNCATEGORIZED_FOLDER_ID,
-  UNCATEGORIZED_FOLDER_NAME,
-} from "../types/memory";
+import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants';
+import type { ErrorLog, FolderRecord, GoldenRecord, KnowledgeRecord, QaRecord, ReplyRecord } from '../types/memory';
+
 // 检索缓存失效钩子(工程5b):改变"已嵌三源"集合的写路径必须调用。
 // 循环依赖安全:本模块只在方法体内(运行时)使用它,模块求值期不触碰。
 import { invalidateRetrievalCache } from "./retrievalCache";

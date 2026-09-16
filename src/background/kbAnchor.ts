@@ -5,7 +5,6 @@
  * 重嵌/导入等任何补嵌路径也必须走它,否则失败重试会把错误的文本嵌进向量。
  */
 import type { KnowledgeRecord } from '../types/memory'
-
 export function kbAnchorText(k: Pick<KnowledgeRecord, 'source' | 'title' | 'content'>): string {
   return k.source === 'doc' ? `${k.title}\n${k.content}` : k.title
 }

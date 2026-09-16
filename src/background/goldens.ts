@@ -9,12 +9,9 @@
  */
 import { db } from "./db";
 import { queueEmbedding } from "./offscreen";
-import { hashText, normalizeText } from "../utils/text";
+import { hashText, normalizeText } from "../shared/text";
 import { planGoldenAdd, planGoldenEdit } from "./goldenEdit";
-import {
-  MAX_GOLDENS_PER_QUESTION,
-  UNCATEGORIZED_FOLDER_ID,
-} from "../types/memory";
+import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
 import type {
   AddGoldenRequest,
   UpdateGoldenRequest,

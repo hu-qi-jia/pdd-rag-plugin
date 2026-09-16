@@ -7,7 +7,7 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { QaRecord, ReplyRecord, GoldenRecord } from '../../../src/types/memory'
-import { hashText } from '../../../src/utils/text'
+import { hashText } from '../../../src/shared/text'
 
 // offscreen 依赖 chrome.runtime 消息通道:编排测试不关心嵌入实现,
 // mock 为确定性函数 —— 含"发票"→[1,0],否则→[0,1](正交 ⇒ 余弦 0/1 可预测)。

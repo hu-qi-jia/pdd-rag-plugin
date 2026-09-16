@@ -4,7 +4,6 @@
  * (KeyboardEvent.key 对字母受大小写影响,Enter 等命名键不受影响)。
  */
 import type { HotkeyConfig } from '../types/memory'
-
 type KeyEventLike = Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'shiftKey' | 'key'>
 
 export function formatHotkey(hk: HotkeyConfig): string {

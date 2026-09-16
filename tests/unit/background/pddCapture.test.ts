@@ -5,7 +5,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { chromeMock } from '../../__mocks__/chrome'
 import type { QaRecord, ReplyRecord } from '../../../src/types/memory'
-
 vi.mock('../../../src/background/db', () => {
   // 有状态最小 mock:addQaRecord 存入内存,getQaRecord 可读回(孤回复守卫需要)
   const qaStore = new Map<string, unknown>()

@@ -7,10 +7,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { GetMemoryListResponse, MemoryListItem } from '../../../src/types/messages'
 
 // sendMessage 是 popup → SW 的唯一通道:mock 掉后按序返回分页响应
-vi.mock('../../../src/utils/message-passing', () => ({
+vi.mock('../../../src/shared/message-passing', () => ({
   sendMessage: vi.fn(),
 }))
-const { sendMessage } = await import('../../../src/utils/message-passing')
+const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')

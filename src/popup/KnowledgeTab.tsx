@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
-import { sendMessage } from '../utils/message-passing'
+import { sendMessage } from '../shared/message-passing'
 import type {
   CreateKbResponse,
   DeleteKbResponse,

@@ -7,8 +7,8 @@
  *    永不截断单行;无结构纯文本回退原 chunkText(500/75 滑窗,原项目逻辑兜底)。
  */
 import { describe, it, expect } from 'vitest'
-import { mdToPlainText, chunkMarkdown } from '../../../src/utils/mdText'
-import { chunkText } from '../../../src/utils/chunkText'
+import { mdToPlainText, chunkMarkdown } from '../../../src/shared/mdText'
+import { chunkText } from '../../../src/shared/chunkText'
 
 describe('mdToPlainText', () => {
   it('剥标题/列表/加粗/行内代码/链接标记,保留文字', () => {

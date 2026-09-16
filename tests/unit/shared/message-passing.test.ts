@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { sendMessage, sendMessageFireAndForget } from '../../../src/utils/message-passing'
+import { sendMessage, sendMessageFireAndForget } from '../../../src/shared/message-passing'
 import { chromeMock, resetChromeMock, setLastError } from '../../__mocks__/chrome'
 
 beforeEach(() => {

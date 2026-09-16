@@ -4,8 +4,8 @@
  * (2026-09-16 工程审查③-V6:自 utils/panelLogic.ts 迁入 popup/,与 background/panel.ts
  *  的命名撞车解除 —— 后者是 SW 侧 DB 读取,本文件是 UI 侧纯逻辑)
  */
-import { hashText, normalizeText } from '../utils/text'
-import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../types/memory'
+import { hashText, normalizeText } from '../shared/text'
+import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants'
 import type { PanelFolder, PanelGolden } from '../types/messages'
 
 export type { PanelFolder, PanelGolden }

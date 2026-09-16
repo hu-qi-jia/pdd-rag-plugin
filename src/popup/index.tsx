@@ -19,7 +19,7 @@ import {
   MoonIcon,
   SunIcon,
 } from '../ui/icons'
-import { sendMessage } from '../utils/message-passing'
+import { sendMessage } from '../shared/message-passing'
 import type { GetStatsResponse } from '../types/messages'
 import { MemoryListTab } from './MemoryListTab'
 import { FoldersTab } from './FoldersTab'

@@ -4,7 +4,7 @@
  * 正文编辑不动向量;enabled 停用切换不归此管(编排层直改,不重嵌)。
  */
 import type { KnowledgeRecord } from '../types/memory'
-import { normalizeText, hashText } from '../utils/text'
+import { normalizeText, hashText } from '../shared/text'
 
 export type KnowledgeEditPlan =
   | { ok: false; error: string }

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { loadFromChrome, saveToChrome, subscribeChromeStorage } from '../utils/chrome-storage'
+import { loadFromChrome, saveToChrome, subscribeChromeStorage } from '../shared/chrome-storage'
 import type { ThemeMode } from './theme'
 
 const STORAGE_KEY = 'pddcs:theme'

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { planKnowledgeEdit } from '../../../src/background/knowledgeEdit'
-import { hashText } from '../../../src/utils/text'
+import { hashText } from '../../../src/shared/text'
 
 describe('planKnowledgeEdit', () => {
   it('标题置空或正文置空 → 拒绝', () => {

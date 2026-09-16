@@ -6,8 +6,8 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { ExportEnvelope } from '../../../src/types/transfer'
-import { hashText } from '../../../src/utils/text'
-import { DEFAULT_SETTINGS } from '../../../src/types/memory'
+import { hashText } from '../../../src/shared/text'
+import { DEFAULT_SETTINGS } from '../../../src/shared/constants'
 
 async function freshImport() {
   vi.resetModules()

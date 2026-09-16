@@ -4,7 +4,7 @@
  * 用途:P4-KB md 文档上传 → 分块 → 逐块向量化。
  */
 import { describe, it, expect } from 'vitest'
-import { chunkText, CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS } from '../../../src/utils/chunkText'
+import { chunkText, CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS } from '../../../src/shared/chunkText'
 
 describe('chunkText(与原项目一致)', () => {
   it('常量与原项目一致:500 / 75', () => {

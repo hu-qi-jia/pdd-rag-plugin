@@ -9,7 +9,7 @@ import {
   planGoldenEdit,
   type GoldenEditContext,
 } from '../../../src/background/goldenEdit'
-import { hashText } from '../../../src/utils/text'
+import { hashText } from '../../../src/shared/text'
 
 const MAX = 3
 

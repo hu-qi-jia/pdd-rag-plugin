@@ -6,15 +6,8 @@
  * 实现差异(记录在案):导出统一剥离向量字段、hasEmbedding 归 0,
  * 导入端全量重新嵌入 —— 终态与"含向量搬库"一致,免去跨模型版本校验。
  */
-import type {
-  FolderRecord,
-  GoldenRecord,
-  KnowledgeRecord,
-  PddSettings,
-  QaRecord,
-  ReplyRecord,
-} from '../types/memory'
-import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../types/memory'
+import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../shared/constants'
+import type { FolderRecord, GoldenRecord, KnowledgeRecord, PddSettings, QaRecord, ReplyRecord } from '../types/memory'
 // 导出线上形状(信封/剥离向量后的记录)是纯类型,2026-09-16 工程审查③移入 types/transfer,
 // types 层不再反向依赖 background
 import type {
@@ -24,7 +17,7 @@ import type {
   ExportedQa,
   ExportedReply,
 } from '../types/transfer'
-import { hashText } from '../utils/text'
+import { hashText } from '../shared/text'
 
 export const EXPORT_VERSION = '2.0'
 

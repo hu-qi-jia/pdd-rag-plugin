@@ -1,14 +1,8 @@
-// 设置读写(chrome.storage.local) —— 默认值见 types/memory.ts DEFAULT_SETTINGS
+// 设置读写(chrome.storage.local) —— 默认值见 shared/constants.ts DEFAULT_SETTINGS
 // 读取时与默认值合并并夹取合法区间,防止旧值/脏数据污染行为。
 
-import {
-  DEFAULT_HOTKEY,
-  DEFAULT_PANEL_NAV_HOTKEY,
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-  type HotkeyConfig,
-  type PddSettings,
-} from "../types/memory";
+import { DEFAULT_HOTKEY, DEFAULT_PANEL_NAV_HOTKEY, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../shared/constants';
+import type { HotkeyConfig, PddSettings } from '../types/memory';
 
 /** 快捷键夹取:主键必须是非空短字符串,修饰键只认布尔 */
 function clampHotkey(raw: unknown, fallbackKey: string = DEFAULT_HOTKEY.key): HotkeyConfig {
@@ -19,7 +13,7 @@ function clampHotkey(raw: unknown, fallbackKey: string = DEFAULT_HOTKEY.key): Ho
       : fallbackKey;
   return { ctrl: !!base.ctrl, alt: !!base.alt, shift: !!base.shift, key };
 }
-import { loadFromChrome, saveToChrome } from "../utils/chrome-storage";
+import { loadFromChrome, saveToChrome } from "../shared/chrome-storage";
 
 function clampSettings(raw: Partial<PddSettings>): PddSettings {
   const base = { ...DEFAULT_SETTINGS, ...raw };

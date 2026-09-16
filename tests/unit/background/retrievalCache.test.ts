@@ -6,8 +6,8 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { QaRecord, GoldenRecord, KnowledgeRecord } from '../../../src/types/memory'
-import { hashText } from '../../../src/utils/text'
-import { kbAnchorText } from '../../../src/utils/../background/kbAnchor'
+import { hashText } from '../../../src/shared/text'
+import { kbAnchorText } from '../../../src/background/kbAnchor'
 
 /** 重置模块注册表 → retrievalCache + db 单例在已删库的 fake-indexeddb 上重建 */
 async function freshCache() {
@@ -240,7 +240,7 @@ describe('db 写路径自动失效', () => {
 
   it('clearSelfTestRecords:自检数据清除后出缓存', async () => {
     const { getRetrievalEntries, db } = await freshCache()
-    const { SELF_TEST_SESSION_KEY } = await import('../../../src/types/memory')
+    const { SELF_TEST_SESSION_KEY } = await import('../../../src/shared/constants')
     await db.addQaRecord(
       makeQa({
         id: 'qa-st',

@@ -18,20 +18,8 @@ import type {
   ExportedReply,
   ExportedKnowledge,
 } from '../../../src/types/transfer'
-import type {
-  GoldenRecord,
-  QaRecord,
-  ReplyRecord,
-  FolderRecord,
-  KnowledgeRecord,
-} from '../../../src/types/memory'
-import {
-  MAX_GOLDENS_PER_QUESTION,
-  SELF_TEST_SESSION_KEY,
-  UNCATEGORIZED_FOLDER_ID,
-} from '../../../src/types/memory'
-import { DEFAULT_SETTINGS } from '../../../src/types/memory'
-
+import { MAX_GOLDENS_PER_QUESTION, SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, DEFAULT_SETTINGS } from '../../../src/shared/constants'
+import type { GoldenRecord, QaRecord, ReplyRecord, FolderRecord, KnowledgeRecord } from '../../../src/types/memory'
 // ─── 造数 ──────────────────────────────────────────────────────────────────────
 
 const golden = (

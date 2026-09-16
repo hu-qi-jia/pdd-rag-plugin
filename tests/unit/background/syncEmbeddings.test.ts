@@ -19,9 +19,8 @@ vi.mock('../../../src/background/offscreen', () => ({
 
 import { db } from '../../../src/background/db'
 import { processPendingEmbeddings } from '../../../src/background/syncEmbeddings'
-import { hashText } from '../../../src/utils/text'
+import { hashText } from '../../../src/shared/text'
 import type { QaRecord } from '../../../src/types/memory'
-
 function makeQa(over: Partial<QaRecord> & { id: string }): QaRecord {
   const now = Date.now()
   return {

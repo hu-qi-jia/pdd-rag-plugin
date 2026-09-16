@@ -6,7 +6,7 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { QaRecord, ReplyRecord, GoldenRecord } from '../../../src/types/memory'
-import { hashText } from '../../../src/utils/text'
+import { hashText } from '../../../src/shared/text'
 
 /** 重置模块注册表 → panel.ts(及其单例 db)在已删库的 fake-indexeddb 上重建 */
 async function freshPanel() {
@@ -121,7 +121,7 @@ describe('getMemoryList:分页(2026-09-15 PM2,更早记录显式入口)', () => 
 
   it('total 排除自检示例数据(与头部统计同口径)', async () => {
     const { getMemoryList, db } = await seedFive()
-    const { SELF_TEST_SESSION_KEY } = await import('../../../src/types/memory')
+    const { SELF_TEST_SESSION_KEY } = await import('../../../src/shared/constants')
     await db.addQaRecord(
       makeQa({ id: 'qa-st', sessionKey: SELF_TEST_SESSION_KEY, questionTs: 99 }),
     )

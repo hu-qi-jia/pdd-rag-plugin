@@ -3,7 +3,7 @@
  * 树构建等纯逻辑见 popup/logic.ts;本文件只做 DB 读取与形状组装。
  */
 import { db } from "./db";
-import { UNCATEGORIZED_FOLDER_ID } from "../types/memory";
+import { UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
 import type {
   ClearMemoryDataRequest,
   CreateFolderRequest,

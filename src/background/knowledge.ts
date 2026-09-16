@@ -6,8 +6,8 @@
  */
 import { db } from './db'
 import { queueEmbedding } from './offscreen'
-import { hashText, normalizeText } from '../utils/text'
-import { chunkMarkdown } from '../utils/mdText'
+import { hashText, normalizeText } from '../shared/text'
+import { chunkMarkdown } from '../shared/mdText'
 import { kbAnchorText } from './kbAnchor'
 import { planKnowledgeEdit } from './knowledgeEdit'
 import type { CreateKbRequest, UpdateKbRequest, UploadKbDocRequest } from '../types/messages'

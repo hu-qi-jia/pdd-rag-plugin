@@ -9,7 +9,6 @@
  *  - 顺序性由内部 promise 链保证(事件串行落盘,防 DB 竞态)。
  */
 import type { PddRole } from '../types/memory'
-
 export interface SegMsg {
   sessionKey: string
   role: PddRole

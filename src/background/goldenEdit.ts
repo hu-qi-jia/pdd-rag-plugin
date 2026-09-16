@@ -10,7 +10,7 @@
  * v1 检索锚 = 问题向量:仅问题实质变更才作废重嵌;答案/文件夹调整不影响向量有效性。
  */
 import type { GoldenRecord } from '../types/memory'
-import { normalizeText, hashText } from '../utils/text'
+import { normalizeText, hashText } from '../shared/text'
 
 // ─── 新增 ─────────────────────────────────────────────────────────────────────
 

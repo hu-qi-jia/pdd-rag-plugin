@@ -13,8 +13,7 @@ import {
   type PanelGolden,
   type FolderNode,
 } from '../../../src/popup/logic'
-import { UNCATEGORIZED_FOLDER_ID } from '../../../src/types/memory'
-
+import { UNCATEGORIZED_FOLDER_ID } from '../../../src/shared/constants'
 const DAY = 86_400_000
 
 describe('filterQaRecords 关键词筛选', () => {

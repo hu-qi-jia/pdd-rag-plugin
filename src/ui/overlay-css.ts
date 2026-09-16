@@ -22,6 +22,14 @@ export function parseThemeMode(value: unknown): ThemeMode {
 /** 候选弹窗宽度(CSS 与 JS 定位共用,单处维护;v2.6.18 340→360,给 13.5px 中文正文松一档) */
 export const POPUP_W = 360
 
+/**
+ * 类别徽标的水平内边距(v2.6.24 放大时定档 9px)。
+ * 下方「原问题 / 回答正文」的左缩进**复用同一数字** —— 于是
+ * 「标签**文字**左缘 = 原问题文字左缘 = 回答文字左缘」这条对齐基线
+ * 由这一个常量单点决定(v2.6.26 用户定稿:对齐标签文字,而非徽标外框)。
+ */
+export const BADGE_PAD_X = 9
+
 export function buildOverlayCss(tk: ThemeTokens): string {
   return `
 #pddcs-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
@@ -70,21 +78,24 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    v2.6.25 用户"标签/原问题/回答之间间距各 +2px,但词条整体高度不要变化;词条的默认高度减小一点"——
    两处行内间距 2→4px(+4px),行内上下 padding 6→3px(−6px),
    行内竖向总留白 16→14px → **净减 2px**:信息之间更松,词条反而更矮;
-   行内**左** padding 12px 不动:它是"徽标左缘 = 正文左缘"的对齐基线(见下) */
+   行内**左** padding 12px 是整行的公共左缘(徽标外框、操作钮组的基准),
+   正文再在此基础上各自缩进 BADGE_PAD_X(见下) */
 .pddcs-cand { position: relative; margin: 1px 8px; padding: 3px 12px; border-radius: ${radius.lg}px;
   cursor: pointer; transition: background-color .12s ease; }
 .pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
 /* 行首行:徽标居左 → 折叠数紧随徽标 → 操作图标钮居右(margin-left:auto 顶到行末);
-   行内左 padding 是公共基线 —— 徽标左缘与下方「原问题 / 正文」左缘同一条线
-   (v2.6.24 用户指定"下方内容和标签左侧对齐";正文均为块级子元素,不额外缩进);
+   行首行自身**不加左缩进**(徽标外框即整行左缘),
+   下方「原问题 / 正文」各自 padding-left: BADGE_PAD_X → 三处**文字**左缘同一条线
+   (v2.6.24 用户指定"下方内容和标签左侧对齐";v2.6.26 明确为对齐**标签文字**而非徽标外框);
    下间距 2→4px 见 v2.6.25 留白重配 */
 .pddcs-cand-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 /* 类别徽标(v2.6.19 chip 化 → v2.6.24 放大):用户"标准回答、历史、知识库标签比例增大"——
    10px / 内边距 1px 7px → **11.5px(secondary 档)/ 3px 9px**,圆角 4→6px,
    与 24px 图标钮同行时是一眼可辨的类别标签;
+   水平内边距 = BADGE_PAD_X 常量,同时决定下方正文的左缩进量(改一处即整体重对齐);
    配色不变:标准回答 = 琥珀软底金字,知识库 = 绿软底绿字(semantic 同源,两表面不割裂),
    历史 = 中性灰软底灰字 */
-.pddcs-badge { display: inline-flex; align-items: center; padding: 3px 9px;
+.pddcs-badge { display: inline-flex; align-items: center; padding: 3px ${BADGE_PAD_X}px;
   border-radius: ${radius.md}px; font-size: ${fontSize.secondary}px; font-weight: 500;
   background: ${tk.selectedBg}; color: ${tk.textMuted}; }
 .pddcs-badge.golden { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
@@ -119,13 +130,17 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-icon-btn-busy svg { animation: pddcs-spin .7s linear infinite; }
 @keyframes pddcs-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pddcs-icon-btn-busy svg { animation: none; } }
-/* 回答正文 = 面板唯一主层(v2.6.17):13.5px + 1.6 行高,与其余 11.5/10.5 灰字拉开两档 */
-.pddcs-cand-text { font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
+/* 回答正文 = 面板唯一主层(v2.6.17):13.5px + 1.6 行高,与其余 11.5/10.5 灰字拉开两档;
+   左缩进 BADGE_PAD_X = 对齐上方徽标**内文字**左缘(v2.6.26 用户:v2.6.24 那版对齐的是徽标外框,
+   视觉上正文比标签文字凸出 9px,看着"不齐") */
+.pddcs-cand-text { padding-left: ${BADGE_PAD_X}px;
+  font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 /* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略;
-   左缘与上方徽标左缘同基线(同为行内左 padding 12px 起),下间距 2→4px(v2.6.25 留白重配) */
-.pddcs-cand-q { margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
+   左缩进与正文同一个 BADGE_PAD_X(三处文字左缘同线),下间距 2→4px(v2.6.25 留白重配)。
+   注意 padding-left 与 text-overflow:ellipsis 不冲突:省略号仍落在行右缘 */
+.pddcs-cand-q { padding-left: ${BADGE_PAD_X}px; margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 页脚常驻壳:hairline 上边 + 次级表面底,键位提示不再漂在正文后面 */
 .pddcs-popup-foot { flex: 0 0 auto; padding: 7px 14px; border-top: 1px solid ${tk.borderLight};

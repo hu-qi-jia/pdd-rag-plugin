@@ -346,8 +346,26 @@ function applySelection(): void {
   if (!popupEl || !armedPanel) return
   const rows = popupEl.querySelectorAll('.pddcs-cand')
   rows.forEach((r, i) => r.classList.toggle('pddcs-cand-selected', i === armedPanel!.selected))
-  // 长面板(候选至多 9 条)可能出滚动条:选中项始终滚进可视区
-  rows[armedPanel.selected]?.scrollIntoView({ block: 'nearest' })
+  // 长面板(候选至多 9 条)可能出滚动条:选中项始终滚进可视区。
+  // 滚动校正(v2.6.17 第二十六轮):sticky 头部悬浮在滚动视口上沿,scrollIntoView(nearest)
+  // 会把行对齐到容器顶 → 行被头部盖住(用户反馈"回绕到首条出现折叠")。
+  // 改手动滚动,上下界都按头部实高校正;回绕到首条时 scrollTop 自然归 0(滚回最上)。
+  const row = rows[armedPanel.selected]
+  if (row instanceof HTMLElement) {
+    // 选中首条 → 滚动条直接归零(第二十六轮用户指定"回绕到首条滚到最上方";
+    // 也避开浮点残差导致 scrollTop 停在 1px 的毛刺)
+    if (armedPanel.selected === 0) {
+      popupEl.scrollTop = 0
+      return
+    }
+    const head = popupEl.querySelector('.pddcs-popup-head')
+    const headH = head ? head.getBoundingClientRect().height : 0
+    const cRect = popupEl.getBoundingClientRect()
+    const rRect = row.getBoundingClientRect()
+    const topLimit = cRect.top + headH
+    if (rRect.top < topLimit) popupEl.scrollTop -= topLimit - rRect.top
+    else if (rRect.bottom > cRect.bottom) popupEl.scrollTop += rRect.bottom - cRect.bottom
+  }
 }
 
 /** 导航键移动选中项;无快捷键面板时返回 false(按键放行) */
@@ -477,17 +495,18 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
 
   renderActions()
 
+  // 问题回显上置为引子(v2.6.17 第二十六轮,原底部来源行移此):
+  // 金标准/历史:来源是原始问题;知识库:手工条目来源是标题,文档块来源即命中片段
+  const q = document.createElement('div')
+  q.className = 'pddcs-cand-q'
+  q.textContent = `${s.kind === 'knowledge' ? '来源' : '原问题'}:${s.sourceQuestion}`
+  q.title = s.sourceQuestion
+  row.appendChild(q)
+
   const text = document.createElement('div')
   text.className = 'pddcs-cand-text'
   text.textContent = s.text
   row.appendChild(text)
-
-  const src = document.createElement('div')
-  src.className = 'pddcs-cand-src'
-  // 金标准/历史:来源是原始问题;知识库:手工条目来源是标题,文档块来源即命中片段
-  src.textContent = `${s.kind === 'knowledge' ? '来源' : '原问题'}:${s.sourceQuestion}`
-  src.title = s.sourceQuestion
-  row.appendChild(src)
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {

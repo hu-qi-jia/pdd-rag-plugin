@@ -81,6 +81,7 @@ await page.addInitScript(() => {
   window.__sent = sent
   window.__goldenCount = 1
   window.__forceLimit = false
+  window.__extraSuggestions = []
   window.chrome = {
     storage: { local: {}, onChanged: { addListener() {} } },
     runtime: {
@@ -97,9 +98,10 @@ await page.addInitScript(() => {
           })
         }
         if (msg?.type === 'GET_SUGGESTIONS') {
+          const list = suggestions.concat(window.__extraSuggestions ?? [])
           return Promise.resolve({
             payload: {
-              suggestions,
+              suggestions: list,
               settings: { directFillEnabled: false, goldenPriorityEnabled: true },
             },
           })
@@ -232,6 +234,18 @@ const visual = await page.evaluate(() => {
     selShadow: ss?.boxShadow ?? '',
     thinRule: hasRule('.pddcs-popup::-webkit-scrollbar') && hasRule('width: 6px'),
     candBorder: cand ? getComputedStyle(cand).borderBottomWidth : '',
+    candTextFont: document.querySelector('.pddcs-cand-text')
+      ? getComputedStyle(document.querySelector('.pddcs-cand-text')).fontSize
+      : '',
+    qEl: !!document.querySelector('.pddcs-cand-q'),
+    qFont: document.querySelector('.pddcs-cand-q')
+      ? getComputedStyle(document.querySelector('.pddcs-cand-q')).fontSize
+      : '',
+    qText: document.querySelector('.pddcs-cand-q')?.textContent ?? '',
+    srcGone: !document.querySelector('.pddcs-cand-src'),
+    headFont: document.querySelector('.pddcs-popup-head')
+      ? getComputedStyle(document.querySelector('.pddcs-popup-head')).fontSize
+      : '',
     panelShadow: cs?.boxShadow ?? '',
     badgeBg: badge ? getComputedStyle(badge).backgroundColor : '',
     badgeDot: badge ? getComputedStyle(badge, '::before').width : '',
@@ -265,6 +279,14 @@ check(
   `badgeDot=${visual.badgeDot} badgeBg=${visual.badgeBg}`,
 )
 check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
+check('回答正文为主层(13.5px)', visual.candTextFont === '13.5px', `candTextFont=${visual.candTextFont}`)
+check(
+  '问题回显上置为引子(11.5px,原问题开头)',
+  visual.qEl && visual.qFont === '11.5px' && visual.qText.startsWith('原问题:'),
+  `qFont=${visual.qFont} qText=${visual.qText.slice(0, 20)}`,
+)
+check('底部来源行移除(并入顶部回显)', visual.srcGone, `srcGone=${visual.srcGone}`)
+check('头部极简(12.5px 小字)', visual.headFont === '12.5px', `headFont=${visual.headFont}`)
 
 await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
@@ -309,6 +331,62 @@ check(
   'Enter → 填充的是**选中项**(回绕后的首条标准回答),面板关闭',
   filled === '标准回答:支持7天无理由退换,运费我们承担。' && popupGone,
   `value=${filled.slice(0, 24)}… popupGone=${popupGone}`,
+)
+
+// ── ⑦ 循环切换的滚动校正(2026-09-16 第二十六轮:9 条候选出滚动;
+//      回绕到首条时滚回顶部,sticky 头不得盖住选中行)──
+await page.evaluate(() => {
+  window.__extraSuggestions = Array.from({ length: 6 }, (_, i) => ({
+    kind: 'history',
+    text: `滚动候选 ${i + 1}:填充用长答复,保证面板出滚动条。`,
+    sourceQuestion: '这个支持7天无理由退换吗',
+    score: 0.7,
+    sourceId: `x-${i}`,
+    replyId: `rp-x-${i}`,
+  }))
+})
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+})
+await sleep(900)
+for (let i = 0; i < 8; i += 1) {
+  await page.evaluate(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+  })
+  await sleep(80)
+}
+const scrolled = await page.evaluate(() => {
+  const p = document.querySelector('.pddcs-popup')
+  const sel = document.querySelector('.pddcs-cand-selected')
+  const head = document.querySelector('.pddcs-popup-head')
+  return {
+    count: document.querySelectorAll('.pddcs-cand').length,
+    selected: [...document.querySelectorAll('.pddcs-cand')].indexOf(sel),
+    scrollTop: p.scrollTop,
+    headBottom: head.getBoundingClientRect().bottom,
+    selTop: sel.getBoundingClientRect().top,
+  }
+})
+check('9 条候选面板:连按 Tab 到末条(滚动跟随)', scrolled.count === 9 && scrolled.selected === 8 && scrolled.scrollTop > 0, JSON.stringify(scrolled))
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+})
+await sleep(200)
+const wrapped = await page.evaluate(() => {
+  const p = document.querySelector('.pddcs-popup')
+  const sel = document.querySelector('.pddcs-cand-selected')
+  const head = document.querySelector('.pddcs-popup-head')
+  return {
+    selected: [...document.querySelectorAll('.pddcs-cand')].indexOf(sel),
+    scrollTop: p.scrollTop,
+    headBottom: head.getBoundingClientRect().bottom,
+    selTop: sel.getBoundingClientRect().top,
+  }
+})
+check(
+  '回绕到首条 → 滚回顶部,选中行完整露在 sticky 头下方(不被折叠遮盖)',
+  wrapped.selected === 0 && wrapped.scrollTop === 0 && wrapped.selTop >= wrapped.headBottom - 1,
+  JSON.stringify(wrapped),
 )
 
 await page.screenshot({ path: ROOT + '\\logs\\ui-0915-ai-popup.png' })

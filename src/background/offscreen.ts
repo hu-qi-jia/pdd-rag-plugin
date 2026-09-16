@@ -1,4 +1,4 @@
-import { MODEL_NAME, EMBEDDING_VERSION } from "./embedding";
+import { MODEL_NAME, EMBEDDING_VERSION } from "../shared/embedding-model";
 import { db } from "./db";
 
 // ─── Offscreen Document Management ───────────────────────────────────────────

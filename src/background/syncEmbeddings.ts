@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { MODEL_NAME, EMBEDDING_VERSION } from "./embedding";
+import { MODEL_NAME, EMBEDDING_VERSION } from "../shared/embedding-model";
 import { embedBatchViaOffscreen } from "./offscreen";
 import { kbAnchorText } from "./kbAnchor";
 

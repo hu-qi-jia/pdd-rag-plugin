@@ -10,7 +10,7 @@
  *                Here → (sendResponse) → Background SW callback
  */
 
-import { embed, embedBatch } from '../background/embedding'
+import { embed, embedBatch } from '../offscreen/embedding'
 
 // Register listener at module level so it's ready before the first message arrives.
 // Returns true to keep the message channel open for the async sendResponse call.

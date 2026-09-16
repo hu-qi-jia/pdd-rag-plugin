@@ -1,14 +1,19 @@
 /**
- * EmbeddingEngine
+ * EmbeddingEngine —— 运行于 offscreen 页(tabs/offscreen.html),不在 SW 内。
  *
  * 懒加载 Xenova/bge-small-zh-v1.5(中文检索专用,量化后 ~25MB)作为单例。
  * 所有嵌入请求经串行任务队列执行,避免 SW/WASM 并发内存溢出。
  *
  * 输出 512 维 Float32Array(mean pooling + L2 归一化)。
  * 决策背景见 docs/adr/0001-embedding-model-bge-small-zh.md。
+ *
+ * (2026-09-16 工程审查③-V4:自 background/ 迁入 offscreen/ —— 本模块实际运行
+ *  上下文是 offscreen 页;MODEL_NAME/EMBEDDING_VERSION 契约常量拆到
+ *  shared/embedding-model.ts,SW 侧只引常量,transformers 不再进后台包。)
  */
 
 import { pipeline, env, type FeatureExtractionPipeline } from '@xenova/transformers'
+import { MODEL_NAME } from '../shared/embedding-model'
 
 // 允许远程下载模型文件,首次使用时拉取并由浏览器缓存(扩展存储内)。
 // NOTE: huggingface.co 在本网络不可达;改用 hf-mirror.com 国内镜像(已验证可达)。
@@ -20,11 +25,6 @@ env.remoteHost = 'https://hf-mirror.com'
 // 被扩展 CSP 拦截(script-src 'self' 'wasm-unsafe-eval' 不含 blob:)。
 // numThreads=1 使 ONNX 使用无 worker 的非线程版 wasm。
 env.backends.onnx.wasm.numThreads = 1
-
-const MODEL_NAME = 'Xenova/bge-small-zh-v1.5'
-// 模型族换代计数:bge 中文系 = 2.x;记录自带 embeddingVersion,
-// 将来再换模型时按旧版本号懒重嵌,无需人工干预。
-const EMBEDDING_VERSION = '2.0.0'
 
 // ─── Singleton Model ──────────────────────────────────────────────────────────
 
@@ -133,4 +133,4 @@ export async function embedBatch(
   return results
 }
 
-export { MODEL_NAME, EMBEDDING_VERSION }
+export { MODEL_NAME }

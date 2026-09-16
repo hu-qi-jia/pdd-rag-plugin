@@ -9,7 +9,7 @@
  *   - P1 起扩展:PDD 捕获链路由、分段状态机等
  */
 
-import { MODEL_NAME } from "./embedding";
+import { MODEL_NAME } from "../shared/embedding-model";
 import { db } from "./db";
 import {
   embedViaOffscreen,

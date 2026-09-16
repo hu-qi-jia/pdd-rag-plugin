@@ -148,6 +148,14 @@ export const DEFAULT_HOTKEY: HotkeyConfig = {
   key: 'Enter',
 }
 
+/** 推荐面板「下一候选」键默认 Tab(第二十二轮:↑↓ 与平台切换会话冲突,让位) */
+export const DEFAULT_PANEL_NAV_HOTKEY: HotkeyConfig = {
+  ctrl: false,
+  alt: false,
+  shift: false,
+  key: 'Tab',
+}
+
 // ─── 设置(chrome.storage.local) ────────────────────────────────────────────────
 
 export interface PddSettings {
@@ -165,6 +173,8 @@ export interface PddSettings {
   goldenPriorityEnabled: boolean
   /** 「自动回复」快捷键(默认 Ctrl+Enter):关=弹推荐回复面板再按 Enter 填第一条;开=直接填第一条 */
   autoReplyHotkey: HotkeyConfig
+  /** 推荐面板「下一候选」键(默认 Tab,可单键):Shift+同键 = 上一候选(2026-09-16 第二十二轮) */
+  panelNavHotkey: HotkeyConfig
 }
 
 export const DEFAULT_SETTINGS: PddSettings = {
@@ -175,6 +185,7 @@ export const DEFAULT_SETTINGS: PddSettings = {
   retentionDays: 90,
   goldenPriorityEnabled: true,
   autoReplyHotkey: DEFAULT_HOTKEY,
+  panelNavHotkey: DEFAULT_PANEL_NAV_HOTKEY,
 }
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'

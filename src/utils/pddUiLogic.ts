@@ -6,6 +6,7 @@
 // 此处不再截断。
 
 import type { Suggestion } from "../types/messages";
+import type { HotkeyConfig } from "../types/memory";
 
 export type UiAction =
   | { action: "none" }
@@ -42,4 +43,13 @@ export function decideUiAction(
 export function moveSelection(current: number, delta: number, count: number): number {
   if (count <= 0) return 0;
   return Math.min(count - 1, Math.max(0, current + delta));
+}
+
+/**
+ * 面板导航键对(2026-09-16 第二十二轮):设置里只录一个"下一个"键,
+ * "上一个"固定 = 同键 + Shift 取反(与 Tab/Shift+Tab 表单导航同款惯例)。
+ * ↑↓ 不做面板导航 —— 与平台"↑↓ 切换会话"冲突,按键让位给页面。
+ */
+export function panelNavKeys(cfg: HotkeyConfig): { next: HotkeyConfig; prev: HotkeyConfig } {
+  return { next: cfg, prev: { ...cfg, shift: !cfg.shift } };
 }

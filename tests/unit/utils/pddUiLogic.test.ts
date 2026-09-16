@@ -3,7 +3,12 @@
  * DOM/样式部分不可单测,只测纯函数。
  */
 import { describe, it, expect } from 'vitest'
-import { mergeBuyerQuery, decideUiAction, moveSelection } from '../../../src/utils/pddUiLogic'
+import {
+  mergeBuyerQuery,
+  decideUiAction,
+  moveSelection,
+  panelNavKeys,
+} from '../../../src/utils/pddUiLogic'
 import type { Suggestion } from '../../../src/types/messages'
 
 const sug = (text: string, kind: Suggestion['kind'] = 'history'): Suggestion => ({
@@ -60,5 +65,17 @@ describe('moveSelection:面板 ↑↓ 键盘导航(2026-09-16 第二十一轮)',
   })
   it('空列表安全返回 0', () => {
     expect(moveSelection(0, 1, 0)).toBe(0)
+  })
+})
+
+describe('panelNavKeys:一个配置推导 下一个/上一个 两键(2026-09-16 第二十二轮)', () => {
+  it('默认 Tab:next = Tab,prev = Shift+Tab(表单导航同款惯例)', () => {
+    const { next, prev } = panelNavKeys({ ctrl: false, alt: false, shift: false, key: 'Tab' })
+    expect(next).toEqual({ ctrl: false, alt: false, shift: false, key: 'Tab' })
+    expect(prev).toEqual({ ctrl: false, alt: false, shift: true, key: 'Tab' })
+  })
+  it('自定义组合键(如 Ctrl+J)同样以 Shift 反向', () => {
+    const { next, prev } = panelNavKeys({ ctrl: true, alt: false, shift: false, key: 'j' })
+    expect(prev).toEqual({ ctrl: true, alt: false, shift: true, key: 'j' })
   })
 })

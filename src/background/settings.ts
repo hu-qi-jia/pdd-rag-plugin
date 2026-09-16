@@ -3,6 +3,7 @@
 
 import {
   DEFAULT_HOTKEY,
+  DEFAULT_PANEL_NAV_HOTKEY,
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
   type HotkeyConfig,
@@ -10,12 +11,12 @@ import {
 } from "../types/memory";
 
 /** 快捷键夹取:主键必须是非空短字符串,修饰键只认布尔 */
-function clampHotkey(raw: unknown): HotkeyConfig {
+function clampHotkey(raw: unknown, fallbackKey: string = DEFAULT_HOTKEY.key): HotkeyConfig {
   const base = (typeof raw === "object" && raw !== null ? raw : {}) as Partial<HotkeyConfig>;
   const key =
     typeof base.key === "string" && base.key.trim().length > 0
       ? base.key.trim().slice(0, 32)
-      : DEFAULT_HOTKEY.key;
+      : fallbackKey;
   return { ctrl: !!base.ctrl, alt: !!base.alt, shift: !!base.shift, key };
 }
 import { loadFromChrome, saveToChrome } from "../utils/chrome-storage";
@@ -30,6 +31,7 @@ function clampSettings(raw: Partial<PddSettings>): PddSettings {
     retentionDays: Math.min(365, Math.max(30, Math.round(Number(base.retentionDays) || DEFAULT_SETTINGS.retentionDays))),
     goldenPriorityEnabled: !!base.goldenPriorityEnabled,
     autoReplyHotkey: clampHotkey(base.autoReplyHotkey),
+    panelNavHotkey: clampHotkey(base.panelNavHotkey, DEFAULT_PANEL_NAV_HOTKEY.key),
   };
 }
 

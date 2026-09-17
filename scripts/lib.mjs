@@ -5,7 +5,7 @@
  * 换机即全废。统一后:路径相对化(可环境变量覆盖),样板一处维护。
  */
 import { chromium } from '@playwright/test'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -26,11 +26,32 @@ export const freshProfile = () => mkdtempSync(path.join(tmpdir(), 'pddcs-diag-')
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
+ * 产物自检:模型必须在包里,否则整条检索链路必死。
+ *
+ * 第四十七轮实证「Plasmo 0.90 不复制 public/」,模型靠 `npm run build` 里的
+ * `&& node scripts/model.mjs copy` 落地 —— 直接跑 `plasmo build` 会产出一个**没有模型的包**,
+ * 后果不是构建报错,而是 30 秒后在某一步检索里抛「本地模型加载失败(文件缺失或损坏)」,
+ * 把人往"重装扩展""模型损坏"的方向带。这里提前到 0 秒、并且直接说清怎么修。
+ */
+export function assertModelBundled() {
+  const probe = path.join(EXT, 'model', 'Xenova', 'bge-small-zh-v1.5', 'tokenizer.json')
+  if (existsSync(probe)) return
+  console.error(
+    `FAIL: 产物里没有模型 —— ${probe} 不存在。\n` +
+      `      多半是直接跑了 \`plasmo build\`。请改用 \`npm run build\`\n` +
+      `      (它多一步 \`node scripts/model.mjs copy\`,Plasmo 不会自己复制 public/)。`,
+  )
+  process.exit(1)
+}
+
+/**
  * 加载扩展启动 Chromium(各脚本原有 launch 参数组的统一版)。
  * headless 缺省 false(本地有桌面, headed 观感接近真机);CI 无 X server,
  * 设 PDD_E2E_HEADLESS=1 走无头(channel 'chromium' 新无头模式支持扩展)。
  */
 export async function launchExtContext(profile, options = {}) {
+  // 唯一入口,所有验收脚本都从这里过 —— 缺模型的包在这里拦下,别等到检索那一步才炸
+  assertModelBundled()
   const headless = options.headless ?? process.env.PDD_E2E_HEADLESS === '1'
   const { timeout = 60000 } = options
   return chromium.launchPersistentContext(profile, {

@@ -115,6 +115,118 @@ describe('chunkMarkdown(结构感知分块)', () => {
   })
 })
 
+describe('chunkMarkdown · 问答体切分', () => {
+  const qa = (q: string, a: string) => `- Q：${q} A：${a}`
+
+  it('每条 QA 独立成块:问句作标题、答案作正文', () => {
+    const md = [
+      '# 常见问答',
+      '',
+      qa('这个麦克风能用多久？', '发射器续航约 11.5 小时,接收器约 10.5 小时。'),
+      '',
+      qa('怎么连手机？', '两种方式:发射器蓝牙直连手机,或接收器 USB-C 接口直连。'),
+      '',
+      qa('防水吗？', '不防水,请注意防雨防潮,进水不在保修范围。'),
+    ].join('\n')
+
+    const chunks = chunkMarkdown(md)
+    expect(chunks).toHaveLength(3)
+    expect(chunks[0].title).toBe('这个麦克风能用多久？')
+    expect(chunks[0].text).toBe('发射器续航约 11.5 小时,接收器约 10.5 小时。')
+    expect(chunks[2].title).toBe('防水吗？')
+    expect(chunks[2].text).toBe('不防水,请注意防雨防潮,进水不在保修范围。')
+    for (const c of chunks) {
+      expect(c.kind).toBe('qa')
+      // 第 0 节是 H1 之前的空节,正文块属第 1 节
+      expect(c.sectionSeq).toBe(1)
+    }
+  })
+
+  it('Q 与 A 分行写法', () => {
+    const md = [
+      '# 常见问答',
+      '',
+      'Q：能连相机吗？',
+      'A：可以,接收器通过 3.5 毫米音频线连接相机。',
+      '',
+      'Q：一拖二吗？',
+      'A：接收器可同时配对 2 个发射器。',
+    ].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].title).toBe('能连相机吗？')
+    expect(chunks[0].text).toBe('可以,接收器通过 3.5 毫米音频线连接相机。')
+  })
+
+  it('兼容半角冒号 / 加粗 / 无序列表前缀', () => {
+    const md = ['# FAQ', '', '**Q:** 防水吗？ **A:** 不防水。', '', '* Q: 多久发货？ A: 48 小时内。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].title).toBe('防水吗？')
+    expect(chunks[0].text).toBe('不防水。')
+    expect(chunks[1].title).toBe('多久发货？')
+    expect(chunks[1].text).toBe('48 小时内。')
+  })
+
+  it('只有 1 条 Q → 不触发 QA 分支,按原节逻辑成块', () => {
+    const md = ['## 说明', '', 'Q：只有一个问题？ A：是。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].kind).toBe('section')
+    expect(chunks[0].title).toBe('说明')
+    expect(chunks[0].text).toBe('Q：只有一个问题？ A：是。')
+  })
+
+  it('无标题的问答文档也走 QA 切分', () => {
+    const md = ['Q：甲？ A：甲答案。', '', 'Q：乙？ A：乙答案。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks).toHaveLength(2)
+    expect(chunks.map((c) => c.title)).toEqual(['甲？', '乙？'])
+    expect(chunks.map((c) => c.kind)).toEqual(['qa', 'qa'])
+  })
+
+  it('缺答案的 QA 条目整条跳过,不产出空块', () => {
+    const md = ['# Q', '', 'Q：第一个？ A：答案一。', '', 'Q：第二个？', '', 'Q：第三个？ A：答案三。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks.map((c) => c.title)).toEqual(['第一个？', '第三个？'])
+  })
+
+  it('单条答案超长 → 拆续块,续块共享同一 sectionSeq', () => {
+    const md = ['# Q', '', `Q：很长的问题？ A：${'内容'.repeat(300)}`, '', 'Q：短问题？ A：短答案。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    const longParts = chunks.filter((c) => c.title === '很长的问题？')
+    expect(longParts.length).toBeGreaterThan(1)
+    for (const c of longParts) {
+      expect(c.kind).toBe('qa')
+      expect(c.sectionSeq).toBe(longParts[0].sectionSeq)
+    }
+    expect(chunks.some((c) => c.title === '短问题？')).toBe(true)
+  })
+
+  it('首个 Q 之前的引言行作为 section 块保留,不混入 QA 锚文本', () => {
+    const md = [
+      '## 常见问题',
+      '',
+      '以下是买家最常问的问题:',
+      '',
+      'Q：甲？ A：甲答案。',
+      '',
+      'Q：乙？ A：乙答案。',
+    ].join('\n')
+    const chunks = chunkMarkdown(md)
+    const preamble = chunks.find((c) => c.kind === 'section')
+    expect(preamble?.text).toBe('以下是买家最常问的问题:')
+    expect(chunks.filter((c) => c.kind === 'qa')).toHaveLength(2)
+  })
+
+  it('非问答体文档完全不受影响(回归)', () => {
+    const md = ['# 标题', '', '普通段落一。', '', '普通段落二。'].join('\n')
+    const chunks = chunkMarkdown(md)
+    expect(chunks.every((c) => c.kind === 'section')).toBe(true)
+    expect(chunks[0].text).toContain('普通段落一。')
+  })
+})
+
 function tiles_fix(titles: string[]) {
   // 标题应含小节名;引言块用文档级(空)标题
   expect(titles.some((t) => t.includes('退换货条件'))).toBe(true)

@@ -23,11 +23,31 @@
  *   node scripts/release.mjs --dry-run # 只构建+打包,打印将执行的 gh 命令与正文,不联网、不改任何远端状态
  *   node scripts/release.mjs --update  # release 已存在时:改说明 + `--clobber` 重传资产(下载计数归零)
  */
-import { execSync } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+/**
+ * 下游提前关掉管道(例:`npm run release | head -8`)时,写 stdout 会报 EPIPE —— 这一轮真实咬过一次:
+ * 未处理 ⇒ 脚本当场崩溃、**把还在跑的构建一起掐死**,而 Plasmo 开工前已清空
+ * `build/chrome-mv3-prod`,留下一个空目录 —— 用户那边就是 `chrome://extensions` 报
+ * 「清单文件缺失或不可读取」,扩展直接打不开。两道防线,缺一不可:
+ *   ① 流错误吞掉(EPIPE / 流已销毁),之后的输出不再写(`out`),其余错误照常抛;
+ *   ② 构建与打包的输出**经我们转发**(见 `stream`),否则收到 EPIPE 的是**构建进程自己**,
+ *      它一样会死 —— 只护住自己这一头没有用(先只加 ①,复现时构建目录仍然是空的)。
+ */
+let pipeBroken = false
+const onStreamError = (e) => {
+  if (e.code === 'EPIPE' || e.code === 'ERR_STREAM_DESTROYED') pipeBroken = true
+  else throw e
+}
+process.stdout.on('error', onStreamError)
+process.stderr.on('error', onStreamError)
+const out = (chunk) => {
+  if (!pipeBroken) process.stdout.write(chunk)
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const argv = process.argv.slice(2)
@@ -35,10 +55,13 @@ const DRY = argv.includes('--dry-run')
 const UPDATE = argv.includes('--update')
 
 const fail = (msg) => {
-  console.error(`✗ ${msg}`)
+  if (!pipeBroken) process.stderr.write(`✗ ${msg}\n`)
   process.exit(1)
 }
-const say = (msg) => console.log(msg)
+const say = (msg) => out(`${msg}\n`)
+const warn = (msg) => {
+  if (!pipeBroken) process.stderr.write(`${msg}\n`)
+}
 
 /**
  * 走 shell 而不是 execFile:Windows 上 `npm` 是 `npm.cmd`,而 Node 20 起 execFile 不许直接跑
@@ -46,8 +69,25 @@ const say = (msg) => console.log(msg)
  * 代价是得自己加引号:本项目路径无空格,但别人/CI 的路径未必。
  */
 const quote = (s) => (/[\s"^&|<>]/.test(s) ? `"${s}"` : s)
-const run = (cmd, args, opts = {}) =>
-  execSync([cmd, ...args.map(quote)].join(' '), { cwd: ROOT, encoding: 'utf8', ...opts })
+/** 要回读输出的短命令(git 查询、gh):输出不经过终端,故与断管道无关 */
+const run = (cmd, args) =>
+  execSync([cmd, ...args.map(quote)].join(' '), { cwd: ROOT, encoding: 'utf8' })
+
+/** 长任务(构建、打包):输出 pipe 给我们再转发 —— 管道断掉时死的是"转发"这个动作,不是构建本身 */
+const stream = (cmd, args) =>
+  new Promise((resolve, reject) => {
+    const opts = { cwd: ROOT, stdio: ['inherit', 'pipe', 'pipe'] }
+    // Windows 上 npm 是 npm.cmd,Node 20 起 execFile 不许直接跑它 ⇒ 只能经 shell;而"shell: true + 参数
+    // 数组"已被 DEP0190 标记(参数只做拼接、不转义)⇒ 自己拼成一条命令行传进去,参数全由本脚本构造。
+    const child =
+      process.platform === 'win32'
+        ? spawn([cmd, ...args.map(quote)].join(' '), { ...opts, shell: true })
+        : spawn(cmd, args, opts)
+    child.stdout.on('data', out)
+    child.stderr.on('data', out)
+    child.on('error', reject)
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`退出码 ${code}`))))
+  })
 
 const { version } = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const TAG = `v${version}`
@@ -75,14 +115,14 @@ if (blockers.length) {
     'release 的 tag 指向远端分支的提交,而 zip 是本地工作区构建的 —— 两者不一致时,用户下载的包' +
     '和 GitHub 上那份代码对不上,事后也无法从 tag 重建成同一个包。\n  ' +
     '先提交并推送:git add -A && git commit && git push(直连不通时见 README 的代理说明)'
-  if (DRY) console.warn(`⚠ 以下问题会让真发布在这里中止(dry-run 继续):\n${detail}`)
+  if (DRY) warn(`⚠ 以下问题会让真发布在这里中止(dry-run 继续):\n${detail}`)
   else fail(`${detail}\n  ${why}`)
 }
 
 // ── 1/3 构建 ────────────────────────────────────────────────────────────
 say('▶ 1/3 构建(npm run build;含 model.mjs copy,出包不裸跑 plasmo build)')
 try {
-  run('npm', ['run', 'build'], { stdio: 'inherit' })
+  await stream('npm', ['run', 'build'])
 } catch {
   fail('构建失败 —— 已中止,远端未有任何改动')
 }
@@ -90,7 +130,7 @@ try {
 // ── 2/3 打包 ────────────────────────────────────────────────────────────
 say('▶ 2/3 打包(node scripts/package.mjs;三条自检 + 回读中央目录)')
 try {
-  run('node', ['scripts/package.mjs'], { stdio: 'inherit' })
+  await stream('node', ['scripts/package.mjs'])
 } catch {
   fail('打包失败 —— 已中止,远端未有任何改动')
 }
@@ -120,7 +160,7 @@ if (existsSync(NOTES_SRC)) {
     )
   }
   say(`▶ 3/3 说明正文:CHANGELOG.md 的 ${version} 段`)
-  console.warn(
+  warn(
     `⚠ 退回 CHANGELOG 段是内部口径(带轮次、"验收"等字眼),面向用户的说明请写 ` +
       `${path.relative(ROOT, NOTES_SRC)}(本次仍可发布,发布后在 GitHub 上改也一样)`,
   )
@@ -187,7 +227,7 @@ if (exists) {
 }
 const url = gh('release', 'view', TAG, '--json', 'url', '-q', '.url')
 
-console.log(`✓ ${TAG} ${exists ? '已更新' : '已发布'}`)
-console.log(`  ${title}`)
-console.log(`  ${url}`)
-console.log(`  ${path.basename(ZIP)} · ${(bytes / 1024 / 1024).toFixed(1)} MB · sha256 ${sha}`)
+say(`✓ ${TAG} ${exists ? '已更新' : '已发布'}`)
+say(`  ${title}`)
+say(`  ${url}`)
+say(`  ${path.basename(ZIP)} · ${(bytes / 1024 / 1024).toFixed(1)} MB · sha256 ${sha}`)

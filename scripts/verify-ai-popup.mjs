@@ -256,9 +256,18 @@ await page.evaluate(() => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
 })
 await sleep(900)
-const hkHead = await page.evaluate(() => document.querySelector('.pddcs-popup-head')?.textContent ?? '')
+const hkHead = await page.evaluate(() => ({
+  title: document.querySelector('.pddcs-popup-title')?.textContent ?? '',
+  count: document.querySelector('.pddcs-popup-count')?.textContent ?? '',
+}))
 const hkFoot = await page.evaluate(() => document.querySelector('.pddcs-popup-foot')?.textContent ?? '')
-check('Ctrl+Enter 唤起「推荐回复」面板', hkHead.startsWith('推荐回复('), hkHead)
+// v2.7.0:面板名与计数拆成两个元素两个文字档,断言随之分开 ——
+// 比断「推荐回复(3)」这个拼接串更贴意图(名字是名字,计数是计数)
+check(
+  'Ctrl+Enter 唤起「推荐回复」面板(名字 + 计数分列)',
+  hkHead.title === '推荐回复' && /^\d+$/.test(hkHead.count),
+  JSON.stringify(hkHead),
+)
 check('面板脚注提示 Tab 切换候选(循环) + Enter 填充', hkFoot.includes('Tab 切换候选') && hkFoot.includes('Enter 填充'), hkFoot)
 
 const selIdx = () =>
@@ -327,17 +336,59 @@ const visual = await page.evaluate(() => {
     badgeBg: badge ? getComputedStyle(badge).backgroundColor : '',
     badgeColor: badge ? getComputedStyle(badge).color : '',
     popupRadius: cs?.borderRadius ?? '',
-    headWeight: (() => {
+    popupBorder: cs?.borderTopWidth ?? '',
+    backdropFilter: cs?.backdropFilter ?? cs?.webkitBackdropFilter ?? '',
+    headBorderBottom: (() => {
       const h = document.querySelector('.pddcs-popup-head')
-      return h ? getComputedStyle(h).fontWeight : ''
+      return h ? getComputedStyle(h).borderBottomWidth : ''
+    })(),
+    titleFont: (() => {
+      const t = document.querySelector('.pddcs-popup-title')
+      return t ? getComputedStyle(t).fontSize : ''
+    })(),
+    headWeight: (() => {
+      const t = document.querySelector('.pddcs-popup-title')
+      return t ? getComputedStyle(t).fontWeight : ''
+    })(),
+    footTextAlign: (() => {
+      const f = document.querySelector('.pddcs-popup-foot')
+      return f ? getComputedStyle(f).textAlign : ''
+    })(),
+    footBg: (() => {
+      const f = document.querySelector('.pddcs-popup-foot')
+      return f ? getComputedStyle(f).backgroundColor : ''
+    })(),
+    closeRadius: (() => {
+      const c = document.querySelector('.pddcs-popup-close')
+      return c ? getComputedStyle(c).borderRadius : ''
+    })(),
+    closeBg: (() => {
+      const c = document.querySelector('.pddcs-popup-close')
+      return c ? getComputedStyle(c).backgroundColor : ''
     })(),
     footKbd: !!document.querySelector('.pddcs-popup-foot kbd'),
   }
 })
+// v2.7.0:面板从"不透明实心底 + 1px 描边"改成毛玻璃材料。断言随之改成**材料的两条硬约束**,
+// 而不是简单地放宽成"半透明就行" —— 那样会把用户当年反馈过的"面板怎么是半透明的"放回来:
+//   ① 引擎真的在模糊背景(backdrop-filter 生效),否则半透明就只是"看得见后面";
+//   ② 材料本身的不透明度 ≥ 0.75,不做成虚面板。
+// 引擎不支持模糊时另走不透明兜底(那条路径由 overlay-css 单测的 panelSurface 用例覆盖)
+const bgAlpha = (() => {
+  const m = visual.bg.match(/rgba?\([^)]*?([\d.]+)\)$/)
+  if (!visual.bg.startsWith('rgba')) return 1
+  return m ? Number(m[1]) : NaN
+})()
+const glassy = visual.backdropFilter.includes('blur(20px)')
 check(
-  '面板背景不透明(rgb 无 alpha,opacity=1)',
-  /^rgb\(\d+, \d+, \d+\)$/.test(visual.bg) && visual.opacity === '1',
-  `bg=${visual.bg} opacity=${visual.opacity}`,
+  '面板是毛玻璃材料:背景模糊生效 + 材料不透明度 ≥0.75(不做成"看得见后面"的虚面板)',
+  glassy && bgAlpha >= 0.75 && bgAlpha < 1 && visual.opacity === '1',
+  `bg=${visual.bg} alpha=${bgAlpha} backdrop=${visual.backdropFilter} opacity=${visual.opacity}`,
+)
+check(
+  '面板不挂描边:与页面之间的硬边改由阴影里的 0.5px 亮环承担',
+  visual.popupBorder === '0px' && visual.panelShadow.includes('0px 0px 0px 0.5px'),
+  `border=${visual.popupBorder} shadow=${visual.panelShadow.slice(0, 40)}…`,
 )
 check(
   '选中态为中性灰软填充(去 3px 左描边,非 accent 蓝)',
@@ -351,8 +402,8 @@ check(
   `candBorder=${visual.candBorder}`,
 )
 check(
-  '浮层阴影柔和双层(含 0 8px 24px 环境影)',
-  visual.panelShadow.includes('0px 8px 24px'),
+  '浮层阴影"近影 + 大范围环境影"两段托浮(撤掉描边后,这是唯一的托起感)',
+  visual.panelShadow.includes('0px 2px 8px') && visual.panelShadow.includes('0px 12px 40px'),
   `panelShadow=${visual.panelShadow}`,
 )
 check(
@@ -360,9 +411,18 @@ check(
   visual.badgeBg.includes('184, 134, 11') && visual.badgeColor === 'rgb(184, 134, 11)',
   `badgeBg=${visual.badgeBg} badgeColor=${visual.badgeColor}`,
 )
-check('面板圆角增大至 12px', visual.popupRadius === '12px', `popupRadius=${visual.popupRadius}`)
-check('头部标题加粗(600)', visual.headWeight === '600', `headWeight=${visual.headWeight}`)
+check('面板圆角 20px(radius.xl)', visual.popupRadius === '20px', `popupRadius=${visual.popupRadius}`)
+check(
+  '面板名升到标题档(15px/600),不再是 12.5px 灰字注释',
+  visual.titleFont === '15px' && visual.headWeight === '600',
+  `titleFont=${visual.titleFont} headWeight=${visual.headWeight}`,
+)
 check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
+check(
+  '关闭钮常驻可见(有圆底、全圆端),不再"悬浮才找得到"',
+  visual.closeRadius === '9999px' && /^rgba\(0, 0, 0, 0\.0\d+\)$/.test(visual.closeBg),
+  `radius=${visual.closeRadius} bg=${visual.closeBg}`,
+)
 check('回答正文为主层(13.5px)', visual.candTextFont === '13.5px', `candTextFont=${visual.candTextFont}`)
 check(
   '问题回显上置为引子(11.5px,原问题开头)',
@@ -370,10 +430,9 @@ check(
   `qFont=${visual.qFont} qText=${visual.qText.slice(0, 20)}`,
 )
 check('底部来源行移除(并入顶部回显)', visual.srcGone, `srcGone=${visual.srcGone}`)
-check('头部极简(12.5px 小字)', visual.headFont === '12.5px', `headFont=${visual.headFont}`)
 check(
-  '候选行为内缩圆角软行(圆角 8px,无通栏直角)',
-  visual.candRadius === '8px',
+  '候选行为内缩圆角软行,且行圆角与面板圆角同心(20 − 8 = 12px)',
+  visual.candRadius === '12px',
   `candRadius=${visual.candRadius}`,
 )
 check(
@@ -382,9 +441,13 @@ check(
   `opacity=${visual.actionsOpacity} pe=${visual.actionsPointerEvents}`,
 )
 check(
-  '三段式壳:滚动移交 body,页脚常驻带 hairline 上边',
-  visual.bodyOverflowY === 'auto' && visual.footBorderTop === '1px',
-  `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop}`,
+  '分层不再用分隔线:头/脚都没有 hairline,页脚也不再自成一段(无独立底色 + 居中)',
+  visual.bodyOverflowY === 'auto' &&
+    visual.footBorderTop === '0px' &&
+    visual.headBorderBottom === '0px' &&
+    visual.footBg === 'rgba(0, 0, 0, 0)' &&
+    visual.footTextAlign === 'center',
+  `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop} headBorderBottom=${visual.headBorderBottom} footBg=${visual.footBg} textAlign=${visual.footTextAlign}`,
 )
 
 // ── ⑥b 图标钮 / 对齐 / 间距几何(第三十七轮 v2.6.24,用户"标签比例增大,下方内容和标签左侧对齐,
@@ -425,6 +488,10 @@ const geo = await page.evaluate(() => {
     btnCount: btns.length,
     btnSize: iconRect ? `${iconRect.width}x${iconRect.height}` : '',
     rowRight: +rowRect.right.toFixed(2),
+    rowLeft: +rowRect.left.toFixed(2),
+    panelLeft: +document.querySelector('.pddcs-popup').getBoundingClientRect().left.toFixed(2),
+    titleLeft: +document.querySelector('.pddcs-popup-title').getBoundingClientRect().left.toFixed(2),
+    panelRight: +document.querySelector('.pddcs-popup').getBoundingClientRect().right.toFixed(2),
     actionsRight: +actRect.right.toFixed(2),
     rowGap: +(r1.top - r0.bottom).toFixed(2),
     // 第三十八轮 v2.6.25:标签→原问题、原问题→回答两处行内间距(按相邻块 rect 差量,含外边距塌缩后的实际值)
@@ -458,17 +525,30 @@ check(
   Math.abs(geo.rowRight - geo.actionsRight - 6) <= 1,
   `rowRight=${geo.rowRight} actionsRight=${geo.actionsRight}`,
 )
-check('词条间距收紧:相邻候选行外边距合计 ≤2px', geo.rowGap <= 2, `rowGap=${geo.rowGap}`)
-// 第三十八轮 v2.6.25:内部更松、整体更矮 —— 数值口径写在断言里(上版 = 6+2+2+6 = 16px)
+// v2.7.0:行距与行内节奏**取同一个值**(ROW_GAP_Y = 6px)—— 列表的疏与内文的疏是一套,
+// 旧版是"行距 2px、内文间距 4px"两个各自拍的数字
 check(
-  '标签/原问题/回答两处间距各增大到 4px(上版 2px,按 rect 量实得)',
-  Math.abs(geo.gapBadgeQ - 4) <= 0.5 && Math.abs(geo.gapQText - 4) <= 0.5,
-  `标签→原问题=${geo.gapBadgeQ} 原问题→回答=${geo.gapQText}`,
+  '行距 = 行内节奏 = 6px(列表的疏与内文的疏同一套,按 rect 量实得)',
+  Math.abs(geo.rowGap - 6) <= 0.5 &&
+    Math.abs(geo.gapBadgeQ - 6) <= 0.5 &&
+    Math.abs(geo.gapQText - 6) <= 0.5,
+  `行距=${geo.rowGap} 标签→原问题=${geo.gapBadgeQ} 原问题→回答=${geo.gapQText}`,
 )
 check(
-  '词条默认高度净减 2px:行内竖向总留白 = 3+4+4+3 = 14px(上版 6+2+2+6 = 16px)',
-  geo.rowPadTop === '3px' && geo.rowPadBottom === '3px' && geo.gapBadgeQ + geo.gapQText === 8,
-  `pad=${geo.rowPadTop}/${geo.rowPadBottom} 间距合计=${geo.gapBadgeQ + geo.gapQText} 行高=${geo.rowH}`,
+  '行上下内边距 10px(把信息推开的留白在这里,不靠行内间距一点点抠)',
+  geo.rowPadTop === '10px' && geo.rowPadBottom === '10px',
+  `pad=${geo.rowPadTop}/${geo.rowPadBottom} 行高=${geo.rowH}`,
+)
+check(
+  '行左右缘由滚动中段统一内缩 8px(行自身不再带左右外边距,改一处即整体对齐)',
+  Math.abs(geo.rowLeft - geo.panelLeft - 8) <= 0.5 &&
+    Math.abs(geo.panelRight - geo.rowRight - 8) <= 0.5,
+  `panel=${geo.panelLeft}/${geo.panelRight} row=${geo.rowLeft}/${geo.rowRight}`,
+)
+check(
+  '面板名站在列表内容那条竖线上(标题左缘 = 行内容左缘,头部不自成一套缩进)',
+  Math.abs(geo.titleLeft - geo.badgeLeft) <= 0.5,
+  `标题=${geo.titleLeft} 行内容左缘(徽标外框)=${geo.badgeLeft}`,
 )
 
 await page.evaluate(() => {
@@ -585,8 +665,8 @@ check(
   JSON.stringify(foldVis),
 )
 check(
-  '折叠不再撑高词条:带折叠数的行无 folded 类、底边距与常规行同为 3px',
-  !!foldVis && !foldVis.foldedCls && foldVis.rowPadBottom === '3px',
+  '折叠不再撑高词条:带折叠数的行无 folded 类、底边距与常规行同为 10px',
+  !!foldVis && !foldVis.foldedCls && foldVis.rowPadBottom === '10px',
   JSON.stringify(foldVis ? { cls: foldVis.foldedCls, padB: foldVis.rowPadBottom, rowH: foldVis.rowH } : null),
 )
 await page.evaluate(() => {

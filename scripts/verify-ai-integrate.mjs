@@ -17,8 +17,9 @@
  *  ⑧ 生成中途 Port 断开(SW 被回收)→ 落到可重试的失败态,不永久卡在「正在整合」
  *  ⑨ **键盘唤起时默认选中跳过整合行**:Ctrl+Enter 开面板后直接按 Enter 填的是
  *    第一条真实候选,而不是发起一次付费 API 请求(整合行是 ↑↓/Tab 走过去才触发的动作)
- *  ⑩ 重设计(v2.6.34):整合行与候选行**等高**(按真实 rect 量,不靠 padding 虚撑)、
- *     有知识库绿软底 + 同色描边(候选行是中性面色)、内容左缘与候选行重合;
+ *  ⑩ 重设计(v2.6.34 立规 / v2.7.0 随面板重设计改表达方式,两条口径未动):
+ *     整合行与候选行**高度同档**(按真实 rect 量,不靠 padding 虚撑)、
+ *     靠"常驻知识库绿软底"(候选行静止时是彻底无底的纸)与素材区分、内容左缘与候选行重合;
  *  ⑪ 生成后的展示:说明行让位给正文、正文取面板主层 13.5px、重试钮 24px 在行内右端、
  *     整行不塌回单行;出结果后点整行不再发起请求(防误触再烧一次)
  *
@@ -284,21 +285,18 @@ let idleAiRowH = 0
       ai.hint.includes('不出本机'),
     JSON.stringify({ hint: ai.hint, h: ai.h }),
   )
+  // v2.7.0:整合行那圈绿描边撤掉了 —— 新面板里**所有**候选行静止时都是无底无框的纸,
+  // "有底的只有这一块"就已经足够把它读成动作。断言随之从"底色 + 描边两层叠加"
+  // 改成"有底 / 没底"这一条真正在承担区分作用的差别
   check(
-    '⑩ 视觉:整合行有知识库绿软底 + 1px 描边,候选行两条都没有(素材 vs 动作)',
-    ai.bg !== 'rgba(0, 0, 0, 0)' &&
-      ai.borderW === '1px' &&
-      ai.bg !== cands[0].bg &&
+    '⑩ 视觉:全面板只有整合行有底(常驻知识库绿软底),候选行静止时完全无底无框',
+    ai.bg.includes('20, 174, 92') &&
+      ai.borderW === '0px' &&
       cands.every((x) => x.borderW === '0px' && x.bg === 'rgba(0, 0, 0, 0)'),
-    `ai=${ai.bg}/${ai.borderW} 候选=${cands[0].bg}/${cands[0].borderW}`,
+    `ai=${ai.bg}/border=${ai.borderW} 候选=${cands.map((x) => x.bg).join(' ')}`,
   )
   check(
-    '⑩ 视觉:描边与底色同出知识库绿系(不是中性灰边框)',
-    ai.borderColor.includes('20, 174, 92') && ai.bg.includes('20, 174, 92'),
-    `${ai.borderColor} / ${ai.bg}`,
-  )
-  check(
-    '⑩ 对齐:整合行内容左缘 = 候选行内容左缘(11px 内边距 + 1px 描边 = 12px)',
+    '⑩ 对齐:整合行内容左缘 = 候选行内容左缘(同类盒子同一个横向内边距)',
     ai.contentLeft === cands[0].contentLeft,
     `ai=${ai.contentLeft} 候选=${cands[0].contentLeft}`,
   )
@@ -396,9 +394,9 @@ check('终态后退出 busy 态', done[1]?.busy === false)
     `done=${ai.h} idle=${idleAiRowH} 候选=${rowsNow.filter((x) => !x.ai).map((x) => x.h).join('/')}`,
   )
   check(
-    '⑪ 生成结果:整行底色与描边仍是知识库绿(出结果不换成中性面色)',
-    ai.bg.includes('20, 174, 92') && ai.borderColor.includes('20, 174, 92'),
-    `${ai.bg} / ${ai.borderColor}`,
+    '⑪ 生成结果:整行仍是知识库绿底(出结果不换成中性面色,也不因为"结果来了"就退成普通词条)',
+    ai.bg.includes('20, 174, 92') && ai.borderW === '0px',
+    `${ai.bg} / border=${ai.borderW}`,
   )
   await page.locator('.pddcs-popup').screenshot({ path: path.join(ROOT, 'logs', 'ui-0917-ai-row-done.png') })
 

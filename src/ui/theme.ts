@@ -66,6 +66,33 @@ export interface ThemeTokens {
   shadow: string
   /** 滚动条滑块(悬浮显现);暗色下必须是浅色,否则在深底上不可见 */
   scrollThumb: string
+  /**
+   * 浮层材料底色(v2.7.0 第四十九轮)—— 聊天页推荐面板的**半透明**底,
+   * 与 `bg` 的区别是"要不要让平台页透过 `backdrop-filter` 的模糊参与成像"。
+   *
+   * 两条硬约束:
+   *  - **不透明度 ≥ 0.75**:再低就是"看得见后面文字"的半透明(用户反馈过的观感),
+   *    材料感来自模糊半径,不靠把面板做虚;
+   *  - **只给浮层用**,popup 是原生窗口、没有"后面",用它是白费一层合成。
+   *  引擎不支持 backdrop-filter 时退回 `bg`(判断在 overlay-css#panelSurface,单点)。
+   */
+  surfaceOverlay: string
+  /** 静默填充(关闭钮、图标钮这类无描边小控件的静止底;比 selectedBg 再轻一档) */
+  fillQuiet: string
+  /** 静默填充的悬浮态(同上,提亮一档) */
+  fillQuietHover: string
+  /**
+   * 知识库绿的动作面(推荐面板「根据知识库内容整合并回复」整行的底色)。
+   *
+   * 为什么不直接用 `semantic.knowledgeBg`:那是**压在实心面上**的软底(白 popup、白卡片),
+   * 一个固定 alpha 就够。而这一行现在压在**浮层材料**上 —— 材料本身是半透明的,
+   * 深色主题下合成出来是中灰而非近黑,同一份 9% 绿在中灰上只剩一点色偏,
+   * "这是本面板唯一的动作"这条就立不住了。故按主题各给一档:
+   * 浅色与 `semantic.knowledgeBg` 同值(白面上原样可用),深色提到能一眼看出是绿。
+   */
+  knowledgeSurface: string
+  /** 知识库动作面的悬浮态(同色加深一档) */
+  knowledgeSurfaceHover: string
 }
 
 /** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作深灰底白字 */
@@ -106,8 +133,18 @@ export const lightTheme: ThemeTokens = {
   controlKnobBg: '#ffffff',
   // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层"。
   // v2.6.32 起**仅聊天页推荐面板(overlay-css)使用**:popup 是原生窗口,挂阴影只会在
-  // 24px 圆角切出的四角露出一圈渐变(见 DESIGN §九),popup 不再消费本令牌
-  shadow: '0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)',
+  // 24px 圆角切出的四角露出一圈渐变(见 DESIGN §九),popup 不再消费本令牌。
+  // v2.7.0(第四十九轮):改"0.5px 亮环 + 近影 + 大范围环境影"三段 —— 毛玻璃面板没有描边,
+  // 那圈 0.5px 环就是它与页面之间唯一的一条硬边(Apple 浮层的做法)
+  shadow: '0 0 0 0.5px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.16)',
+  // v2.7.0(第四十九轮)浮层材料:#fcfcfc 的 0.8 —— 面板不再是"一块白",而是让平台页
+  // 透过 blur(20px) 参与成像的磨砂面。0.8 是本主题"不透明度 ≥ 0.75"下限之上留的余量
+  surfaceOverlay: 'rgba(252,252,252,0.80)',
+  fillQuiet: 'rgba(0,0,0,0.05)',
+  fillQuietHover: 'rgba(0,0,0,0.10)',
+  // 浅色与 semantic.knowledgeBg 同值 —— 白面上的那一档本来就没问题,换的是"谁来决定"
+  knowledgeSurface: 'rgba(20,174,92,0.09)',
+  knowledgeSurfaceHover: 'rgba(20,174,92,0.16)',
   scrollThumb: 'rgba(0,0,0,0.16)',
 }
 
@@ -149,8 +186,18 @@ export const darkTheme: ThemeTokens = {
   controlActive: '#ffffff',
   controlActiveHover: '#e3e5e9',
   controlKnobBg: '#2c2c2c',
-  // 与浅色同构的近影→环境影顺序(小→大),仅加大不透明度保深底可辨
-  shadow: '0 2px 8px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.55)',
+  // 与浅色同构的"亮环 → 近影 → 环境影"三段,仅加大不透明度保深底可辨;
+  // 深底上的环取**白**而非黑 —— 黑环在深色页面上等于没画
+  shadow:
+    '0 0 0 0.5px rgba(255,255,255,0.10), 0 2px 8px rgba(0,0,0,0.40), 0 12px 40px rgba(0,0,0,0.55)',
+  // 深色材料:Apple 深色浮层的 #1c1c1e,0.78(同样守住"不透明度 ≥ 0.75"下限)
+  surfaceOverlay: 'rgba(28,28,30,0.78)',
+  fillQuiet: 'rgba(255,255,255,0.10)',
+  fillQuietHover: 'rgba(255,255,255,0.18)',
+  // 深色面板压在浅色平台页上合成出的是**中灰**(0.78×28 + 0.22×255 ≈ 78),不是近黑 ——
+  // 9% 的绿到那上面只剩一点色偏,故提亮到 0.22 / 悬浮 0.30
+  knowledgeSurface: 'rgba(20,174,92,0.22)',
+  knowledgeSurfaceHover: 'rgba(20,174,92,0.30)',
   scrollThumb: 'rgba(255,255,255,0.24)',
 }
 

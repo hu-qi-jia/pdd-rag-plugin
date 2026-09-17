@@ -4,12 +4,19 @@ import { describe, it, expect } from 'vitest'
 import {
   BADGE_PAD_X,
   buildOverlayCss,
+  PANEL_PAD_X,
+  panelSurface,
   parseThemeMode,
   POPUP_W,
+  ROW_GAP_Y,
+  ROW_INSET_X,
+  ROW_PAD_X,
+  ROW_PAD_Y,
+  ROW_RADIUS,
   THEME_STORAGE_KEY,
 } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
-import { controlH, fontSize, semantic, spacing } from '../../../src/ui/design'
+import { controlH, fontSize, fontWeight, material, radius, semantic, spacing } from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底 + 主/次级文本色,且不混入深色文本', () => {
@@ -58,9 +65,16 @@ describe('buildOverlayCss:ChatGPT 化视觉(2026-09-16 第二十五轮,1+2+3+6,�
     expect(css).toContain('.pddcs-kbd')
     expect(css).toContain(`border: 1px solid ${lightTheme.border}`)
   })
-  it('浮层阴影柔和双层(浅/深同构:近影 + 环境影)', () => {
-    expect(lightTheme.shadow).toBe('0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)')
-    expect(darkTheme.shadow).toBe('0 2px 8px rgba(0,0,0,0.35), 0 12px 32px rgba(0,0,0,0.55)')
+  it('浮层阴影为"亮环 → 近影 → 环境影"三段(v2.7.0:面板无描边,那圈 0.5px 环是唯一硬边)', () => {
+    // 浅色的环是黑的、深色的环是白的 —— 深底上画黑环等于没画
+    for (const [name, tk, ring] of [
+      ['浅色', lightTheme, '0 0 0 0.5px rgba(0,0,0,0.06)'],
+      ['深色', darkTheme, '0 0 0 0.5px rgba(255,255,255,0.10)'],
+    ] as const) {
+      expect(tk.shadow.startsWith(ring), `${name}环`).toBe(true)
+      // 环只是轮廓,托起面板靠后两段阴影,且必须是"近→远"的小大序
+      expect(tk.shadow.split('), ').length, `${name}三段`).toBe(3)
+    }
   })
 })
 
@@ -78,12 +92,23 @@ describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六
     expect(qRule).toContain('text-overflow: ellipsis')
     expect(css).not.toContain('.pddcs-cand-src')
   })
-  it('头部小字但加粗(v2.6.19 用户指定 600;12.5px 中灰保持)', () => {
+  it('面板名与候选数分属两档(v2.7.0):15px 半粗主文本 + 12.5px 三级灰,不再挤在一个灰字串里', () => {
     const css = buildOverlayCss(lightTheme)
-    const headRule = css.match(/\.pddcs-popup-head \{[^}]*\}/)![0]
-    expect(headRule).toContain('font-size: 12.5px')
-    expect(headRule).toContain('font-weight: 600')
-    expect(headRule).toContain(`color: ${lightTheme.textMuted}`)
+    const rule = (sel: RegExp) => css.match(sel)![0]
+    const head = rule(/\.pddcs-popup-head \{[^}]*\}/)
+    // 头容器只做布局与配色,字号/字重下沉到两个文字档,否则 title/count 的字号会被容器盖住
+    expect(head).not.toContain('font-size')
+    expect(head).toContain(`color: ${lightTheme.text}`)
+    const title = rule(/\.pddcs-popup-title \{[^}]*\}/)
+    expect(title).toContain(`font-size: ${fontSize.heading}px`)
+    expect(title).toContain(`font-weight: ${fontWeight.semibold}`)
+    expect(title).toContain('letter-spacing: -0.02em')
+    const count = rule(/\.pddcs-popup-count \{[^}]*\}/)
+    expect(count).toContain(`font-size: ${fontSize.body}px`)
+    expect(count).toContain(`font-weight: ${fontWeight.regular}`)
+    expect(count).toContain(`color: ${lightTheme.textTertiary}`)
+    // 计数比面板名小两档:它是补充信息,不是第二个标题
+    expect(fontSize.heading).toBeGreaterThan(fontSize.body)
   })
   it('死规则清理:score 元素早已移除,规则不再生成', () => {
     expect(buildOverlayCss(lightTheme)).not.toContain('.pddcs-score')
@@ -94,12 +119,16 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
   it('面板加宽至 360(CSS 与 JS 定位共用常量,单处维护)', () => {
     expect(POPUP_W).toBe(360)
   })
-  it('内缩圆角软行:行带内缩 margin 与圆角,v2.6.25 为 margin 1px / padding 3px 12px;悬浮与选中共用同一软中性灰填充', () => {
+  it('内缩圆角软行:左右内缩由滚动中段的内边距统一给(v2.7.0),行自身只留纵向行距', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
     expect(candRule).toContain('border-radius')
-    expect(candRule).toContain('margin: 1px 8px')
-    expect(candRule).toContain('padding: 3px 12px')
+    // 行的左右缘由 body 的 padding 单点决定,行不再自带左右外边距(改一处即整体对齐)
+    expect(candRule).toContain(`margin: 0 0 ${ROW_GAP_Y}px`)
+    expect(candRule).toContain(`padding: ${ROW_PAD_Y}px ${ROW_PAD_X}px`)
+    expect(css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]).toContain(
+      `padding: ${spacing.xs}px ${ROW_INSET_X}px`,
+    )
     const fillRule = css.match(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
     expect(fillRule).toContain(lightTheme.selectedBg)
     expect(fillRule).not.toContain('inset 3px') // 左描边属旧表格语言,移除
@@ -112,7 +141,7 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
     expect(css).toMatch(/\.pddcs-cand:hover \.pddcs-cand-actions[^{]*\{[^}]*opacity: 1/)
     expect(css).toMatch(/\.pddcs-cand-selected \.pddcs-cand-actions[^{]*\{[^}]*opacity: 1/)
   })
-  it('三段式壳:popup 为 flex 列只负责裁圆角,滚动移交 body,页脚常驻带 hairline', () => {
+  it('三段式壳:popup 为 flex 列只负责裁圆角,滚动移交 body,页脚常驻;v2.7.0 三段之间不再有分隔线', () => {
     const css = buildOverlayCss(lightTheme)
     const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
     expect(popupRule).toContain('display: flex')
@@ -120,10 +149,14 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
     const bodyRule = css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]
     expect(bodyRule).toContain('flex: 1')
     expect(bodyRule).toContain('overflow-y: auto')
+    // 页脚仍是常驻壳(flex: 0 0 auto),但不再靠 hairline + 灰底自成一段 ——
+    // 整块面板是一张连续材料,分层靠留白(见 v2.7.0 材料用例)
     const footRule = css.match(/\.pddcs-popup-foot \{[^}]*\}/)![0]
-    expect(footRule).toContain('border-top')
+    expect(footRule).toContain('flex: 0 0 auto')
+    expect(footRule).not.toContain('border-top')
+    expect(footRule).not.toContain('background')
   })
-  it('入场动效:160ms 级淡入上移, prefers-reduced-motion 关闭', () => {
+  it('入场动效:200ms 级淡入落位, prefers-reduced-motion 关闭', () => {
     const css = buildOverlayCss(lightTheme)
     expect(css).toContain('@keyframes pddcs-pop-in')
     const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
@@ -133,10 +166,12 @@ describe('buildOverlayCss:面板重设计(2026-09-16 第三十二轮 v2.6.18)', 
 })
 
 describe('buildOverlayCss:面板细节四调(2026-09-16 第三十三轮 v2.6.19)', () => {
-  it('面板圆角增大至 12px(radius.xxl 新档,不影响 popup 本体的 8px)', () => {
+  it('面板圆角走 radius.xl,与行圆角构成同心圆角(行内缩多少,行圆角就减多少)', () => {
     const css = buildOverlayCss(lightTheme)
-    const popupRule = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
-    expect(popupRule).toContain('border-radius: 12px')
+    expect(css.match(/\.pddcs-popup \{[^}]*\}/)![0]).toContain(`border-radius: ${radius.xl}px`)
+    // 同心是减法关系而非两个独立数字:改任一端,另一端自动跟上
+    expect(ROW_RADIUS).toBe(radius.xl - ROW_INSET_X)
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain(`border-radius: ${ROW_RADIUS}px`)
   })
   it('同内容×n 移到徽标右侧常驻(v2.6.25 用户"同内容移动至标签的右侧"):不再 absolute/不再悬浮才显,折叠条位预留规则删除', () => {
     const css = buildOverlayCss(lightTheme)
@@ -165,7 +200,7 @@ describe('buildOverlayCss:标签放大 + 操作钮图标化 + 列表收紧(2026-
   it('三处文字左缘同基线:徽标内边距 BADGE_PAD_X 单点决定下方正文的左缩进', () => {
     const css = buildOverlayCss(lightTheme)
     const candRule = css.match(/\.pddcs-cand \{[^}]*\}/)![0]
-    expect(candRule).toContain('padding: 3px 12px') // 行左右对称 12px → 徽标外框即整行左缘
+    expect(candRule).toContain(`padding: ${ROW_PAD_Y}px ${ROW_PAD_X}px`) // 行左右对称 → 徽标外框即整行左缘
     const topRule = css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]
     expect(topRule).not.toContain('padding-left') // 徽标所在行不得再加缩进
     // v2.6.26 口径:正文对齐徽标**内文字**左缘 → 缩进量 = 徽标的水平内边距,同一个常量
@@ -205,16 +240,20 @@ describe('buildOverlayCss:标签放大 + 操作钮图标化 + 列表收紧(2026-
 })
 
 describe('buildOverlayCss:词条留白重配 + 折叠数归位(2026-09-16 第三十八轮 v2.6.25)', () => {
-  it('留白重配(用户"标签/原问题/回答间距各 +2px,词条反而要更矮"):两处行内间距 4px、上下 padding 压到 3px', () => {
+  it('留白重配:行内两处纵向节奏取同一个值(RowGapY),上下内边距取另一个(RowPadY)', () => {
     const css = buildOverlayCss(lightTheme)
-    expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).toContain('margin-bottom: 4px')
-    expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain('margin-bottom: 4px')
-    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
-    expect(css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]).toContain('padding: 1px 0 3px')
+    expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).toContain(`margin-bottom: ${ROW_GAP_Y}px`)
+    expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain(`margin-bottom: ${ROW_GAP_Y}px`)
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain(`padding: ${ROW_PAD_Y}px ${ROW_PAD_X}px`)
+    expect(css.match(/\.pddcs-popup-body \{ flex: 1[^}]*\}/)![0]).toContain(
+      `padding: ${spacing.xs}px ${ROW_INSET_X}px`,
+    )
+    // 行距与行内节奏是同一个值:"列表的疏"和"内文的疏"必须是一套,否则一眼看出两套排版
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain(`margin: 0 0 ${ROW_GAP_Y}px`)
   })
-  it('文字左缘基线不受重配影响(行左右 padding 仍 12px;引子/正文缩进 = 徽标内边距)', () => {
+  it('文字左缘基线:行左右内边距即公共左缘;引子/正文缩进 = 徽标内边距', () => {
     const css = buildOverlayCss(lightTheme)
-    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain('padding: 3px 12px')
+    expect(css.match(/\.pddcs-cand \{[^}]*\}/)![0]).toContain(`padding: ${ROW_PAD_Y}px ${ROW_PAD_X}px`)
     expect(css.match(/\.pddcs-cand-top \{[^}]*\}/)![0]).not.toContain('padding-left')
     expect(css.match(/\.pddcs-cand-q \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
     expect(css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]).toContain(`padding-left: ${BADGE_PAD_X}px`)
@@ -255,11 +294,13 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(aiRow).not.toContain('border-radius:')
   })
 
-  it('内容左缘与候选行重合:11px 内边距 + 1px 描边 = 候选行的 12px', () => {
-    const padX = (r: string) => Number(r.match(/padding:\s*[\d.]+px\s+([\d.]+)px/)![1])
-    const candPadX = padX(rule(/\.pddcs-cand \{[^}]*\}/))
-    expect(padX(aiRow) + 1).toBe(candPadX)
-    expect(aiRow).toContain('border: 1px solid') // 那条 1px 描边就是被"算进来"的那 1px
+  it('内容左缘与候选行重合:横向内边距取候选行的同一个常量,且不自带描边去凑那 1px', () => {
+    // v2.6.34 那版靠"11px 内边距 + 1px 描边 = 12px"凑出对齐;v2.7.0 撤掉描边后这条变恒等 ——
+    // 断言也随之从"两个数相加相等"改成"两行横向内边距同源"
+    const padX = (r: string) => r.match(/padding:\s*[\d.]+px\s+([\d.]+)px/)![1]
+    expect(padX(rule(/\.pddcs-cand \{[^}]*\}/))).toBe(String(ROW_PAD_X))
+    expect(aiRow).not.toContain('padding:') // 整条盒子的横向内边距都从 .pddcs-cand 继承
+    expect(aiRow).not.toContain('border')
   })
 
   it('两层结构撑起高度:主行顶 24px 行内控件档 + 说明行 11.5px(不靠 padding 虚撑)', () => {
@@ -272,15 +313,33 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(hint).not.toContain('text-overflow')
   })
 
-  it('视觉区分:整合行是知识库绿软底 + 同色描边,候选行只有中性面色', () => {
-    expect(aiRow).toContain(`background: ${semantic.knowledgeBg}`)
-    expect(aiRow).toContain('border: 1px solid rgba(20, 174, 92,')
-    // 候选行本体不带描边、不带语义底色(它的颜色全在类别徽标里)
+  it('视觉区分靠"有没有底"这一条:整合行常驻知识库绿软底,候选行静止时完全无底', () => {
+    // v2.7.0 撤掉了整合行那圈绿描边 —— 新面板里候选行全都无底无框,
+    // "有底的只有这一块"已经足够把它读成动作,再叠一层描边是多余的重量
+    expect(aiRow).toContain(`background: ${lightTheme.knowledgeSurface}`)
     const cand = rule(/\.pddcs-cand \{[^}]*\}/)
+    // 只禁"设了底色",不禁 transition 里的 background-color(那不是底色)
+    expect(cand).not.toContain('background:')
     expect(cand).not.toContain('border:')
-    expect(cand).not.toContain(semantic.knowledgeBg)
+    // 候选行的"底"只在悬浮/选中时出现,且是中性灰(与整合行的绿是两个体系)
+    const candHover = rule(/\.pddcs-cand:hover,[^{]*\{[^}]*\}/)
+    expect(candHover).toContain(lightTheme.selectedBg)
+    expect(candHover).not.toContain(lightTheme.knowledgeSurface)
     // 整合行不挂类别徽标:它是一次动作,不是一个类别
     expect(css).not.toContain('.pddcs-ai-row .pddcs-badge')
+  })
+
+  it('动作面按主题走令牌:浮层材料是半透明的,同一份 alpha 在中灰上立不住', () => {
+    // 这一行压在半透明材料上 —— 深色主题下材料压在白色平台页上合成出中灰,
+    // 固定 9% 的绿到那上面只剩一点色偏。故动作面必须随主题,且深色要更实
+    const alpha = (s: string) => Number(s.match(/([\d.]+)\)$/)![1])
+    expect(alpha(darkTheme.knowledgeSurface)).toBeGreaterThan(alpha(lightTheme.knowledgeSurface))
+    expect(alpha(darkTheme.knowledgeSurfaceHover)).toBeGreaterThan(
+      alpha(darkTheme.knowledgeSurface),
+    )
+    const darkAi = buildOverlayCss(darkTheme).match(/\.pddcs-cand\.pddcs-ai-row \{[^}]*\}/)![0]
+    expect(darkAi).toContain(`background: ${darkTheme.knowledgeSurface}`)
+    expect(darkAi).not.toContain(lightTheme.knowledgeSurface)
   })
 
   it('悬浮/选中态显式补写(双类选择器会盖过单类的 .pddcs-cand:hover / -selected)', () => {
@@ -289,7 +348,7 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(css).toContain('.pddcs-cand.pddcs-ai-row.pddcs-cand-selected')
     // 且悬浮态是同色加深,不是候选行那层中性灰
     const hover = rule(/\.pddcs-cand\.pddcs-ai-row:hover,[\s\S]*?\{[^}]*\}/)
-    expect(hover).toContain('rgba(20, 174, 92,')
+    expect(hover).toContain(lightTheme.knowledgeSurfaceHover)
     expect(hover).not.toContain(`background: ${lightTheme.selectedBg}`)
   })
 
@@ -306,13 +365,16 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(rule(/\.pddcs-cand-text \{[^}]*\}/)).toContain(`font-size: ${fontSize.title}px`)
   })
 
-  it('失败态:文案转红 + 整行转红软底红描边(不靠文案里的"失败"二字表意)', () => {
+  it('失败态:文案转红 + 整行转红软底(不靠文案里的"失败"二字表意)', () => {
     const colorRule = rule(/\.pddcs-ai-row\.is-error \.pddcs-ai-icon,[\s\S]*?\{[^}]*\}/)
     expect(colorRule).toContain(`color: ${semantic.danger}`)
     expect(colorRule).toContain('.pddcs-ai-label')
     const surface = rule(/\.pddcs-cand\.pddcs-ai-row\.is-error \{[^}]*\}/)
     expect(surface).toContain('rgba(217, 48, 38,')
-    expect(surface).not.toContain(semantic.knowledgeBg)
+    expect(surface).not.toContain(lightTheme.knowledgeSurface)
+    // 撤掉描边后,红底是失败态唯一的"整行信号" —— 得比绿底明显
+    const alpha = (r: string) => Number(r.match(/rgba\(217, 48, 38, ([\d.]+)\)/)![1])
+    expect(alpha(surface)).toBeGreaterThan(0.09)
   })
 
   it('生成结果按候选正文口径排版(同字号同截断行数),流式时行高不跳', () => {
@@ -340,7 +402,10 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(retry).toContain(`height: ${controlH.inline}px`)
     expect(retry).toContain('margin-left: auto')
     expect(retry).toContain('box-sizing: border-box') // 覆盖层注入平台页面,不享受 popup 的全局重置
-    expect(retry).toContain(`border: 1px solid ${lightTheme.border}`)
+    // v2.7.0:与关闭钮同一套"安静填充 + 全圆端"语言,不再是有描边的次级按钮
+    expect(retry).toContain(`border-radius: ${radius.pill}px`)
+    expect(retry).toContain(`background: ${lightTheme.fillQuiet}`)
+    expect(retry).not.toContain('border: 1px')
   })
 
   it('在途 = ✦ 原地转圈,且尊重"减少动态效果"', () => {
@@ -350,8 +415,100 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
 
   it('说明行不参与行高竞争:不给它 -webkit-line-clamp(那是正文的截断规则)', () => {
     expect(rule(/\.pddcs-ai-hint \{[^}]*\}/)).not.toContain('line-clamp')
-    expect(spacing.xs).toBeGreaterThan(0) // 主行与第二层之间的 4px 间距走栅格常量
-    expect(aiRow).toContain(`gap: ${spacing.xs}px`)
+    // 主行与第二层之间的间距 = 候选行的行内节奏,两类行的"疏"才是同一套
+    expect(ROW_GAP_Y).toBeGreaterThan(0)
+    expect(aiRow).toContain(`gap: ${ROW_GAP_Y}px`)
+    expect(rule(/\.pddcs-cand-top \{[^}]*\}/)).toContain(`margin-bottom: ${ROW_GAP_Y}px`)
+  })
+})
+
+describe('buildOverlayCss:Apple 式材料重设计(2026-09-17 第四十九轮 v2.7.0)', () => {
+  // 用户原话:「可以重新设计推荐回复面板吗。不要带着现有设计的框架,大胆一点,简约风格,
+  // 类似 apple 的设计」。这组用例把"材料"这件事拆成可断言的不变量 ——
+  // 面板与页面的分界从"实心底 + 描边"换成"半透明底 + 背景模糊 + 一圈 0.5px 亮环"。
+  const css = buildOverlayCss(lightTheme)
+  const popup = css.match(/\.pddcs-popup \{[^}]*\}/)![0]
+
+  it('面板是毛玻璃材料:背景模糊取 material 令牌,且 -webkit- 前缀同值', () => {
+    const filter = `saturate(${material.saturate}) blur(${material.blurPx}px)`
+    expect(popup).toContain(`backdrop-filter: ${filter}`)
+    expect(popup).toContain(`-webkit-backdrop-filter: ${filter}`)
+    // 模糊半径是"看不看得见后面"的唯一旋钮,低于 12px 后面的文字仍可辨认(见 material 注释)
+    expect(material.blurPx).toBeGreaterThanOrEqual(12)
+  })
+
+  it('材料的两条硬约束:不透明度 ≥ 0.75(不做成"看得见后面"的虚面板),且只给浮层用', () => {
+    for (const [name, tk] of [
+      ['浅色', lightTheme],
+      ['深色', darkTheme],
+    ] as const) {
+      const alpha = Number(tk.surfaceOverlay.match(/([\d.]+)\)$/)![1])
+      expect(alpha, `${name}材料不透明度`).toBeGreaterThanOrEqual(0.75)
+      expect(alpha, `${name}材料必须真的半透明`).toBeLessThan(1)
+      // 材料底必须与不透明面色不同源,否则"支持模糊"这条分支等于没走
+      expect(tk.surfaceOverlay).not.toBe(tk.bg)
+    }
+  })
+
+  it('panelSurface 单点决定"材料还是面色":支持模糊给半透明,不支持退回不透明', () => {
+    expect(panelSurface(lightTheme, true)).toBe(lightTheme.surfaceOverlay)
+    expect(panelSurface(lightTheme, false)).toBe(lightTheme.bg)
+    expect(panelSurface(darkTheme, true)).toBe(darkTheme.surfaceOverlay)
+    expect(panelSurface(darkTheme, false)).toBe(darkTheme.bg)
+  })
+
+  it('面板不挂描边:与页面之间那条硬边改由阴影里的 0.5px 亮环承担', () => {
+    expect(popup).toContain('border: none')
+    expect(popup).toContain(`box-shadow: ${lightTheme.shadow}`)
+    expect(lightTheme.shadow.startsWith('0 0 0 0.5px')).toBe(true)
+  })
+
+  it('分层不再用分隔线:头/脚都没有 hairline,整块是一张连续材料', () => {
+    expect(css).not.toContain('border-bottom')
+    expect(css.match(/\.pddcs-popup-foot \{[^}]*\}/)![0]).not.toContain('border-top')
+    expect(css.match(/\.pddcs-popup-head \{[^}]*\}/)![0]).not.toContain('border-bottom')
+  })
+
+  it('无描边小控件统一为全圆端 + 安静填充(关闭钮 / 图标钮 / 重试钮同形)', () => {
+    const close = css.match(/\.pddcs-popup-close \{[^}]*\}/)![0]
+    expect(close).toContain(`border-radius: ${radius.pill}px`)
+    expect(close).toContain(`background: ${lightTheme.fillQuiet}`)
+    expect(close).not.toContain('background: none') // 常驻可见,不再"悬浮才找得到"
+    expect(css.match(/\.pddcs-icon-btn \{[^}]*\}/)![0]).toContain(`border-radius: ${radius.pill}px`)
+    expect(css.match(/\.pddcs-icon-btn:hover \{[^}]*\}/)![0]).toContain(
+      `background: ${lightTheme.fillQuietHover}`,
+    )
+  })
+
+  it('关闭钮恒有可见的圆底,且两主题都取本主题的安静填充', () => {
+    const dark = buildOverlayCss(darkTheme)
+    expect(dark.match(/\.pddcs-popup-close \{[^}]*\}/)![0]).toContain(
+      `background: ${darkTheme.fillQuiet}`,
+    )
+    expect(darkTheme.fillQuiet).not.toBe(lightTheme.fillQuiet)
+  })
+
+  it('标题与页脚站在列表内容那条竖线上(头部不自成一套缩进)', () => {
+    // 面板名是这张列表的标题,不是浮层里另一个区块的标题 ——
+    // 它的左缘必须落在「行内缩量 + 行内边距」这条线上,和每条行内容的左缘重合
+    expect(PANEL_PAD_X).toBe(ROW_INSET_X + ROW_PAD_X)
+    expect(css.match(/\.pddcs-popup-head \{[^}]*\}/)![0]).toContain(
+      `padding: ${spacing.xxl}px ${PANEL_PAD_X}px ${spacing.md}px`,
+    )
+    expect(css.match(/\.pddcs-popup-foot \{[^}]*\}/)![0]).toContain(
+      `padding: 0 ${PANEL_PAD_X}px`,
+    )
+  })
+
+  it('页脚是居中的静音小字(不再是贴了灰带的一段)', () => {
+    const foot = css.match(/\.pddcs-popup-foot \{[^}]*\}/)![0]
+    expect(foot).toContain('text-align: center')
+    expect(foot).toContain(`color: ${lightTheme.textTertiary}`)
+  })
+
+  it('入场动效走减速曲线,并尊重"减少动态效果"', () => {
+    expect(popup).toContain('animation: pddcs-pop-in .22s cubic-bezier(0.32, 0.72, 0, 1)')
+    expect(css).toContain('@media (prefers-reduced-motion: reduce) { .pddcs-popup { animation: none; } }')
   })
 })
 

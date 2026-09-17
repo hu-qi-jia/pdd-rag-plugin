@@ -57,7 +57,9 @@ import {
   THEME_STORAGE_KEY,
   POPUP_W,
   buildOverlayCss,
+  panelSurface,
   parseThemeMode,
+  supportsBackdropBlur,
 } from '../ui/overlay-css'
 import {
   COPY_ICON,
@@ -698,19 +700,30 @@ function openPopup(
   const overlay = ensureOverlay()
   const el = document.createElement('div')
   el.className = 'pddcs-popup'
-  // 不透明双保险(第二十三轮,用户反馈面板似半透明):本样式注入平台页面,
-  // 类样式可能被页面级 !important 规则盖掉;内联背景优先级最高,直观兜底
-  el.style.backgroundColor = getThemeTokens(currentTheme).bg
+  // 背景双保险(第二十三轮):本样式注入平台页面,类样式可能被页面级 !important 规则盖掉,
+  // 内联背景优先级更高,直观兜底。
+  // v2.7.0 起这个兜底要**跟着材料走**:支持背景模糊时面板是半透明的,内联若仍写不透明面色,
+  // 就会把毛玻璃一脚踩回白板 —— 取哪个值由 overlay-css#panelSurface 单点决定(与 CSS 同源)
+  el.style.backgroundColor = panelSurface(getThemeTokens(currentTheme), supportsBackdropBlur())
 
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'
-  head.textContent = `推荐回复(${items.length})`
+  // 面板名与候选数分属两个文字档(v2.7.0):15px 半粗主文本 + 12.5px 三级灰计数。
+  // 旧版把「推荐回复(3)」挤成同一个 12.5px 灰字符串,一条标题读起来像一句注释
+  const title = document.createElement('span')
+  title.className = 'pddcs-popup-title'
+  title.textContent = '推荐回复'
+  const count = document.createElement('span')
+  count.className = 'pddcs-popup-count'
+  count.textContent = String(items.length)
+  count.title = `${items.length} 条候选`
   const close = document.createElement('button')
   close.className = 'pddcs-popup-close'
   close.textContent = '×'
   close.title = '关闭'
+  close.setAttribute('aria-label', '关闭')
   close.addEventListener('click', closePopup)
-  head.appendChild(close)
+  head.append(title, count, close)
   el.appendChild(head)
 
   // v2.6.18 三段式:滚动只发生在 body 中段,头/脚常驻成面板外壳(页脚键位提示不再滚走)
@@ -763,6 +776,11 @@ function openPopup(
   // 垂直方向必须按弹窗**实高**夹在视口内(几何算术见 pdd/ui-logic#popupPosition,含单测)
   const a = anchor.getBoundingClientRect()
   el.style.visibility = 'hidden'
+  // 量高期间必须关掉入场动效(v2.7.0):getBoundingClientRect 返回的是**变换后**的矩形,
+  // 动效里那 2% 的缩放会让刚挂载的面板矮一圈(385.78 → 378),定位就按矮的那版夹边界,
+  // 动画结束回到原尺寸时底边恰好压出视口(实测 bottom 798.78 > 792)。
+  // 旧版动效只翻译不缩放,所以这个坑一直没露头。量完立刻还原,动效从定位好的位置开始播
+  el.style.animation = 'none'
   overlay.appendChild(el)
   // 实高向上取整:offsetHeight 是取整后的整数,会丢掉亚像素(如 336.125 → 336),
   // 差的 0.1px 恰好让面板底边压线溢出;getBoundingClientRect 保留小数
@@ -771,6 +789,7 @@ function openPopup(
   el.style.left = `${Math.round(x)}px`
   el.style.top = `${Math.round(y)}px`
   el.style.visibility = ''
+  el.style.animation = ''
   popupEl = el
   // 键盘模式:挂载完成后初始化选中态(popupEl 就位前 applySelection 是空操作)
   if (opts.keyboard) {

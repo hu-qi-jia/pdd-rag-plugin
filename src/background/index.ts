@@ -16,6 +16,7 @@ import {
   queueEmbedding,
 } from "./offscreen";
 import { processPendingEmbeddings } from "./syncEmbeddings";
+import { resplitStaleKbDocs } from "./kbResplit";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { hashText } from "../shared/text";
@@ -431,7 +432,15 @@ if (typeof chrome.scripting?.unregisterContentScripts === "function") {
 
 // 延迟执行,让 offscreen 有机会先行就绪(首次唤醒可能同时拉模型)
 setTimeout(() => {
-  void processPendingEmbeddings();
+  void (async () => {
+    // 分块器版本迁移必须先于补嵌:重切会把新块标为待嵌,由随后同一批补嵌一次拉齐
+    try {
+      await resplitStaleKbDocs();
+    } catch (err) {
+      console.error("[PDD CS] resplit stale kb docs failed:", err);
+    }
+    await processPendingEmbeddings();
+  })();
 }, 8000);
 setTimeout(() => {
   void runTtlPurge();

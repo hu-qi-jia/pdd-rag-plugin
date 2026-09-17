@@ -110,6 +110,10 @@ export const chromeMock = {
           return Promise.resolve()
         },
       ),
+      remove: vi.fn((_keys: string | string[], callback?: () => void) => {
+        if (callback) callback()
+        return Promise.resolve()
+      }),
     },
     onChanged: {
       addListener: vi.fn((fn: Listener) => {

@@ -50,6 +50,10 @@ export const LLM_TIMEOUT_MAX_MS = 30000
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
 
+/** AI 接口表单草稿(边填边存):弹窗失焦会被 Chrome 销毁,没保存的内容靠它续上。
+ *  与 SETTINGS_STORAGE_KEY 分开 —— 草稿不是生效配置,半途而废的密钥不会出网。 */
+export const LLM_DRAFT_STORAGE_KEY = 'pddcs:llmDraft'
+
 /** 同一问题可保留的标准回答条数上限(用户指定:合计最多 3 条)。
  *  后台写入口径与聊天页 UI 提示共用同一个数字。 */
 export const MAX_GOLDENS_PER_QUESTION = 3

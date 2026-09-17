@@ -336,15 +336,11 @@ export function Toggle({
       ? tk.switchTrackHover
       : tk.switchTrack
   return (
-    <label
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: spacing.lg, cursor: 'pointer' }}
-      onClick={(e) => {
-        e.preventDefault()
-        onChange(!checked)
-      }}
-    >
+    // 容器是 div 而非 label(第四十八轮用户"只有在点击开关时才开启/关闭,
+    // 目前点击对应配置文字就会触发"):原先整行是带 onClick 的 <label>,
+    // 点标签文字也会翻转 —— 而标签旁边就挨着说明文字,想选一句话复制都做不到。
+    // 现在**只有开关本体**可点;键盘可达性不受影响(开关自带 tabIndex + onKeyDown)。
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span
           style={{
@@ -374,12 +370,14 @@ export function Toggle({
         role="switch"
         aria-checked={checked}
         aria-label={label}
-        title={label}
+        title={`${checked ? '点击关闭' : '点击开启'}:${label}`}
         tabIndex={0}
         className="pddcs-switch"
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onClick={() => onChange(!checked)}
         onKeyDown={(e) => {
-          // 键盘可达(2026-09-15 设计6):Enter/Space 切换,Space 阻断页面滚动;
-          // 不冒泡,避免外层 label 的 onClick 再次翻转
+          // 键盘可达(2026-09-15 设计6):Enter/Space 切换,Space 阻断页面滚动
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             e.stopPropagation()
@@ -401,7 +399,7 @@ export function Toggle({
             (内联 left 会压过 :active 拉伸;React 只声明结构) */}
         <span className="pddcs-switch-knob" />
       </span>
-    </label>
+    </div>
   )
 }
 

@@ -20,7 +20,14 @@ import { controlH, fontSize, formGap, formType, spacing } from '../ui/design'
 import { DownloadIcon, LoaderIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
 import {
+  LLM_DRAFT_DEBOUNCE_MS,
+  clearLlmDraft,
+  loadLlmDraft,
+  saveLlmDraft,
+} from '../pdd/llm-draft'
+import {
   llmFormReady,
+  type LlmFormFields,
   llmTestFailed,
   llmTestLabel,
   originsForBaseUrl,
@@ -54,14 +61,13 @@ export function SettingsTab({
   const fileRef = useRef<HTMLInputElement>(null)
 
   // ── AI 整合(第四十八轮 P2-6)──────────────────────────────────────────────
-  // 三个文本框**不走自动保存**:①API Key 不该每敲一个字符就落一次库;
+  // 三个文本框**不直接自动保存**:①API Key 不该每敲一个字符就落一次正式配置;
   // ②申请主机权限必须发生在用户手势里,只有"点保存"这一刻才有手势可用。
   // 于是本卡片是全页唯一的"显式保存"处(超时滑杆仍随大流即时落库)。
-  const [llm, setLlm] = useState<{
-    baseUrl: string
-    apiKey: string
-    model: string
-  } | null>(null)
+  //
+  // 但**草稿**是边填边存的(见 pdd/llm-draft.ts):弹窗失焦即被 Chrome 销毁,
+  // 扩展拦不住 —— 用户"点窗口外面内容就没了"的抱怨由此而来。
+  const [llm, setLlm] = useState<LlmFormFields | null>(null)
   const [showKey, setShowKey] = useState(false)
   const [test, setTest] = useState<LlmTestState>({ phase: 'idle' })
   // 只在首次拿到设置时灌一次初值:此后 llm 是用户的输入,不被后台回写覆盖
@@ -69,8 +75,25 @@ export function SettingsTab({
   useEffect(() => {
     if (!draft || llmSeeded.current) return
     llmSeeded.current = true
-    setLlm({ baseUrl: draft.llmBaseUrl, apiKey: draft.llmApiKey, model: draft.llmModel })
+    // 草稿优先:上次没保存就关掉的输入,原样还给用户
+    void (async () => {
+      const saved = await loadLlmDraft()
+      setLlm(saved ?? { baseUrl: draft.llmBaseUrl, apiKey: draft.llmApiKey, model: draft.llmModel })
+    })()
   }, [draft])
+
+  // 每次改动 300ms 后落一次草稿:既不会每敲一个字符就写一次存储,也不会因为
+  // "刚敲完就被关掉"而丢字(300ms 远短于人手离开键盘去点窗口外的时间)
+  const draftTimer = useRef<number>(0)
+  const updateLlm = (patch: Partial<LlmFormFields>) => {
+    setLlm((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...patch }
+      window.clearTimeout(draftTimer.current)
+      draftTimer.current = window.setTimeout(() => void saveLlmDraft(next), LLM_DRAFT_DEBOUNCE_MS)
+      return next
+    })
+  }
 
   const llmDirty =
     !!draft &&
@@ -104,7 +127,7 @@ export function SettingsTab({
   const sliderTimer = useRef<number>(0)
 
   const persist = useCallback(
-    async (next: PddSettings) => {
+    async (next: PddSettings): Promise<PddSettings | null> => {
       window.clearTimeout(sliderTimer.current)
       setDraft(next)
       setBusy(true)
@@ -115,13 +138,18 @@ export function SettingsTab({
         })
         if (resp.payload.error) {
           setMsg({ ok: false, text: `保存失败:${resp.payload.error}` })
-        } else {
-          setDraft(resp.payload.settings ?? next)
-          setMsg({ ok: true, text: '已保存' })
-          await onDataChanged()
+          return null
         }
+        const saved = resp.payload.settings ?? next
+        setDraft(saved)
+        setMsg({ ok: true, text: '已保存' })
+        await onDataChanged()
+        // 返回**夹取后**的那份:调用方要拿它回填表单,不能拿自己提交的原始值
+        // (后台会去尾斜杠、夹超时,回填原始值会让"已保存"的界面与真实配置对不上)
+        return saved
       } catch (err) {
         setMsg({ ok: false, text: `保存失败:${String(err)}` })
+        return null
       } finally {
         setBusy(false)
       }
@@ -148,7 +176,14 @@ export function SettingsTab({
     const granted = origins.length > 0 ? await ensureHostPermission(llm.baseUrl) : true
     const next = { ...draft, ...llm }
     setTest({ phase: 'idle' }) // 改了配置,上一次的测试结论作废
-    await persist(next)
+    const saved = await persist(next)
+    if (saved) {
+      // 回填夹取后的值,并清掉草稿 —— 存住了就没有"未保存的改动"可言。
+      // (不清的话,后台对 baseUrl 去尾斜杠这类夹取会让草稿永远比正式配置多一个斜杠,
+      //  「有未保存的修改」从此常驻,用户怎么点保存都消不掉。)
+      setLlm({ baseUrl: saved.llmBaseUrl, apiKey: saved.llmApiKey, model: saved.llmModel })
+      await clearLlmDraft()
+    }
     if (!granted) {
       setMsg({
         ok: false,
@@ -360,32 +395,24 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="AI 整合"
-          desc="开:推荐面板的知识库候选上方多一行「根据知识库内容整合并回复」,点它才把检索到的知识库内容整合成一段可直接发送的回复;关:一切照旧,全程本地,不产生任何网络请求"
+          desc="开启后,推荐面板的知识库候选上方多一行「根据知识库内容整合并回复」,点击才生成"
           checked={draft.aiIntegrateEnabled}
           onChange={(v) => void persist({ ...draft, aiIntegrateEnabled: v })}
         />
 
-        {/* 数据边界说明(ADR-0006):必须写清楚"什么会被发出去",这是开关说明文案的核心 */}
+        {/* 数据边界(ADR-0006):只留用户真正需要知道的三件事 —— 什么会出去、
+            什么永远不出去、谁来决定发送。不解释实现细节,不堆加粗。 */}
         <div
           style={{
             fontSize: formType.desc.size,
             fontWeight: formType.desc.weight,
             color: tk.textMuted,
-            lineHeight: 1.7,
+            lineHeight: 1.6,
           }}
         >
-          开启并点那行之后,<b style={{ fontWeight: formType.label.weight, color: tk.text }}>本轮检索出的知识库候选内容</b>
-          与<b style={{ fontWeight: formType.label.weight, color: tk.text }}>当前买家问题</b>
-          会发送到你下面填的接口,用于生成回复。
-          <b style={{ fontWeight: formType.label.weight, color: tk.text }}>历史回答与标准回答永不外发</b>
-          ,它们始终只走本地检索;生成结果只填进输入框,发送仍由你手动完成。
-          密钥仅存本机,不随浏览器账号同步。
-          {draft.directFillEnabled && (
-            <>
-              <br />
-              当前已开启「自动回复」,面板不会出现整合行,本功能不会生效。
-            </>
-          )}
+          点击那一行时,本轮命中的知识库内容与买家问题会发给你配置的接口。历史回答与标准回答永不外发,
+          密钥只存本机,生成结果只填输入框、发送仍由你手动完成。
+          {draft.directFillEnabled && ' 当前已开启「自动回复」,本功能不会生效。'}
         </div>
 
         <Slider
@@ -406,7 +433,7 @@ export function SettingsTab({
             placeholder="https://api.deepseek.com/v1"
             spellCheck={false}
             value={llm?.baseUrl ?? ''}
-            onChange={(e) => setLlm((p) => (p ? { ...p, baseUrl: e.target.value } : p))}
+            onChange={(e) => updateLlm({ baseUrl: e.target.value })}
           />
         </Field>
 
@@ -419,7 +446,7 @@ export function SettingsTab({
             autoComplete="off"
             type={showKey ? 'text' : 'password'}
             value={llm?.apiKey ?? ''}
-            onChange={(e) => setLlm((p) => (p ? { ...p, apiKey: e.target.value } : p))}
+            onChange={(e) => updateLlm({ apiKey: e.target.value })}
           />
           <Btn tk={tk} variant="ghost" onClick={() => setShowKey((v) => !v)}>
             {showKey ? '隐藏' : '显示'}
@@ -433,7 +460,7 @@ export function SettingsTab({
             placeholder="deepseek-chat"
             spellCheck={false}
             value={llm?.model ?? ''}
-            onChange={(e) => setLlm((p) => (p ? { ...p, model: e.target.value } : p))}
+            onChange={(e) => updateLlm({ model: e.target.value })}
           />
         </Field>
 

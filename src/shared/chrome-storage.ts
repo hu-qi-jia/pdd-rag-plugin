@@ -34,6 +34,18 @@ export async function saveToChrome(key: string, value: unknown): Promise<void> {
   })
 }
 
+/** 删除一个键(存 null 与"没有这个键"在语义上不是一回事,故走 remove 而不是存空值) */
+export async function removeFromChrome(key: string): Promise<void> {
+  if (!hasChromeStorage()) return
+  return new Promise<void>((resolve) => {
+    try {
+      chrome.storage.local.remove(key, () => resolve())
+    } catch {
+      resolve()
+    }
+  })
+}
+
 /** Subscribe to changes for a single key. Returns a cleanup function. */
 export function subscribeChromeStorage<T>(
   key: string,

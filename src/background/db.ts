@@ -9,13 +9,14 @@
  *   goldens   — 金标准(长期,豁免保留期,独立可编辑问答文档)
  *   folders   — 回复文件夹(两层,parentId=null 即根层)
  *   knowledge — 知识库条目(人工维护"标题+正文"话术卡,豁免保留期)
+ *   kbDocs    — 知识库文档原文(分块器版本变更时重新分块的事实源,豁免保留期)
  *   errors    — 错误日志
  *
  * hasEmbedding 三态:0=待嵌(启动扫描重试) 1=已嵌 -1=嵌入失败(记录 errors,下次启动扫描重试)
  */
 import Dexie, { type Table } from "dexie";
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants';
-import type { ErrorLog, FolderRecord, GoldenRecord, KnowledgeRecord, QaRecord, ReplyRecord } from '../types/memory';
+import type { ErrorLog, FolderRecord, GoldenRecord, KbDocRecord, KnowledgeRecord, QaRecord, ReplyRecord } from '../types/memory';
 
 // 检索缓存失效钩子(工程5b):改变"已嵌三源"集合的写路径必须调用。
 // 循环依赖安全:本模块只在方法体内(运行时)使用它,模块求值期不触碰。
@@ -27,6 +28,7 @@ export class PddDatabase extends Dexie {
   goldens!: Table<GoldenRecord, string>;
   folders!: Table<FolderRecord, string>;
   knowledge!: Table<KnowledgeRecord, string>;
+  kbDocs!: Table<KbDocRecord, string>;
   errors!: Table<ErrorLog, number>;
 
   constructor() {
@@ -57,6 +59,12 @@ export class PddDatabase extends Dexie {
       qaRecords:
         "id, sessionKey, questionHash, questionTs, hasEmbedding, [sessionKey+questionTs], msgId",
       replies: "id, qaId, contentHash, ts, msgId",
+    });
+
+    // 知识库文档原文:knowledge 只存切好的块,分块规则一变旧块就无法原地修正;
+    // 存下原文才能在启动时按新规则重切,用户不必手动重传文档。
+    this.version(5).stores({
+      kbDocs: "docId, splitterVersion",
     });
   }
 
@@ -495,6 +503,25 @@ export class PddDatabase extends Dexie {
     await this.knowledge.bulkDelete(ids);
     invalidateRetrievalCache();
     return ids.length;
+  }
+
+  // ─── 知识库文档原文(kbDocs) ────────────────────────────────────────────────────
+
+  async putKbDoc(record: KbDocRecord): Promise<void> {
+    await this.kbDocs.put(record);
+  }
+
+  async getKbDoc(docId: string): Promise<KbDocRecord | undefined> {
+    return this.kbDocs.get(docId);
+  }
+
+  async deleteKbDoc(docId: string): Promise<void> {
+    await this.kbDocs.delete(docId);
+  }
+
+  /** 分块器版本失配的文档(SW 启动时按新规则重切) */
+  async getStaleKbDocs(version: string): Promise<KbDocRecord[]> {
+    return this.kbDocs.filter((d) => d.splitterVersion !== version).toArray();
   }
 
   // ─── 回复文件夹(folders) ──────────────────────────────────────────────────────

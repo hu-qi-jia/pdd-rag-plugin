@@ -7,7 +7,7 @@
  *    永不截断单行;无结构纯文本回退原 chunkText(500/75 滑窗,原项目逻辑兜底)。
  */
 import { describe, it, expect } from 'vitest'
-import { mdToPlainText, chunkMarkdown } from '../../../src/shared/mdText'
+import { mdToPlainText, chunkMarkdown, SPLITTER_VERSION } from '../../../src/shared/mdText'
 import { chunkText } from '../../../src/shared/chunkText'
 
 describe('mdToPlainText', () => {
@@ -224,6 +224,12 @@ describe('chunkMarkdown · 问答体切分', () => {
     const chunks = chunkMarkdown(md)
     expect(chunks.every((c) => c.kind === 'section')).toBe(true)
     expect(chunks[0].text).toContain('普通段落一。')
+  })
+})
+
+describe('SPLITTER_VERSION', () => {
+  it('问答体切分上线后版本号为 2.0.0(旧库 1.0.0 将触发重分块)', () => {
+    expect(SPLITTER_VERSION).toBe('2.0.0')
   })
 })
 

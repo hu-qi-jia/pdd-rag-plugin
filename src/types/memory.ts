@@ -113,6 +113,24 @@ export interface KnowledgeRecord {
   source?: 'manual' | 'doc'
   /** 文档块所属文档名(去扩展名,索引);手工条目缺省 */
   docId?: string
+  /** 块类型:qa=问答体切出的单条(答案自足);section=按标题切出的节(含长节续块) */
+  chunkKind?: 'qa' | 'section'
+  /** 源节在文档中的序号(0 起,文档顺序):同一节被拆成多块时这些块共享同一 sectionSeq */
+  sectionSeq?: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** 知识库文档原文(kbDocs):重分块的事实源;豁免保留期 */
+export interface KbDocRecord {
+  /** 主键:文档名(去扩展名),与 KnowledgeRecord.docId 同口径 */
+  docId: string
+  /** markdown 原文,原样保存 */
+  content: string
+  /** 落块时的分块器版本;不等于当前 SPLITTER_VERSION → 待重分块 */
+  splitterVersion: string
+  /** 最近一次分块产出的块数(展示用) */
+  chunkCount: number
   createdAt: number
   updatedAt: number
 }

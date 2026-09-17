@@ -278,3 +278,37 @@ describe('嵌入回填不改写 updatedAt', () => {
     expect(k?.updatedAt).toBe(now)
   })
 })
+
+describe('kbDocs(文档原文)', () => {
+  const doc = (over: Partial<Parameters<typeof testDb.putKbDoc>[0]> & { docId: string }) => ({
+    content: 'x',
+    splitterVersion: '2.0.0',
+    chunkCount: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  })
+
+  it('存取原文与分块器版本', async () => {
+    await testDb.putKbDoc(
+      doc({ docId: '常见问答', content: '# 常见问答\n\nQ：防水吗？ A：不防水。', chunkCount: 2 }),
+    )
+    const got = await testDb.getKbDoc('常见问答')
+    expect(got?.content).toContain('防水吗')
+    expect(got?.chunkCount).toBe(2)
+    expect(got?.splitterVersion).toBe('2.0.0')
+  })
+
+  it('getStaleKbDocs 只返回版本失配的文档', async () => {
+    await testDb.putKbDoc(doc({ docId: '旧文档', splitterVersion: '1.0.0' }))
+    await testDb.putKbDoc(doc({ docId: '新文档', splitterVersion: '2.0.0' }))
+    const stale = await testDb.getStaleKbDocs('2.0.0')
+    expect(stale.map((d) => d.docId)).toEqual(['旧文档'])
+  })
+
+  it('deleteKbDoc 删除', async () => {
+    await testDb.putKbDoc(doc({ docId: '待删' }))
+    await testDb.deleteKbDoc('待删')
+    expect(await testDb.getKbDoc('待删')).toBeUndefined()
+  })
+})

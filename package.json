@@ -9,6 +9,7 @@
     "build": "plasmo build && node scripts/model.mjs copy",
     "build:prod": "plasmo build && node scripts/model.mjs copy",
     "fetch-model": "node scripts/model.mjs fetch",
+    "release": "node scripts/release.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

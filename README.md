@@ -63,6 +63,15 @@ pnpm test    # vitest 单测
 node scripts/package.mjs   # 打发布 zip(pdd-cs-quick-reply-v<版本>.zip;自检产物版本一致 + 内置模型在包内)
 ```
 
+发布(维护者):
+
+```bash
+pnpm release                    # 构建 → 打包 → 建 GitHub Release(说明取 docs/release-notes/v<版本>.md)
+node scripts/release.mjs --dry-run   # 只看会发布什么:构建+打包照跑,gh 命令只打印不执行
+```
+
+脚本会先拦两道:工作区有未提交改动、有提交没推送 —— release 的 tag 指向远端分支的提交,而 zip 是本地工作区构建的,两者不一致时用户下载的包和 GitHub 上那份代码对不上。所以顺序是:提交 → 推送 → `pnpm release`。已在远端存在同名 release 时脚本拒绝执行,确实要覆盖说明与资产才加 `--update`(资产会被 `--clobber` 覆盖,下载计数归零)。
+
 ### 验证
 
 - **单测**:`pnpm test`(vitest,覆盖检索计划、分段状态机、DB 契约、面板纯逻辑、组件行为);

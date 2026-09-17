@@ -26,7 +26,7 @@
 ## 安装与分发
 
 - **Edge 商店(推荐,国内直连,自动更新)**:上架审核通过后见 Release 说明中的商店链接;
-- **GitHub Releases(离线安装)**:下载 `pdd-cs-quick-reply-v0.11.0.zip` 并解压,然后
+- **GitHub Releases(离线安装)**:到 [Releases](https://github.com/hu-qi-jia/pdd-rag-plugin/releases/latest) 下载最新的 `pdd-cs-quick-reply-v<版本>.zip` 并解压,然后
   - Chrome:打开 `chrome://extensions` → 右上角开启「开发者模式」→「加载已解压的扩展程序」→ 选择解压出的 `chrome-mv3-prod` 文件夹;
   - Edge:打开 `edge://extensions` → 左下角开启「开发人员模式」→「加载解压缩的扩展」→ 同上;
   - 已知代价:开发者模式下浏览器每次启动会弹一条提示(可忽略),且不自动更新,新版本需重新下载;
@@ -60,6 +60,7 @@ pnpm install
 pnpm dev     # 开发模式(自动加载扩展)
 pnpm build   # 产物在 build/chrome-mv3-prod
 pnpm test    # vitest 单测
+node scripts/package.mjs   # 打发布 zip(pdd-cs-quick-reply-v<版本>.zip;自检产物版本一致 + 内置模型在包内)
 ```
 
 ### 验证

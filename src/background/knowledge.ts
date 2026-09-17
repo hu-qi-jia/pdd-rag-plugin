@@ -92,9 +92,14 @@ export async function updateKnowledgeWithReembed(
   return { id: payload.id, reembed: plan.reembed }
 }
 
-/** 删除知识条目 */
+/** 删除知识条目;删掉的是某文档最后一块时,连带清掉 kbDocs 原文(否则重分块会把它复活) */
 export async function deleteKnowledge(id: string): Promise<void> {
+  const existing = await db.getKnowledge(id)
   await db.deleteKnowledge(id)
+  const docId = existing?.docId
+  if (!docId) return
+  const rest = await db.listKnowledgeByDoc(docId)
+  if (rest.length === 0) await db.deleteKbDoc(docId)
 }
 
 // ─── md 文档上传(P4-KB)────────────────────────────────────────────────────────

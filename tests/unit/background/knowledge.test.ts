@@ -135,3 +135,32 @@ describe('importKbDocument · kbDocs 原文与块元数据', () => {
     expect(chunks.every((c) => c.chunkKind === 'section')).toBe(true)
   })
 })
+
+describe('deleteKnowledge · 孤儿原文清理', () => {
+  it('删掉某文档最后一块 → 原文一并删除', async () => {
+    const { importKbDocument, deleteKnowledge, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '孤儿文档.md', content: QA_DOC })
+    const chunks = await db.listKnowledgeByDoc('孤儿文档')
+    for (const c of chunks) await deleteKnowledge(c.id)
+    expect(await db.getKbDoc('孤儿文档')).toBeUndefined()
+  })
+
+  it('文档还有剩余块 → 原文保留', async () => {
+    const { importKbDocument, deleteKnowledge, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '半删文档.md', content: QA_DOC })
+    const chunks = await db.listKnowledgeByDoc('半删文档')
+    await deleteKnowledge(chunks[0].id)
+    expect(await db.getKbDoc('半删文档')).toBeDefined()
+  })
+
+  it('手工条目不涉及 kbDocs,删除不抛错', async () => {
+    const { createKnowledge, deleteKnowledge, db } = await freshModules()
+    const r = await createKnowledge({ title: '手工条目', content: '正文' })
+    await expect(deleteKnowledge(r.id!)).resolves.toBeUndefined()
+    expect(await db.listKnowledgeByDoc('')).toHaveLength(0)
+  })
+})

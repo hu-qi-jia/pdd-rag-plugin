@@ -422,18 +422,22 @@ export function SettingsTab({
           {draft.directFillEnabled && ' 当前已开启「自动回复」,本功能不会生效。'}
         </div>
 
+        {/* 滑杆读秒、设置存毫秒 —— 这里是两者**唯一**的换算点(第五十二轮修)。
+            此前 value 喂的是毫秒(8000)、min/max 却是秒(2~30):值恒大于上限,浏览器把滑块
+            钉在最右端,每次拖动刚算出的新值又超上限、又被钉回去 —— 观感就是"拖不动",
+            读数还写着「8000 秒」。修法是让两侧同单位,而不是把 min/max 抬到毫秒。 */}
         <Slider
           tk={tk}
           label="整合超时"
-          value={draft.llmTimeoutMs}
+          value={draft.llmTimeoutMs / 1000}
           min={LLM_TIMEOUT_MIN_MS / 1000}
           max={LLM_TIMEOUT_MAX_MS / 1000}
           step={1}
-          onChange={(v) => persistSlider({ llmTimeoutMs: Math.round(v) * 1000 })}
+          onChange={(v) => persistSlider({ llmTimeoutMs: v * 1000 })}
           format={(v) => `${v} 秒`}
         />
 
-        <Field tk={tk} label="接口地址" desc="OpenAI 兼容的 /chat/completions,填到 /v1 为止即可(不带尾斜杠)">
+        <Field tk={tk} label="接口地址">
           <input
             className="pddcs-input"
             style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
@@ -444,7 +448,7 @@ export function SettingsTab({
           />
         </Field>
 
-        <Field tk={tk} label="API Key" desc="只存这台电脑的本地存储,不会同步到云端,也不会随导出外发">
+        <Field tk={tk} label="API Key">
           <input
             className="pddcs-input"
             style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
@@ -460,7 +464,7 @@ export function SettingsTab({
           </Btn>
         </Field>
 
-        <Field tk={tk} label="模型名" desc="如 deepseek-chat、qwen-plus、gpt-4o-mini —— 请填非思考型模型">
+        <Field tk={tk} label="模型名">
           <input
             className="pddcs-input"
             style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
@@ -630,37 +634,28 @@ export function SettingsTab({
 }
 
 
-// ─── AI 整合:带标签与说明的输入行 ───────────────────────────────────────────────
+// ─── AI 整合:带标签的输入行 ─────────────────────────────────────────────────────
 
 /**
- * 文本框行(标签 / 控件 / 说明三件套),与 Toggle、Slider、HotkeyRow 完全同构:
- * 字号走 formType 三档、标签与说明的间距走 formGap.labelDesc —— 设置页不允许出现第四种行样式。
+ * 文本框行(标签 / 控件两件套),与 Toggle、Slider、HotkeyRow 同构:
+ * 字号走 formType、标签与控件的间距走 formGap.labelControl —— 设置页不允许出现第四种行样式。
+ *
+ * 第五十二轮按用户「接口地址、apikey、模型名下方的解释文案删除」去掉 desc 一行:
+ * 三行只留标签与输入框(placeholder 已在示例,「关于」卡与数据边界段仍在讲密钥去向)。
  */
 function Field({
   tk,
   label,
-  desc,
   children,
 }: {
   tk: ThemeTokens
   label: string
-  desc: string
   children: React.ReactNode
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelDesc }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelControl }}>
       <span style={{ fontSize: formType.label.size, fontWeight: formType.label.weight }}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>{children}</div>
-      <span
-        style={{
-          fontSize: formType.desc.size,
-          fontWeight: formType.desc.weight,
-          color: tk.textMuted,
-          lineHeight: 1.5,
-        }}
-      >
-        {desc}
-      </span>
     </div>
   )
 }

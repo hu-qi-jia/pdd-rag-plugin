@@ -144,7 +144,8 @@ export const formGap = {
   row: spacing.xxl,
   /** 字段标签 → 说明文字 */
   labelDesc: spacing.xs,
-  /** 字段标签 → 其下方的控件(滑杆轨道);比 labelDesc 大一档,给 14px 圆拇指留上下溢出空间 */
+  /** 字段标签 → 其下方的控件(滑杆轨道、文本输入框);比 labelDesc 大一档,
+   *  给 14px 圆拇指留上下溢出空间(第五十二轮起 AI 表单的文本行也取这一档) */
   labelControl: spacing.md,
 } as const
 

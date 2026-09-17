@@ -262,6 +262,62 @@ for (const theme of ['light', 'dark']) {
   })
 }
 
+// ─── 滑杆量程与单位(2026-09-17 第五十二轮真实 bug)──────────────────────────────
+// 用户报:「整合超时的默认项数值太高了,滚动条有问题,拖动无变化」。
+// 根因是调用点把毫秒喂给了以秒为界的滑杆(range 值越界时浏览器把滑块钉在最右端,
+// 组件显示的却仍是 React 传进来的那个数)—— 所以这里量的是**渲染出来的读数**,
+// 读数越界就是单位错配的现场证据;再用键盘拖一格,验"拖得动"。
+{
+  await pop.reload({ waitUntil: 'domcontentloaded' })
+  await sleep(1800)
+  await pop.locator('button[title="设置"]').click()
+  await sleep(800)
+
+  /** 读全部滑杆的「标签 / 显示值 / 量程」;再按标签取某根(页面里执行,不引用 Node 闭包) */
+  const sliders = await pop.evaluate(() =>
+    [...document.querySelectorAll('input.pddcs-slider')].map((input) => {
+      const row = input.parentElement.children[0]
+      return {
+        label: row.children[0].textContent,
+        shown: parseFloat(row.children[1].textContent),
+        min: Number(input.min),
+        max: Number(input.max),
+      }
+    }),
+  )
+  const outOfRange = sliders.filter((s) => !(s.shown >= s.min && s.shown <= s.max))
+  check(
+    '滑杆读数落在自己的量程内(单位错配的现场证据)',
+    sliders.length >= 5 && outOfRange.length === 0,
+    outOfRange.length ? `越界=${JSON.stringify(outOfRange)}` : `共 ${sliders.length} 根`,
+  )
+
+  const idx = sliders.findIndex((s) => s.label === '整合超时')
+  check(
+    '整合超时:默认 8 秒、量程 2~30 秒(滑杆读秒、设置存毫秒)',
+    idx >= 0 && sliders[idx].shown === 8 && sliders[idx].min === 2 && sliders[idx].max === 30,
+    JSON.stringify(sliders[idx] ?? null),
+  )
+
+  // 键盘拖一格(焦点 + →):range 的原生步进。比鼠标去够 14px 圆拇指稳,
+  // 走的是同一条「值变 → onChange → 防抖落库」的路。
+  await pop.locator('input.pddcs-slider').nth(idx).press('ArrowRight')
+  await sleep(1200) // 滑杆 500ms detent 防抖 + 落库余量
+  const after = await pop.evaluate(async () => {
+    const input = [...document.querySelectorAll('input.pddcs-slider')].find(
+      (el) => el.parentElement.children[0].children[0].textContent === '整合超时',
+    )
+    const row = input.parentElement.children[0]
+    const s = await chrome.storage.local.get(['pddcs:settings'])
+    return { shown: parseFloat(row.children[1].textContent), stored: s['pddcs:settings']?.llmTimeoutMs }
+  })
+  check(
+    '整合超时:键盘拖一格,读数与库里的毫秒一起变(不再"拖动无变化")',
+    after.shown === 9 && after.stored === 9000,
+    `读数=${after.shown} 秒 库=${after.stored} ms`,
+  )
+}
+
 // ─── AI 整合表单保存(2026-09-17 第四十八轮真实 bug)────────────────────────────
 // 用户报:填完接口配置点「保存」,内容全部消失、整块不可用。
 // 单测里后台是桩,这里跑的是**真浏览器 + 真后台 + 真 chrome.storage**:

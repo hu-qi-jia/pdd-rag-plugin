@@ -7,7 +7,7 @@
 import { db } from './db'
 import { queueEmbedding } from './offscreen'
 import { hashText, normalizeText } from '../shared/text'
-import { chunkMarkdown } from '../shared/mdText'
+import { SPLITTER_VERSION, chunkMarkdown } from '../shared/mdText'
 import { kbAnchorText } from './kbAnchor'
 import { planKnowledgeEdit } from './knowledgeEdit'
 import type { CreateKbRequest, UpdateKbRequest, UploadKbDocRequest } from '../types/messages'
@@ -99,8 +99,10 @@ export async function deleteKnowledge(id: string): Promise<void> {
 
 // ─── md 文档上传(P4-KB)────────────────────────────────────────────────────────
 // 结构感知分块(chunkMarkdown):按标题切小节,小节整块保留(≤500 字),超长小节
-// 按行分组、永不截断单行;无结构纯文本回退原 chunkText 滑窗(原项目逻辑兜底)。
+// 按行分组、永不截断单行;节内为问答体(Q：行 ≥2 条)时按条切分;无结构纯文本
+// 回退原 chunkText 滑窗(原项目逻辑兜底)。
 // 每块一条知识条目,检索锚 = 展示标题 + 块正文(kbAnchorText);同名文档整篇替换。
+// 原文另存 kbDocs:分块规则变更后可自动重切,不必要求用户重传(见 kbResplit.ts)。
 
 /** 单文档块数上限:超出提示手动拆分(≈4.2 万字,防止一次排几百个嵌入任务) */
 export const MAX_DOC_CHARS = 100_000
@@ -135,7 +137,7 @@ export async function importKbDocument(
   let replaced = false
 
   // 整篇替换必须原子:删旧块 + 写新块同事务,中途失败整体回滚(旧文档原样保留)
-  await db.transaction('rw', db.knowledge, async () => {
+  await db.transaction('rw', db.knowledge, db.kbDocs, async () => {
     replaced = (await db.deleteKnowledgeByDoc(docId)) > 0
     for (let i = 0; i < chunks.length; i++) {
       const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`
@@ -152,6 +154,8 @@ export async function importKbDocument(
         enabled: 1,
         source: 'doc',
         docId,
+        chunkKind: chunks[i].kind,
+        sectionSeq: chunks[i].sectionSeq,
         createdAt: now,
         updatedAt: now,
       })
@@ -161,6 +165,14 @@ export async function importKbDocument(
         anchor: kbAnchorText({ source: 'doc', title, content: chunks[i].text }),
       })
     }
+    await db.putKbDoc({
+      docId,
+      content,
+      splitterVersion: SPLITTER_VERSION,
+      chunkCount: chunks.length,
+      createdAt: now,
+      updatedAt: now,
+    })
   })
   for (const p of pendingEmbeds) queueEmbedding('knowledge', p.id, p.anchor)
   return { docId, chunkCount: chunks.length, replaced }

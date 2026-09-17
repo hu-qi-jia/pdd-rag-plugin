@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto'
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
+import { SPLITTER_VERSION } from '../../../src/shared/mdText'
 
 /** 重置模块注册表 → knowledge/offscreen/db 单例在已删库的 fake-indexeddb 上重建 */
 async function freshModules() {
@@ -67,5 +68,70 @@ describe('importKbDocument 整篇替换', () => {
     // 失败的导入不得触发任何嵌入任务(含已"成功"写入的前几块)
     expect(qSpy.mock.calls.length).toBe(queuedAfterFirst)
     expect(addSpy).toHaveBeenCalledTimes(2)
+  })
+})
+
+const QA_DOC = [
+  '# 常见问答',
+  '',
+  '- Q：防水吗？ A：不防水,请注意防雨防潮。',
+  '',
+  '- Q：充电要多久？ A：发射器约 90 分钟。',
+].join('\n')
+
+describe('importKbDocument · kbDocs 原文与块元数据', () => {
+  it('导入后原文落库,版本为当前 SPLITTER_VERSION', async () => {
+    const { importKbDocument, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    const r = await importKbDocument({ name: '常见问答.md', content: QA_DOC })
+    expect(r.chunkCount).toBe(2)
+
+    const doc = await db.getKbDoc('常见问答')
+    expect(doc?.content).toBe(QA_DOC)
+    expect(doc?.splitterVersion).toBe(SPLITTER_VERSION)
+    expect(doc?.chunkCount).toBe(2)
+  })
+
+  it('块带 chunkKind=qa 与 sectionSeq,标题为「文档名 · 问句」', async () => {
+    const { importKbDocument, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '常见问答.md', content: QA_DOC })
+    const chunks = await db.listKnowledgeByDoc('常见问答')
+    expect(chunks).toHaveLength(2)
+    for (const c of chunks) {
+      expect(c.chunkKind).toBe('qa')
+      expect(c.sectionSeq).toBe(1) // 第 0 节是 H1 之前的空节
+    }
+    expect(chunks.map((c) => c.title).sort()).toEqual(['常见问答 · 充电要多久？', '常见问答 · 防水吗？'])
+    expect(chunks.find((c) => c.title.endsWith('防水吗？'))?.content).toBe('不防水,请注意防雨防潮。')
+  })
+
+  it('重新上传同名文档 → 原文与块一起替换', async () => {
+    const { importKbDocument, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '常见问答.md', content: QA_DOC })
+    const r = await importKbDocument({
+      name: '常见问答.md',
+      content: '# 常见问答\n\nQ：甲？ A：甲。\n\nQ：乙？ A：乙。',
+    })
+    expect(r.replaced).toBe(true)
+    const doc = await db.getKbDoc('常见问答')
+    expect(doc?.content).toContain('甲？')
+    expect(doc?.chunkCount).toBe(2)
+    const chunks = await db.listKnowledgeByDoc('常见问答')
+    expect(chunks).toHaveLength(2)
+    expect(chunks.every((c) => c.chunkKind === 'qa')).toBe(true)
+  })
+
+  it('非问答体文档块 chunkKind=section', async () => {
+    const { importKbDocument, db, offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '手册.md', content: TWO_CHUNKS })
+    const chunks = await db.listKnowledgeByDoc('手册')
+    expect(chunks.every((c) => c.chunkKind === 'section')).toBe(true)
   })
 })

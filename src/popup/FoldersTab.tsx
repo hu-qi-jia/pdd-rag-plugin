@@ -688,6 +688,10 @@ export function FoldersTab({
      *  重命名入口(v2.6.1):悬浮「重命名」图标钮,或**双击文件夹名**直接进入改名 */
     const header = (
       <div
+        // 分区头的稳定锚点:验收脚本要按文件夹名找到"这一夹的那一块"再断内部顺序,
+        // 而原先用的 .pddcs-row 钩子在 v2.6.31 已退役 —— 脚本因此静默失配(找到 0 个),
+        // 报出来的是"子夹不在父夹前面"这种像是功能坏了的结论。见 verify-golden-multi。
+        data-folder-id={f.id}
         onClick={renamingId === f.id ? undefined : toggle}
         onDoubleClick={isUnc || renamingId === f.id ? undefined : startRename}
         title={isUnc ? undefined : '单击展开/折叠,双击重命名'}

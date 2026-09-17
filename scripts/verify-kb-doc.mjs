@@ -7,9 +7,12 @@
  * 用法:node scripts/verify-kb-doc.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
+import { launchExtContext, findExtensionId, freshProfile, openPopup, sleep } from './lib.mjs'
 
-const PROFILE = persistentProfile('fresh-profile')
+// 每次运行独立 temp profile:第 1 步断言「replaced === false」(全新上传),
+// 复用同一个目录跑第二遍,上次留下的文档会让它变成 true —— 看起来像功能坏了,
+// 其实是脏状态。(原为 persistentProfile('fresh-profile'),与 verify-p3 共用同一目录)
+const PROFILE = freshProfile()
 const DOC = '售后政策手册'
 
 // ── 政策风格 md:文档标题 + 引言 + 8 个小节(各 3 条列表项,节 ~230 字 ≤500 整节成块)──

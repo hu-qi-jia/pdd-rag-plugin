@@ -6,11 +6,15 @@
  * 用法:node scripts/verify-p3.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
+import { launchExtContext, findExtensionId, freshProfile, openPopup, sleep } from './lib.mjs'
 
 // 一次性干净 profile(P1 教训:登录态 profile 对自动化脆弱;P3 验收是纯数据层,无需登录态。
 // 代价:首次需下载嵌入模型 ~25MB(hf-mirror),下方重嵌轮询预算已放大)
-const PROFILE = persistentProfile('fresh-profile')
+// 每次运行独立 temp profile:本脚本断言的是"库里原本没有的东西,现在有了"
+// (设金幂等 / 改成重复问题应成功 / 导出再导入全跳过),复用同一个目录跑第二遍就会
+// 拿上一轮的残留当失败 —— 报出来像功能坏了,其实只是脏状态。
+// (原为 persistentProfile('fresh-profile'),与 verify-kb-doc 共用同一目录,互相污染)
+const PROFILE = freshProfile()
 const SESS = 'p3-verify'
 
 const ctx = await launchExtContext(PROFILE)

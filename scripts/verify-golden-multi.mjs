@@ -116,11 +116,21 @@ await sleep(1500)
 await pop.locator('button[title="文件夹"]').click()
 await sleep(1200)
 const rel = await pop.evaluate(() => {
-  const headers = [...document.querySelectorAll('.pddcs-row')]
+  // 按 data-folder-id 找分区头(原先用的 .pddcs-row 钩子在 v2.6.31 退役,
+  // 这里有很长一段时间是在 0 个元素里找,失败信息指向的却是排序 —— 见 FoldersTab 注释)
+  const headers = [...document.querySelectorAll('[data-folder-id]')]
   const head = headers.find((el) => (el.textContent || '').includes('结构验收根夹'))
   const box = head && head.parentElement
   const t = box?.innerText ?? ''
-  return { childIdx: t.indexOf('结构验收子夹'), answerIdx: t.indexOf('结构验收答复') }
+  return {
+    childIdx: t.indexOf('结构验收子夹'),
+    answerIdx: t.indexOf('结构验收答复'),
+    // 失败时最想知道的是"盒子里到底有什么":根夹没渲染 / 夹是折叠的 / 内容没进来
+    // 三种情况修法完全不同,只报 -1/-1 等于没说
+    rows: headers.length,
+    found: !!head,
+    box: t.replace(/\s+/g, ' ').slice(0, 200),
+  }
 })
 check(
   '子文件夹排在父夹标准回答之前(文件夹优先于内容)',

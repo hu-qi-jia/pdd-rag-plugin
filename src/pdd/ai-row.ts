@@ -88,3 +88,17 @@ export function reduceAiRow(state: AiRowState, event: AiPortEvent): AiRowState {
 export function aiRowInsertIndex(items: Pick<Suggestion, 'kind'>[]): number {
   return items.findIndex((s) => s.kind === 'knowledge')
 }
+
+/**
+ * 键盘模式的**初始选中行**:跳过整合行,落在第一条真实候选上。
+ *
+ * 整合行插在首个知识库候选之前,而知识库候选可能正好排在首位 ——
+ * 若照旧默认选中第 0 行,面板一开选中的就是整合行,老用户肌肉记忆的那一下 Enter
+ * 会从"填入第一条候选"变成"发起一次付费 API 请求"。
+ * 整合行是 ↑↓ 主动走过去才触发的动作,不当默认落点。
+ * (入参恒为非空 —— 有整合行就必有知识库候选,兜底 0 只为不返回 -1)
+ */
+export function aiRowInitialSelection(rows: { ai: boolean }[]): number {
+  const i = rows.findIndex((r) => !r.ai)
+  return i >= 0 ? i : 0
+}

@@ -4,6 +4,7 @@ import {
   AI_LOADING_DELAY_MS,
   aiRowBusy,
   aiRowDraft,
+  aiRowInitialSelection,
   aiRowInsertIndex,
   aiRowLabel,
   aiRowRetryLabel,
@@ -98,6 +99,35 @@ describe('aiRowDraft / 重试 / busy', () => {
 
   it('loading 延迟是 200ms(设计文档 6.4)', () => {
     expect(AI_LOADING_DELAY_MS).toBe(200)
+  })
+})
+
+describe('aiRowInitialSelection:键盘模式的默认落点', () => {
+  it('整合行在首位时跳过它,选中第一条真实候选', () => {
+    // 知识库候选排在最前 → 整合行插到第 0 位:面板一开就选中整合行的话,
+    // 老用户那一下 Enter 会从"填入第一条"变成"发起一次付费 API 请求"
+    expect(aiRowInitialSelection([{ ai: true }, { ai: false }, { ai: false }])).toBe(1)
+  })
+
+  it('整合行在中间/无整合行时都是第 0 行', () => {
+    expect(aiRowInitialSelection([{ ai: false }, { ai: true }, { ai: false }])).toBe(0)
+    expect(aiRowInitialSelection([{ ai: false }, { ai: false }])).toBe(0)
+  })
+
+  it('全是整合行(不可能发生)兜底 0,不返回 -1', () => {
+    expect(aiRowInitialSelection([{ ai: true }])).toBe(0)
+    expect(aiRowInitialSelection([])).toBe(0)
+  })
+
+  it('与插入位配套:插完再算初始选中,落点永远不是整合行', () => {
+    const items = [{ kind: 'knowledge' as const }, { kind: 'history' as const }]
+    const at = aiRowInsertIndex(items)
+    const rows: { ai: boolean }[] = items.map((s) => ({ ai: false, s }))
+    rows.splice(at, 0, { ai: true })
+    const sel = aiRowInitialSelection(rows)
+    expect(at).toBe(0)
+    expect(sel).toBe(1)
+    expect(rows[sel].ai).toBe(false)
   })
 })
 

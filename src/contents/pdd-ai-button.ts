@@ -27,6 +27,7 @@ import {
   AI_LOADING_DELAY_MS,
   aiRowBusy,
   aiRowDraft,
+  aiRowInitialSelection,
   aiRowInsertIndex,
   aiRowLabel,
   aiRowRetryLabel,
@@ -759,7 +760,8 @@ function openPopup(
   popupEl = el
   // 键盘模式:挂载完成后初始化选中态(popupEl 就位前 applySelection 是空操作)
   if (opts.keyboard) {
-    armedPanel = { rows, selected: 0 }
+    // 初始选中**跳过整合行**(理由见 ai-row.ts#aiRowInitialSelection)
+    armedPanel = { rows, selected: aiRowInitialSelection(rows) }
     applySelection()
   }
 }

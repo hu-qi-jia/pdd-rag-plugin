@@ -21,6 +21,19 @@
  *    防止平台重渲染把注入节点清掉(买家行 rect 可滚出容器,必须按可见性裁剪)。
  */
 import type { PlasmoCSConfig } from 'plasmo'
+import type { AiPortEvent, AiPortRequest } from '../types/messages/ai'
+import { AI_PORT_NAME } from '../types/messages/ai'
+import {
+  AI_LOADING_DELAY_MS,
+  aiRowBusy,
+  aiRowDraft,
+  aiRowInsertIndex,
+  aiRowLabel,
+  aiRowRetryLabel,
+  aiRowRetryable,
+  reduceAiRow,
+  type AiRowState,
+} from '../pdd/ai-row'
 import type { Suggestion, UiSettings } from '../types/messages'
 import {
   aiButtonX,
@@ -324,7 +337,7 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
     }
     return
   }
-  openPopup(btn, act.items, query)
+  openPopup(btn, act.items, query, { aiAvailable: settings.aiAvailable })
 }
 
 // ─── 候选弹窗 ─────────────────────────────────────────────────────────────────
@@ -335,13 +348,19 @@ let popupEl: HTMLDivElement | null = null
  * (2026-09-16 第二十一轮引入,第二十四轮:Shift+Tab 反向删除,末条回绕首条;
  * 点外部/Esc 关闭即解除)。仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
  */
-let armedPanel: { items: Suggestion[]; selected: number } | null = null
+let armedPanel: { rows: PanelRow[]; selected: number } | null = null
 
 function closePopup(): void {
   popupEl?.remove()
   popupEl = null
   armedPanel = null
 }
+
+/**
+ * 面板里的一行:普通候选,或 AI 整合行。键盘导航按这个数组走,
+ * 索引与 DOM 里 `.pddcs-cand` 的顺序一一对应(AI 行也是 `.pddcs-cand`)。
+ */
+type PanelRow = { ai: false; s: Suggestion } | { ai: true }
 
 /** 把选中态渲染到行上:唯一高亮源,导航键与鼠标悬浮都写这里 */
 function applySelection(): void {
@@ -368,7 +387,7 @@ function applySelection(): void {
 /** 导航键移动选中项;无快捷键面板时返回 false(按键放行) */
 function movePanelSelection(delta: number): boolean {
   if (!popupEl || !armedPanel) return false
-  armedPanel.selected = moveSelection(armedPanel.selected, delta, armedPanel.items.length)
+  armedPanel.selected = moveSelection(armedPanel.selected, delta, armedPanel.rows.length)
   applySelection()
   return true
 }
@@ -402,6 +421,116 @@ function setBusy(btn: HTMLButtonElement, on: boolean): void {
   btn.disabled = on
   btn.classList.toggle('pddcs-icon-btn-busy', on)
   if (on) btn.innerHTML = LOADER_ICON
+}
+
+/**
+ * 「根据知识库内容整合并回复」行(P4 AI 整合)。
+ *
+ * 只在 SW 判定 aiAvailable(开关开 + 已配 API + 非自动回复 + 本轮有知识库候选)
+ * 时才由 openPopup 渲染;点它才发起请求 —— 面板出现本身不产生任何网络流量。
+ * 结果直接填输入框,但**发送仍由人工点击**(与候选行同一条硬边界)。
+ */
+function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
+  const row = document.createElement('div')
+  row.className = 'pddcs-cand pddcs-ai-row'
+  row.title = '把本轮命中的知识库内容整合成一段可直接发送的话术(会调用你在设置里配置的 API)'
+
+  const icon = document.createElement('span')
+  icon.className = 'pddcs-ai-icon'
+  icon.textContent = '✦'
+  const label = document.createElement('span')
+  label.className = 'pddcs-ai-label'
+  const main = document.createElement('div')
+  main.className = 'pddcs-ai-main'
+  main.append(icon, label)
+
+  const draft = document.createElement('div')
+  draft.className = 'pddcs-ai-draft'
+  const retry = document.createElement('button')
+  retry.type = 'button'
+  retry.className = 'pddcs-ai-retry'
+  row.append(main, draft, retry)
+
+  let state: AiRowState = { phase: 'idle' }
+  let loadingTimer: number | null = null
+  let loadingVisible = false
+  let port: chrome.runtime.Port | null = null
+
+  const render = (): void => {
+    row.classList.toggle('is-busy', aiRowBusy(state))
+    row.classList.toggle('is-error', state.phase === 'error')
+    label.textContent = aiRowLabel(state, loadingVisible)
+    const text = aiRowDraft(state)
+    draft.textContent = text
+    draft.style.display = text ? '' : 'none'
+    const canRetry = aiRowRetryable(state)
+    retry.style.display = canRetry ? '' : 'none'
+    retry.textContent = aiRowRetryLabel(state)
+  }
+
+  const dropPort = (): void => {
+    if (loadingTimer !== null) {
+      window.clearTimeout(loadingTimer)
+      loadingTimer = null
+    }
+    loadingVisible = false
+    try {
+      port?.disconnect()
+    } catch {
+      /* 已断开 */
+    }
+    port = null
+  }
+
+  const start = (): void => {
+    if (aiRowBusy(state)) return
+    dropPort()
+    state = { phase: 'working' }
+    // <200ms 不宣称"正在整合":快请求走完就不闪这一下(设计文档 6.4)
+    loadingTimer = window.setTimeout(() => {
+      loadingVisible = true
+      render()
+    }, AI_LOADING_DELAY_MS)
+    render()
+
+    const p = chrome.runtime.connect({ name: AI_PORT_NAME })
+    port = p
+    p.onMessage.addListener((ev: AiPortEvent) => {
+      state = reduceAiRow(state, ev)
+      if (ev.type === 'DONE') {
+        if (fillInput(ev.payload.text)) toast('已整合并填充:知识库 · 请手动发送')
+        else toast('已整合,但未找到输入框,请手动粘贴')
+      } else if (ev.type === 'NO_ANSWER') {
+        toast('知识库内容不足以回答该问题')
+      } else if (ev.type === 'ERROR') {
+        toast(aiRowLabel(state))
+      }
+      if (!aiRowBusy(state)) dropPort()
+      render()
+    })
+    p.onDisconnect.addListener(() => {
+      // 没到终态就断了 → 视为失败,给出可重试的出口(比如 SW 被回收)
+      if (aiRowBusy(state)) {
+        state = { phase: 'error', error: 'network' }
+      }
+      dropPort()
+      render()
+    })
+    const req: AiPortRequest = { type: 'AI_INTEGRATE', payload: { query, knowledgeIds } }
+    p.postMessage(req)
+  }
+
+  row.addEventListener('click', (ev) => {
+    ev.stopPropagation()
+    start()
+  })
+  retry.addEventListener('click', (ev) => {
+    ev.stopPropagation()
+    start()
+  })
+
+  render()
+  return row
 }
 
 function candidateRow(s: Suggestion, query: string): HTMLDivElement {
@@ -548,7 +677,7 @@ function openPopup(
   anchor: HTMLElement,
   items: Suggestion[],
   query: string,
-  opts: { keyboard?: boolean } = {},
+  opts: { keyboard?: boolean; aiAvailable?: boolean } = {},
 ): void {
   closePopup()
   const overlay = ensureOverlay()
@@ -572,8 +701,15 @@ function openPopup(
   // v2.6.18 三段式:滚动只发生在 body 中段,头/脚常驻成面板外壳(页脚键位提示不再滚走)
   const body = document.createElement('div')
   body.className = 'pddcs-popup-body'
-  for (const [i, s] of items.entries()) {
-    const row = candidateRow(s, query)
+
+  // AI 整合行插在首个知识库候选之前(没有知识库候选就不渲染,面板与现状零差异)
+  const rows: PanelRow[] = items.map((s) => ({ ai: false as const, s }))
+  const aiAt = opts.aiAvailable ? aiRowInsertIndex(items) : -1
+  if (aiAt >= 0) rows.splice(aiAt, 0, { ai: true })
+  const kbIds = items.filter((s) => s.kind === 'knowledge').map((s) => s.sourceId)
+
+  for (const [i, r] of rows.entries()) {
+    const row = r.ai ? aiIntegrateRow(query, kbIds) : candidateRow(r.s, query)
     row.dataset.idx = String(i)
     if (opts.keyboard) {
       // 键盘模式:悬浮即选中(两套高亮共用一态,避免 hover 底色与选中描边打架)
@@ -623,7 +759,7 @@ function openPopup(
   popupEl = el
   // 键盘模式:挂载完成后初始化选中态(popupEl 就位前 applySelection 是空操作)
   if (opts.keyboard) {
-    armedPanel = { items, selected: 0 }
+    armedPanel = { rows, selected: 0 }
     applySelection()
   }
 }
@@ -746,7 +882,7 @@ async function onHotkey(): Promise<void> {
     (rowBtns.get(latest) as HTMLElement | undefined) ??
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
     (latest as HTMLElement)
-  openPopup(anchor, suggestions, query, { keyboard: true })
+  openPopup(anchor, suggestions, query, { keyboard: true, aiAvailable: settings.aiAvailable })
 }
 
 document.addEventListener(
@@ -770,9 +906,15 @@ document.addEventListener(
     ) {
       ev.preventDefault()
       ev.stopPropagation()
-      const picked = armedPanel.items[armedPanel.selected]
-      if (fillInput(picked.text)) {
-        const kindLabel = picked.kind === 'golden' ? '标准回答' : picked.kind === 'knowledge' ? '知识库' : '历史回忆'
+      const picked = armedPanel.rows[armedPanel.selected]
+      // AI 整合行:Enter 等同于点击该行(面板不关,好让「重新生成」留在眼前)
+      if (picked.ai) {
+        const aiRow = popupEl?.querySelectorAll('.pddcs-cand')[armedPanel.selected]
+        ;(aiRow as HTMLElement | undefined)?.click()
+        return
+      }
+      if (fillInput(picked.s.text)) {
+        const kindLabel = picked.s.kind === 'golden' ? '标准回答' : picked.s.kind === 'knowledge' ? '知识库' : '历史回忆'
         toast(`已填充:${kindLabel} · 请手动发送`)
         closePopup()
       } else {

@@ -142,6 +142,24 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    注意 padding-left 与 text-overflow:ellipsis 不冲突:省略号仍落在行右缘 */
 .pddcs-cand-q { padding-left: ${BADGE_PAD_X}px; margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 「根据知识库内容整合并回复」行(AI 整合,默认关闭时不渲染):
+   与候选行同族但要有"这是一次动作、不是一条素材"的观感 —— 左侧一枚 ✦ +
+   primary 色主文案;生成中的草稿沿用候选正文的排版,免得流式时行高跳动 */
+.pddcs-ai-row { display: flex; flex-direction: column; gap: 4px; }
+.pddcs-ai-main { display: flex; align-items: center; gap: 6px; padding-left: ${BADGE_PAD_X}px; }
+.pddcs-ai-icon { color: ${semantic.knowledge}; font-size: ${fontSize.secondary}px; line-height: 1; }
+.pddcs-ai-label { color: ${semantic.knowledge}; font-size: ${fontSize.secondary}px; font-weight: 500; }
+.pddcs-ai-row.is-error .pddcs-ai-icon,
+.pddcs-ai-row.is-error .pddcs-ai-label { color: ${semantic.danger}; }
+.pddcs-ai-draft { padding-left: ${BADGE_PAD_X}px; color: ${tk.textMuted};
+  font-size: ${fontSize.secondary}px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pddcs-ai-retry { align-self: flex-start; margin-left: ${BADGE_PAD_X}px; padding: 2px 8px;
+  border: 1px solid ${tk.border}; border-radius: ${radius.sm}px; background: ${tk.bg};
+  color: ${tk.textMuted}; font-size: ${fontSize.caption}px; cursor: pointer; }
+.pddcs-ai-retry:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
+.pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }
 /* 页脚常驻壳:hairline 上边 + 次级表面底,键位提示不再漂在正文后面 */
 .pddcs-popup-foot { flex: 0 0 auto; padding: 7px 14px; border-top: 1px solid ${tk.borderLight};
   background: ${tk.bgSecondary}; color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; }

@@ -137,4 +137,6 @@ export const semantic = {
   goldenBg: '#fdf6e3',
   knowledge: '#14ae5c',
   knowledgeBg: 'rgba(20,174,92,0.09)',
+  /** 失败态(如 AI 整合报错)—— 两主题下都用同一个红色,与 toast 的"近黑"策略一致 */
+  danger: '#d93026',
 } as const

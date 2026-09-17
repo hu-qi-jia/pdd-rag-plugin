@@ -9,6 +9,7 @@ import {
   THEME_STORAGE_KEY,
 } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
+import { semantic } from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底 + 主/次级文本色,且不混入深色文本', () => {
@@ -227,6 +228,49 @@ describe('buildOverlayCss:词条留白重配 + 折叠数归位(2026-09-16 第三
     expect(foldRule).toContain(`color: ${lightTheme.textTertiary}`)
     expect(css).not.toContain('.pddcs-cand:hover .pddcs-fold')
     expect(css).not.toContain('.pddcs-cand-folded') // 折叠与否不再改变词条高度
+  })
+})
+
+describe('buildOverlayCss:AI 整合行(2026-09-17 第四十八轮 P2-5)', () => {
+  it('整合行三件套齐备(主行 / 草稿 / 重试钮),默认不渲染由 JS 决定(CSS 只管长相)', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css).toContain('.pddcs-ai-row {')
+    expect(css).toContain('.pddcs-ai-draft {')
+    expect(css).toContain('.pddcs-ai-retry {')
+    // 行内纵向排布:主文案在上、草稿/重试在下
+    expect(css.match(/\.pddcs-ai-row \{[^}]*\}/)![0]).toContain('flex-direction: column')
+  })
+  it('✦ 与主文案走知识库语义绿(与 .pddcs-badge.knowledge 同源,一眼看出"这是动作不是素材")', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css.match(/\.pddcs-ai-icon \{[^}]*\}/)![0]).toContain(`color: ${semantic.knowledge}`)
+    expect(css.match(/\.pddcs-ai-label \{[^}]*\}/)![0]).toContain(`color: ${semantic.knowledge}`)
+  })
+  it('失败态整体转语义红(图标 + 文案),不靠文案里的"失败"二字表意', () => {
+    const css = buildOverlayCss(lightTheme)
+    const errRule = css.match(/\.pddcs-ai-row\.is-error[\s\S]*?\}/)![0]
+    expect(errRule).toContain(`color: ${semantic.danger}`)
+    expect(errRule).toContain('.pddcs-ai-icon')
+    expect(errRule).toContain('.pddcs-ai-label')
+  })
+  it('草稿与重试钮吃主题令牌 → 浅/深两套产物不同(不硬编码颜色)', () => {
+    const light = buildOverlayCss(lightTheme)
+    const dark = buildOverlayCss(darkTheme)
+    expect(light.match(/\.pddcs-ai-draft \{[^}]*\}/)![0]).toContain(`color: ${lightTheme.textMuted}`)
+    expect(light.match(/\.pddcs-ai-retry \{[^}]*\}/)![0]).toContain(`border: 1px solid ${lightTheme.border}`)
+    expect(light).not.toBe(dark)
+  })
+  it('草稿行高/换行沿用候选正文口径(流式时行高不跳);比正文少一行(3 行截断,正文 4 行)', () => {
+    const css = buildOverlayCss(lightTheme)
+    const draftRule = css.match(/\.pddcs-ai-draft \{[^}]*\}/)![0]
+    expect(draftRule).toContain('white-space: pre-wrap')
+    expect(draftRule).toContain('word-break: break-word')
+    expect(draftRule).toContain('-webkit-line-clamp: 3')
+    expect(css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]).toContain('-webkit-line-clamp: 4')
+  })
+  it('在途 = ✦ 原地转圈,且尊重"减少动态效果"', () => {
+    const css = buildOverlayCss(lightTheme)
+    expect(css).toContain('.pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin')
+    expect(css).toContain('@media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }')
   })
 })
 

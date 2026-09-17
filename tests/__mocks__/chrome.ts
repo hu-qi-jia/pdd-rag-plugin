@@ -32,6 +32,9 @@ export const chromeMock = {
   },
   alarms: {
     create: vi.fn(),
+    /** 缺省"不在册";测闹钟幂等的用例自行覆盖 */
+    get: vi.fn(() => Promise.resolve(undefined)),
+    clear: vi.fn(() => Promise.resolve(true)),
     onAlarm: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   runtime: {
@@ -137,6 +140,9 @@ export function resetChromeMock(): void {
   _storageOnChangedListeners = []
   _sessionStore.clear()
 
+  chromeMock.alarms.create.mockClear()
+  chromeMock.alarms.get.mockClear()
+  chromeMock.alarms.clear.mockClear()
   chromeMock.runtime.sendMessage.mockClear()
   chromeMock.runtime.onMessage.addListener.mockClear()
   chromeMock.runtime.onMessage.removeListener.mockClear()

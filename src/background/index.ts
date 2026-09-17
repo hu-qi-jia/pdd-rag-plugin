@@ -57,9 +57,9 @@ import {
   updateKnowledgeWithReembed,
 } from "./knowledge";
 import { saveSettings } from "./settings";
+import { TTL_ALARM_NAME, purgeIfRetentionChanged, runTtlPurge, scheduleDailyAlarm } from "./ttl";
 
 const LEGACY_DB_NAME = "AIMemoryDB";
-const TTL_ALARM_NAME = "pddcs-daily-ttl";
 
 // ─── 处理器(只返回 payload;响应包装与错误兜底统一交给 route)──────────────────
 
@@ -337,8 +337,13 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   UPDATE_SETTINGS: route(
     "UPDATE_SETTINGS",
     async (message) => {
+      // 保留期要"改完立刻生效"(第五十四轮):改完即清,不然旧记录得等下次 SW 启动
+      // 才落库。清理自带兜底(runTtlPurge 失败只 warn),不会把设置保存一起带崩。
+      const before = await loadSettings();
       await saveSettings(message.payload ?? {});
-      return { settings: await loadSettings() };
+      const settings = await loadSettings();
+      await purgeIfRetentionChanged(before, settings);
+      return { settings };
     },
     (err) => ({ error: String(err) }),
   ),
@@ -406,28 +411,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
 registerAiPort();
 
 // ─── 保留期清理(TTL) ───────────────────────────────────────────────────────────
-
-async function runTtlPurge(): Promise<void> {
-  try {
-    const settings = await loadSettings();
-    const removed = await db.purgeExpired(Date.now(), settings.retentionDays);
-    if (removed > 0) {
-      console.log(
-        `[PDD CS] TTL purge: removed ${removed} expired qa records (retention ${settings.retentionDays}d)`,
-      );
-    }
-  } catch (err) {
-    console.warn("[PDD CS] TTL purge failed:", err);
-  }
-}
-
-function scheduleDailyAlarm(): void {
-  try {
-    chrome.alarms.create(TTL_ALARM_NAME, { periodInMinutes: 24 * 60 });
-  } catch {
-    /* alarms 不可用时退回 SW 启动时清理 */
-  }
-}
+// 闹钟与清理本体在 background/ttl.ts(可单测);本文件只做接线:闹钟到点、SW 启动补一次。
 
 if (chrome.alarms?.onAlarm) {
   chrome.alarms.onAlarm.addListener((alarm) => {
@@ -444,7 +428,7 @@ void db.ensurePresetFolders();
 void db.dropLegacyDbIfExists(LEGACY_DB_NAME).then((dropped) => {
   if (dropped) console.log("[PDD CS] Dropped legacy database:", LEGACY_DB_NAME);
 });
-scheduleDailyAlarm();
+void scheduleDailyAlarm();
 // SW 休眠会丢分段器内存:从 storage.session 恢复未结问题段(浏览器会话内有效)
 void restoreSegmenterState();
 
@@ -476,7 +460,7 @@ setTimeout(() => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   void db.ensurePresetFolders();
-  scheduleDailyAlarm();
+  void scheduleDailyAlarm();
   if (details.reason === "install" || details.reason === "update") {
     // 更新/重装后旧会话 ID 等状态无需迁移(P0 无状态),仅保底清理
     void db.dropLegacyDbIfExists(LEGACY_DB_NAME);
@@ -485,7 +469,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 if (typeof chrome.runtime.onStartup !== "undefined") {
   chrome.runtime.onStartup.addListener(() => {
-    scheduleDailyAlarm();
+    void scheduleDailyAlarm();
     void runTtlPurge();
   });
 }

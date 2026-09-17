@@ -32,7 +32,10 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
-specs/
+# 根目录的 Spec-Kit 工作目录(上游遗留)。**必须锚定**:裸的 `specs/` 会连 `docs/specs/` 一起吞掉,
+# 而那底下是本项目的设计文档(工作状态、plans、scripts/package.mjs 都在按路径引用它们)——
+# 2026-09-17 才发现两篇设计文档一直没入库,克隆下来的仓库找不到被引用的路径。
+/specs/
 .diag-fresh-profile/
 .cursor/
 .claude/

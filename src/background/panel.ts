@@ -90,11 +90,14 @@ export async function clearMemoryData(
 /** 面板数据:文件夹 + 金标准 + 知识库(剥离向量字段) */
 export async function getPanelData(
   _message: GetPanelDataRequest,
-): Promise<Pick<GetPanelDataResponse["payload"], "folders" | "goldens" | "knowledge">> {
-  const [folders, goldens, knowledge] = await Promise.all([
+): Promise<
+  Pick<GetPanelDataResponse["payload"], "folders" | "goldens" | "knowledge" | "legacyDocs">
+> {
+  const [folders, goldens, knowledge, legacyDocs] = await Promise.all([
     db.listFolders(),
     db.goldens.toArray(),
     db.listKnowledge(),
+    db.getLegacyDocIds(),
   ]);
   return {
     folders: folders.map((f) => ({
@@ -120,6 +123,7 @@ export async function getPanelData(
       ...(k.source !== undefined ? { source: k.source } : {}),
       updatedAt: k.updatedAt,
     })),
+    legacyDocs,
   };
 }
 

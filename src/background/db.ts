@@ -524,6 +524,25 @@ export class PddDatabase extends Dexie {
     return this.kbDocs.filter((d) => d.splitterVersion !== version).toArray();
   }
 
+  /**
+   * 升级前上传的文档:knowledge 里有块,但 kbDocs 里没有原文。
+   *
+   * 自动重切够不着它们(kbDocs 是本轮新增的表,存量文档没有行),而它们的块
+   * 恰恰是旧规则切的 —— 整篇一块,向量被多主题平均稀释,检索会**静默**命中
+   * 不到。查出来是为了在知识库页提示重新上传,而不是假装无事发生。
+   *
+   * 只取索引里的 docId(不把整张表的正文与向量读进内存);手工条目没有 docId,
+   * 不在 docId 索引里,自然不参与。
+   */
+  async getLegacyDocIds(): Promise<string[]> {
+    const [docIds, known] = await Promise.all([
+      this.knowledge.orderBy("docId").uniqueKeys(),
+      this.kbDocs.toCollection().primaryKeys(),
+    ]);
+    const have = new Set(known.map(String));
+    return docIds.map(String).filter((id) => !have.has(id));
+  }
+
   // ─── 回复文件夹(folders) ──────────────────────────────────────────────────────
 
   async listFolders(): Promise<FolderRecord[]> {

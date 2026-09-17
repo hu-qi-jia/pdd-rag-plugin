@@ -30,8 +30,9 @@ import {
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
-import { fontSize, fontWeight, spacing } from '../ui/design'
+import { fontSize, fontWeight, radius, spacing } from '../ui/design'
 import { FileTextIcon, UploadIcon } from '../ui/icons'
+import { legacyDocNotice } from './logic'
 
 export function KnowledgeTab({
   tk,
@@ -41,6 +42,8 @@ export function KnowledgeTab({
   onDataChanged: () => Promise<void> | void
 }) {
   const [items, setItems] = useState<PanelKnowledge[]>([])
+  /** 升级前上传、无原文可重切的文档名(非空则提示重新上传) */
+  const [legacyDocs, setLegacyDocs] = useState<string[]>([])
   const [keyword, setKeyword] = useState('')
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
@@ -63,6 +66,7 @@ export function KnowledgeTab({
         setMsg({ ok: false, text: `读取失败:${resp.payload.error}` })
       } else {
         setItems(resp.payload.knowledge ?? [])
+        setLegacyDocs(resp.payload.legacyDocs ?? [])
       }
     } catch (err) {
       setMsg({ ok: false, text: `读取失败:${String(err)}` })
@@ -85,6 +89,8 @@ export function KnowledgeTab({
     if (!kw) return items
     return items.filter((k) => k.title.toLowerCase().includes(kw) || k.content.toLowerCase().includes(kw))
   }, [items, keyword])
+
+  const legacyNotice = useMemo(() => legacyDocNotice(legacyDocs), [legacyDocs])
 
   /** 上传 md 文档:读文本 → UPLOAD_KB_DOC(分块+逐块向量化,同名整篇替换) */
   const uploadDoc = async (file: File) => {
@@ -249,7 +255,7 @@ export function KnowledgeTab({
       ) : (
         <div style={{ display: 'flex', gap: spacing.sm }}>
           <CreateBtn tk={tk} label="新建条目" onClick={() => setCreating(true)} />
-          <Btn tk={tk} disabled={uploading} title="上传 .md 文档:自动分块(500 字/75 重叠)并逐块向量化" onClick={() => fileRef.current?.click()}>
+          <Btn tk={tk} disabled={uploading} title="上传 .md 文档:自动切分(问答体按条、其余按小节)并逐块向量化" onClick={() => fileRef.current?.click()}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <UploadIcon size={12} strokeWidth={2} />
               {uploading ? '导入中…' : '上传 .md'}
@@ -268,6 +274,24 @@ export function KnowledgeTab({
           if (f) void uploadDoc(f)
         }}
       />
+
+      {/* 旧版文档(有块无原文)提示:它们检索不到却看起来一切正常,不说一声
+          用户只会以为"知识库不灵"。不是错误提示(用户没做错什么),但确实要动手。 */}
+      {legacyNotice && (
+        <div
+          style={{
+            padding: `${spacing.sm + 2}px ${spacing.xl}px`,
+            borderRadius: radius.md,
+            fontSize: fontSize.secondary,
+            lineHeight: 1.55,
+            backgroundColor: tk.errorBg,
+            color: tk.errorText,
+            wordBreak: 'break-word',
+          }}
+        >
+          {legacyNotice}
+        </div>
+      )}
 
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索标题或正文" />
 
@@ -406,7 +430,7 @@ export function KnowledgeTab({
       })}
 
       <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-        检索层级:标准回答 &gt; 历史记录 &gt; 知识库。.md 文档按小节整块导入,超长内容按空行/句号智能截断;文档块只读,同名文档重新上传即整篇替换。
+        检索层级:标准回答 &gt; 历史记录 &gt; 知识库。.md 文档自动切分:问答体按条切、其余按小节切,超长内容按空行/句号智能截断;文档块只读,同名文档重新上传即整篇替换。
       </div>
     </div>
   )

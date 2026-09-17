@@ -119,3 +119,18 @@ export function countGoldensByQuestion(
   }
   return counts
 }
+
+/**
+ * 旧版文档的重新上传提示(2026-09-17 第四十八轮)。
+ *
+ * 升级前上传的文档只有切好的块、没有原文,自动重切够不着 —— 而它们的块正是
+ * 旧规则切的(整篇一块),向量被多主题平均稀释,检索会**静默**命中不到:
+ * 用户以为知识库里有这条,问起来却永远匹配不上,还找不到原因。
+ * 唯一出路是拿原文重切,而原文只有用户手里有 → 提示他重新上传同名文件。
+ *
+ * 返回 null 表示无需提示(无旧文档 / 后台读不到该字段)。
+ */
+export function legacyDocNotice(docIds: string[] | undefined): string | null {
+  if (!docIds || docIds.length === 0) return null
+  return `《${docIds.join('》《')}》是按旧版规则切分的,检索可能命中不到。点上方「上传 .md」重新上传同名文件即可修复 —— 同名整篇替换,不会产生重复条目。`
+}

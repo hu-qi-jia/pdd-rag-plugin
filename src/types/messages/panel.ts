@@ -93,7 +93,14 @@ export interface GetPanelDataRequest {
 
 export interface GetPanelDataResponse {
   type: 'GET_PANEL_DATA_RESPONSE'
-  payload: { folders: PanelFolder[]; goldens: PanelGolden[]; knowledge: PanelKnowledge[]; error?: string }
+  payload: {
+    folders: PanelFolder[]
+    goldens: PanelGolden[]
+    knowledge: PanelKnowledge[]
+    /** 升级前上传、无原文可重切的文档名(知识库页提示重新上传;缺省=无) */
+    legacyDocs?: string[]
+    error?: string
+  }
 }
 
 /** 编辑保存即重嵌(问题实质变更时);folderId 兼作"迁移文件夹" */

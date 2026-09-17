@@ -9,6 +9,7 @@ import {
   buildFolderTree,
   countGoldensByQuestion,
   orderGoldensByRecency,
+  legacyDocNotice,
   type PanelFolder,
   type PanelGolden,
   type FolderNode,
@@ -164,5 +165,26 @@ describe('orderGoldensByRecency / countGoldensByQuestion', () => {
       [g('old', '问题甲', 100), g('new', '问题甲', 300)],
     )
     expect(tree[0].goldens.map((x) => x.id)).toEqual(['new', 'old'])
+  })
+})
+
+// 第四十八轮:升级前上传的文档检索不到却毫无征兆,得说一声并给出可执行的动作。
+describe('legacyDocNotice:旧文档重新上传提示', () => {
+  it('无旧文档 / 字段缺省 → null(不提示)', () => {
+    expect(legacyDocNotice([])).toBeNull()
+    expect(legacyDocNotice(undefined)).toBeNull()
+  })
+
+  it('有旧文档 → 点名文档 + 给出动作(重新上传同名文件)', () => {
+    const t = legacyDocNotice(['常见问答'])
+    expect(t).toContain('《常见问答》')
+    expect(t).toContain('上传 .md') // 按钮上的原话,用户照着找得到
+    expect(t).toContain('同名') // 不产生重复条目的定心丸
+  })
+
+  it('多篇文档全部点名', () => {
+    const t = legacyDocNotice(['常见问答', '售后政策']) as string
+    expect(t).toContain('《常见问答》')
+    expect(t).toContain('《售后政策》')
   })
 })

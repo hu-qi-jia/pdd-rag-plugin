@@ -139,14 +139,18 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    原先单开的 12.5px 是夹在标题与辅助之间的第三档,已收掉 */
 .pddcs-popup-count { font-size: ${panelType.meta.size}px; font-weight: ${panelType.meta.weight};
   line-height: 1.3; color: ${tk.textTertiary}; }
-/* 关闭钮(v2.7.0):从"24px 无底 × 悬浮才显"改成**常驻的安静圆形填充** ——
-   浮层的关闭入口不该要用户先找到它才看得见(Apple 的浮层关闭语言) */
+/* 关闭钮(v2.7.2 收成裸图标):用户"推荐回复面板右上角的关闭按钮,仅保留 × 图标即可" ——
+   上一版是一枚**常驻的灰色圆底 + ×**(v2.7.0 为避免"要先找到它才看得见"而加),
+   在一屏全是无底文字的极简面板里,那颗圆是唯一多出来的墨点。
+   现撤掉静止态的圆底,只留 × 字形本身;命中区仍是 26px(controlH.form,视觉变小、可点范围不变),
+   悬浮时软底回来 —— 点得动这件事由悬浮回执交代,不再靠常驻底色。
+   v2.7.0 那条"关闭入口要常驻可见"仍成立:常驻的是 **× 本身**,不是它身后的圆 */
 .pddcs-popup-close { margin-left: auto; flex: 0 0 auto; box-sizing: border-box;
-  width: 26px; height: 26px; padding: 0; border: none; cursor: pointer;
+  width: ${controlH.form}px; height: ${controlH.form}px; padding: 0; border: none; cursor: pointer;
   border-radius: ${radius.pill}px; display: flex; align-items: center;
-  justify-content: center; background: ${tk.fillQuiet}; color: ${tk.textMuted};
+  justify-content: center; background: transparent; color: ${tk.textMuted};
   font-size: ${fontSize.heading}px; line-height: 1; transition: background-color .12s ease, color .12s ease; }
-.pddcs-popup-close:hover { background: ${tk.fillQuietHover}; color: ${tk.text}; }
+.pddcs-popup-close:hover { background: ${tk.fillQuiet}; color: ${tk.text}; }
 /* 滚动中段:唯一滚动容器(6px 细轨挂此)。左右 ${ROW_INSET_X}px 就是行的内缩量 ——
    行自己不再带左右外边距,行的左右缘由这里单点决定(ROW_INSET_X / ROW_RADIUS 同源) */
 .pddcs-popup-body { flex: 1 1 auto; overflow-y: auto;
@@ -176,8 +180,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-badge { display: inline-flex; align-items: center; padding: 3px ${BADGE_PAD_X}px;
   border-radius: ${radius.md}px; font-size: ${panelType.meta.size}px; font-weight: ${fontWeight.semibold};
   background: ${tk.selectedBg}; color: ${tk.textMuted}; }
-.pddcs-badge.golden { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
-.pddcs-badge.knowledge { background: rgba(20, 174, 92, 0.12); color: ${semantic.knowledge}; }
+.pddcs-badge.golden { background: ${semantic.goldenSoft}; color: ${semantic.golden}; }
+.pddcs-badge.knowledge { background: ${semantic.knowledgeSoft}; color: ${semantic.knowledge}; }
 /* 同内容折叠数(v2.6.19 行右下角悬浮才显 → v2.6.25 用户"同内容移动至标签的右侧"):
    回到行首行、紧贴徽标右侧,与徽标共用行首行的 align-items 中线;
    随之**常驻显示**(右下角那版是浮动覆盖物,才需要悬浮才显来避让正文),
@@ -203,9 +207,9 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-icon-btn:disabled { opacity: .5; cursor: default; }
 /* 星标钮(设为 / 取消标准回答):悬浮走语义金(与琥珀徽标、popup 金标同源);
    已设态 = **实心金星**,一眼看出该条已被提升为标准回答,点击即取消 */
-.pddcs-icon-btn-star:hover { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
+.pddcs-icon-btn-star:hover { background: ${semantic.goldenSoft}; color: ${semantic.golden}; }
 .pddcs-icon-btn-golden { color: ${semantic.golden}; }
-.pddcs-icon-btn-golden:hover { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
+.pddcs-icon-btn-golden:hover { background: ${semantic.goldenSoft}; color: ${semantic.golden}; }
 /* 请求在途:图标原地转圈(替代原「设置中… / 取消中…」文字反馈) */
 .pddcs-icon-btn-busy svg { animation: pddcs-spin .7s linear infinite; }
 @keyframes pddcs-spin { to { transform: rotate(360deg); } }
@@ -251,8 +255,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 失败面仍是固定字面量(跟知识库绿不同):失败态的主信号是**文字转红**
    (动作名 + 说明行两处一起变),底色只是补一层。故它不像动作面那样必须随主题 —
    深色下被材料冲淡一点也不影响"这行出错了"读不读得出来 */
-.pddcs-cand.pddcs-ai-row.is-error { background: rgba(217, 48, 38, 0.12); }
-.pddcs-cand.pddcs-ai-row.is-error:hover { background: rgba(217, 48, 38, 0.18); }
+.pddcs-cand.pddcs-ai-row.is-error { background: ${semantic.dangerSoft}; }
+.pddcs-cand.pddcs-ai-row.is-error:hover { background: ${semantic.dangerSoftHover}; }
 /* 主行:动作名 + 右侧「重试/重新生成」钮。min-height 取行内控件档,
    使操作钮显隐不改变主行高度(等高铁律)。
    v2.7.1 去掉行首的 ✦ 图标(用户"删除图标"):这一行整块已经是知识库绿底,

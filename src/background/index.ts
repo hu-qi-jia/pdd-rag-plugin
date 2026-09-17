@@ -32,6 +32,7 @@ import type {
   SelfTestWriteResponse,
   FillInputResponse,
 } from "../types/messages";
+import type { ContentFillResponse } from "../types/messages/fill";
 import { searchSuggestions } from "./search";
 import {
   addGoldenFromSuggestion,
@@ -133,10 +134,11 @@ async function fillToChatPage(
   if (tabs.length === 0) return { success: false, error: "未找到打开的聊天页" };
   const tab = tabs.find((t) => t.active) ?? tabs[0];
   if (tab.id === undefined) return { success: false, error: "聊天页不可达" };
+  // 第五十一轮:取协议里的 ContentFillResponse,不再手抄响应形状
   const resp = (await chrome.tabs.sendMessage(tab.id, {
     type: "PDD_FILL_INPUT",
     payload: { text },
-  })) as { payload?: { success?: boolean; error?: string } } | undefined;
+  })) as ContentFillResponse | undefined;
   if (!resp?.payload?.success) {
     return {
       success: false,
@@ -380,9 +382,11 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
 };
 
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
-  // 信任边界唯一一次 cast:chrome 类型层把消息当 any,形状契约由 types/messages.ts 保证。
-  // 查表值宽化为统一签名(运行时按键分发,TS 传不过去"键 ↔ 消息类型"的对应关系)——
-  // 全文件仅此一处 cast,映射表内部零强转;| undefined 保留未知消息的 default 分支语义。
+  // 信任边界的 cast:chrome 类型层把消息当 any,形状契约由 types/messages.ts 保证。
+  // 查表值宽化为统一签名(运行时按键分发,TS 传不过去"键 ↔ 消息类型"的对应关系)。
+  // | undefined 保留未知消息的 default 分支语义。
+  // (本文件另有几处 cast,各有其因,不是"仅此一处":route() 内按键拼响应类型 3 处、
+  //  调试挂载 globalThis 2 处、上面 fillToChatPage 的跨上下文响应 1 处。)
   const message = rawMessage as ExtensionMessage | undefined;
   if (!message?.type) return false;
   const handler = handlers[message.type] as

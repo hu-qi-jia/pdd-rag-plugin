@@ -24,7 +24,7 @@ import {
   clearLlmDraft,
   loadLlmDraft,
   saveLlmDraft,
-} from '../pdd/llm-draft'
+} from './llmDraft'
 import {
   llmFormFromSettings,
   llmFormReady,
@@ -68,7 +68,7 @@ export function SettingsTab({
   // ②申请主机权限必须发生在用户手势里,只有"点保存"这一刻才有手势可用。
   // 于是本卡片是全页唯一的"显式保存"处(超时滑杆仍随大流即时落库)。
   //
-  // 但**草稿**是边填边存的(见 pdd/llm-draft.ts):弹窗失焦即被 Chrome 销毁,
+  // 但**草稿**是边填边存的(见 popup/llmDraft.ts):弹窗失焦即被 Chrome 销毁,
   // 扩展拦不住 —— 用户"点窗口外面内容就没了"的抱怨由此而来。
   const [llm, setLlm] = useState<LlmFormFields | null>(null)
   const [showKey, setShowKey] = useState(false)
@@ -618,7 +618,10 @@ export function SettingsTab({
           }}
         >
           本工具仅读取聊天页内容并填充官方输入框,发送始终由人工完成;
-          全部数据仅存本机 IndexedDB,不上传任何服务器;嵌入模型已内置,离线可用,无任何远程下载。
+          全部数据仅存本机 IndexedDB;嵌入模型已内置,离线可用,无任何远程下载。
+          默认全程不联网 —— 只有你亲手填了接口与密钥、打开「AI 整合」、再点击面板里那一行,
+          才会把当轮面板展示的知识库内容与买家问题发给你配置的接口;
+          历史回答与标准回答永不外发,整合结果也只填进输入框,发送仍由你点。
           请勿用于自动群发等违反平台规则的场景。
         </div>
       </Card>

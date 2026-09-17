@@ -17,6 +17,7 @@ import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
 import {
   Btn,
   Card,
+  ConfirmRow,
   EmptyState,
   Notice,
   SearchInput,
@@ -377,16 +378,17 @@ export function MemoryListTab({
               </button>
             </div>
 
-            {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现 */}
+            {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现。
+                第五十一轮改用 ui/components#ConfirmRow —— 与文件夹页同一份实现,
+                原先这里自带一套(字号还落在 `caption + 0.5` 这个被明令禁止的临时值上) */}
             {confirmDeleteId === item.id && (
-              <div style={{ marginTop: spacing.md, display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: fontSize.caption + 0.5, color: tk.errorText }}>删除该问答及其全部回复?</span>
-                <Btn tk={tk} variant="danger" onClick={() => void deleteQa(item.id)}>
-                  确认
-                </Btn>
-                <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
-                  取消
-                </Btn>
+              <div style={{ marginTop: spacing.md }}>
+                <ConfirmRow
+                  tk={tk}
+                  text="删除该问答及其全部回复?"
+                  onOk={() => void deleteQa(item.id)}
+                  onCancel={() => setConfirmDeleteId(null)}
+                />
               </div>
             )}
 

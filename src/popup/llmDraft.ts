@@ -13,10 +13,15 @@
  * 保存成功后草稿即清除(它已经等于正式配置了);不这么做的话,
  * 后台对 baseUrl 的夹取(去尾斜杠等)会让草稿与正式配置永远差一点点,
  * 于是「有未保存的修改」凭空常驻。
+ *
+ * 第五十一轮自 `pdd/llm-draft.ts` 迁到 `popup/`(工程审查):`pdd/` 那一层的契约是
+ * "纯逻辑,不触碰 chrome/Dexie"(见同目录 ui-logic.ts / segmenter.ts 的文件头),
+ * 而这个文件从头到尾只有 chrome.storage 的读/写/删 —— 唯一的使用者就是设置页,
+ * 放在被它服务的这一层才对。纯逻辑那一半(`pdd/llm-form.ts`)原地不动。
  */
 import { loadFromChrome, removeFromChrome, saveToChrome } from '../shared/chrome-storage'
 import { LLM_DRAFT_STORAGE_KEY } from '../shared/constants'
-import type { LlmFormFields } from './llm-form'
+import type { LlmFormFields } from '../pdd/llm-form'
 
 /**
  * 落草稿的防抖间隔。取 300ms 是两头夹出来的:

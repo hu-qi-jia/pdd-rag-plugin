@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  kindLabel,
   mergeBuyerQuery,
   decideUiAction,
   moveSelection,
@@ -147,5 +148,17 @@ describe('scrollForSelection:选中行滚进可视区(sticky 头部实高校正)
   })
   it('行已在可视区:不动', () => {
     expect(scrollForSelection(100, cont, { top: 200, bottom: 250, left: 0, right: 300, height: 50 }, headH, 2)).toBe(100)
+  })
+})
+
+describe('kindLabel:候选类别 → 中文名(第五十一轮单点化)', () => {
+  it('三类各取其名', () => {
+    expect(kindLabel('golden')).toBe('标准回答')
+    expect(kindLabel('knowledge')).toBe('知识库')
+    expect(kindLabel('history')).toBe('历史')
+  })
+
+  it('历史不叫「历史回忆」—— 徽标与「已填充:…」提示此前各说一个词', () => {
+    expect(kindLabel('history')).not.toContain('回忆')
   })
 })

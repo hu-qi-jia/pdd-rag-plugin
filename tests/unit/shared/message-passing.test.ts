@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { sendMessage, sendMessageFireAndForget } from '../../../src/shared/message-passing'
+import { sendMessage } from '../../../src/shared/message-passing'
 import { chromeMock, resetChromeMock, setLastError } from '../../__mocks__/chrome'
 
 beforeEach(() => {
@@ -47,25 +47,5 @@ describe('sendMessage', () => {
     const msg = { type: 'CAPTURE_MESSAGE', payload: {} } as any
     await sendMessage(msg)
     expect(chromeMock.runtime.sendMessage).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('sendMessageFireAndForget', () => {
-  it('calls chrome.runtime.sendMessage once', () => {
-    const msg = { type: 'CAPTURE_MESSAGE', payload: {} } as any
-    sendMessageFireAndForget(msg)
-    expect(chromeMock.runtime.sendMessage).toHaveBeenCalledTimes(1)
-  })
-
-  it('returns void (undefined)', () => {
-    const msg = { type: 'CAPTURE_MESSAGE', payload: {} } as any
-    const result = sendMessageFireAndForget(msg)
-    expect(result).toBeUndefined()
-  })
-
-  it('swallows lastError silently without rejection', () => {
-    setLastError('some error')
-    const msg = { type: 'CAPTURE_MESSAGE', payload: {} } as any
-    expect(() => sendMessageFireAndForget(msg)).not.toThrow()
   })
 })

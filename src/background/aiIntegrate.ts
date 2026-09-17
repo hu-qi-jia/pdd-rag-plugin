@@ -11,7 +11,7 @@ import { loadSettings } from './settings'
 import { collectMaterials } from './aiMaterials'
 import { NO_ANSWER_SENTINEL, integrateReply, isLlmConfigured, llmConfigFromSettings } from './llm'
 import type { PddSettings } from '../types/memory'
-import type { AiIntegrateRequest, AiPortEvent } from '../types/messages/ai'
+import { AI_PORT_NAME, type AiIntegrateRequest, type AiPortEvent } from '../types/messages/ai'
 
 /** 面板整合行的渲染门禁(与 handleAiIntegrate 的前三条门禁同源,不可分叉) */
 export function aiRowAvailable(s: PddSettings, hasKnowledgeCandidate: boolean): boolean {
@@ -80,7 +80,7 @@ export async function handleAiIntegrate(
 /** 挂 Port 长连接:一个端口一次整合,终态后由 content 侧关闭 */
 export function registerAiPort(): void {
   chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== 'pddcs:ai') return
+    if (port.name !== AI_PORT_NAME) return
     port.onMessage.addListener((raw: unknown) => {
       const msg = raw as AiIntegrateRequest | undefined
       if (msg?.type !== 'AI_INTEGRATE') return

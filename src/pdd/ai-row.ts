@@ -3,7 +3,7 @@
  * 从 pdd-ai-button.ts 抽出来:那段是原生 DOM 操作,没法在 jsdom 里可靠断言状态流转,
  * 而状态流转恰恰是最容易写错的部分。
  */
-import { AI_ERROR_TEXT, type AiPortEvent } from '../types/messages/ai'
+import { aiErrorText, type AiPortEvent } from '../types/messages/ai'
 import type { Suggestion } from '../types/messages'
 
 export type AiRowState =
@@ -13,7 +13,11 @@ export type AiRowState =
   | { phase: 'working' }
   /** 正在流式产出草稿 */
   | { phase: 'streaming'; draft: string }
-  /** 生成完成,已填入输入框 */
+  /**
+   * 生成完成。**填进输入框的那一路会立刻关面板**(第五十一轮),所以这个状态实际只停在
+   * "生成成功但页面没有输入框"这一条路上 —— 面板留着让用户手动复制结果。
+   * 因此文案说的是**生成**,不是**填入**(填入成功与否由调用方的 toast 交代)。
+   */
   | { phase: 'done'; text: string }
   /** 模型判定资料不足以回答 */
   | { phase: 'noanswer' }
@@ -33,11 +37,11 @@ export function aiRowLabel(state: AiRowState, loadingVisible = true): string {
     case 'streaming':
       return '正在整合知识库…'
     case 'done':
-      return '✓ 已填入输入框'
+      return '✓ 已生成'
     case 'noanswer':
       return '知识库内容不足以回答'
     case 'error':
-      return AI_ERROR_TEXT[state.error] ?? '整合失败,请检查 API 配置'
+      return aiErrorText(state.error)
   }
 }
 

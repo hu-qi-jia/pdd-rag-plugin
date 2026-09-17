@@ -22,6 +22,7 @@
  */
 import type { PlasmoCSConfig } from 'plasmo'
 import type { AiPortEvent, AiPortRequest } from '../types/messages/ai'
+import type { ContentFillMessage, ContentFillResponse } from '../types/messages/fill'
 import { AI_PORT_NAME } from '../types/messages/ai'
 import {
   AI_LOADING_DELAY_MS,
@@ -36,12 +37,20 @@ import {
   reduceAiRow,
   type AiRowState,
 } from '../pdd/ai-row'
-import type { Suggestion, UiSettings } from '../types/messages'
+import type {
+  AddGoldenResponse,
+  DeleteGoldenResponse,
+  GetStatsResponse,
+  GetSuggestionsResponse,
+  Suggestion,
+  UiSettings,
+} from '../types/messages'
 import {
   aiButtonX,
   aiButtonY,
   decideUiAction,
   isRowVisible,
+  kindLabel,
   mergeBuyerQuery,
   moveSelection,
   popupPosition,
@@ -284,10 +293,12 @@ async function fetchSuggestions(query: string): Promise<{
     aiAvailable: false,
   }
   try {
-    const resp = await chrome.runtime.sendMessage({
+    // 第五十一轮类型对齐:响应按协议里声明的形状取,不再让 TS 从 sendMessage 的
+    // any 上自由推导 —— 后台改了 payload 字段,这里会当场编译不过
+    const resp = (await chrome.runtime.sendMessage({
       type: 'GET_SUGGESTIONS',
       payload: { query },
-    })
+    })) as GetSuggestionsResponse | undefined
     const err =
       chrome.runtime.lastError?.message ?? resp?.payload?.error ?? undefined
     return {
@@ -331,9 +342,8 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
   if (act.action === 'fill') {
     const s = suggestions[act.fillIndex]
     if (fillInput(s.text)) {
-      const kindLabel = s.kind === 'golden' ? '标准回答' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
       toast(
-        `已填充:${kindLabel}` +
+        `已填充:${kindLabel(s.kind)}` +
           `${(s.foldCount ?? 1) > 1 ? ` · 同内容×${s.foldCount}` : ''} · 请手动发送`,
       )
     } else {
@@ -399,7 +409,7 @@ function movePanelSelection(delta: number): boolean {
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
   const b = document.createElement('span')
   b.className = `pddcs-badge ${kind}`
-  b.textContent = kind === 'golden' ? '标准回答' : kind === 'knowledge' ? '知识库' : '历史'
+  b.textContent = kindLabel(kind)
   return b
 }
 
@@ -512,8 +522,16 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
     p.onMessage.addListener((ev: AiPortEvent) => {
       state = reduceAiRow(state, ev)
       if (ev.type === 'DONE') {
-        if (fillInput(ev.payload.text)) toast('已整合并填充:知识库 · 请手动发送')
-        else toast('已整合,但未找到输入框,请手动粘贴')
+        // 第五十一轮(用户"填充内容到输入框后面板退出"):填成功就收工 ——
+        // 面板的职责到此为止,与候选行的口径拉平(点一条候选填进去后面板同样自行退场),
+        // 留着它只会挡住刚填好的输入框。填不进去(页面没有输入框)时**不退场**:
+        // 生成结果还在行里,用户要从这儿手动复制,面板是唯一的载体
+        if (fillInput(ev.payload.text)) {
+          toast('已整合并填充:知识库 · 请手动发送')
+          closePopup()
+        } else {
+          toast('已整合,但未找到输入框,请手动粘贴')
+        }
       } else if (ev.type === 'NO_ANSWER') {
         toast('知识库内容不足以回答该问题')
       } else if (ev.type === 'ERROR') {
@@ -581,7 +599,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   const addGolden = async (btn: HTMLButtonElement): Promise<void> => {
     setBusy(btn, true)
     try {
-      const resp = await chrome.runtime.sendMessage({
+      const resp = (await chrome.runtime.sendMessage({
         type: 'ADD_GOLDEN',
         payload: {
           question: query,
@@ -589,7 +607,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
           sourceRecordId: s.sourceId,
           sourceReplyId: s.replyId,
         },
-      })
+      })) as AddGoldenResponse | undefined
       const p = resp?.payload ?? {}
       const err = chrome.runtime.lastError?.message ?? p.error
       if (err) toast(`设置标准回答失败:${err}`)
@@ -613,10 +631,10 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
     if (!id) return
     setBusy(btn, true)
     try {
-      const resp = await chrome.runtime.sendMessage({
+      const resp = (await chrome.runtime.sendMessage({
         type: 'DELETE_GOLDEN',
         payload: { id },
-      })
+      })) as DeleteGoldenResponse | undefined
       const err = chrome.runtime.lastError?.message ?? resp?.payload?.error
       if (err) toast(`取消失败:${err}`)
       else if (resp?.payload?.success === false) toast('取消失败,请稍后重试')
@@ -679,8 +697,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {
-      const kindLabel = s.kind === 'golden' ? '标准回答' : s.kind === 'knowledge' ? '知识库' : '历史回忆'
-      toast(`已填充:${kindLabel} · 请手动发送`)
+      toast(`已填充:${kindLabel(s.kind)} · 请手动发送`)
       closePopup()
     } else {
       toast('未找到输入框,请手动粘贴')
@@ -830,11 +847,13 @@ let hotkeySettings: PddSettings = { ...DEFAULT_SETTINGS }
 
 async function refreshHotkeySettings(): Promise<void> {
   try {
-    const resp = (await chrome.runtime.sendMessage({ type: 'GET_STATS' })) as {
-      payload?: { settings?: Partial<PddSettings> }
-    }
+    // 第五十一轮:此前手抄了一份"只带 settings 的 GET_STATS 响应"局部类型,
+    // 等于在协议之外自己描述了一遍后台 —— 直接取协议里的 GetStatsResponse
+    const resp = (await chrome.runtime.sendMessage({ type: 'GET_STATS' })) as
+      | GetStatsResponse
+      | undefined
     const s = resp?.payload?.settings
-    if (s) hotkeySettings = { ...DEFAULT_SETTINGS, ...s } as PddSettings
+    if (s) hotkeySettings = { ...DEFAULT_SETTINGS, ...s }
   } catch {
     /* 拿不到就先用默认值 */
   }
@@ -903,8 +922,7 @@ async function onHotkey(): Promise<void> {
   if (settings.directFillEnabled) {
     const first = suggestions[0]
     if (fillInput(first.text)) {
-      const kindLabel = first.kind === 'golden' ? '标准回答' : first.kind === 'knowledge' ? '知识库' : '历史回忆'
-      toast(`已填充:${kindLabel} · 请手动发送`)
+      toast(`已填充:${kindLabel(first.kind)} · 请手动发送`)
     } else {
       toast('未找到输入框,请手动粘贴')
     }
@@ -941,7 +959,9 @@ document.addEventListener(
       ev.preventDefault()
       ev.stopPropagation()
       const picked = armedPanel.rows[armedPanel.selected]
-      // AI 整合行:Enter 等同于点击该行(面板不关,好让「重新生成」留在眼前)
+      // AI 整合行:Enter 等同于点击该行。**面板关不关由结果决定**(第五十一轮):
+      // 生成结果填进输入框了就自行退场(与候选行同一条口径),填不进去才留着 ——
+      // 那种情况下结果还在行里,用户要从这儿手动复制,「重新生成」也得留在眼前
       if (picked.ai) {
         const aiRow = popupEl?.querySelectorAll('.pddcs-cand')[armedPanel.selected] as
           | HTMLElement
@@ -954,8 +974,7 @@ document.addEventListener(
         return
       }
       if (fillInput(picked.s.text)) {
-        const kindLabel = picked.s.kind === 'golden' ? '标准回答' : picked.s.kind === 'knowledge' ? '知识库' : '历史回忆'
-        toast(`已填充:${kindLabel} · 请手动发送`)
+        toast(`已填充:${kindLabel(picked.s.kind)} · 请手动发送`)
         closePopup()
       } else {
         toast('未找到输入框,请手动粘贴')
@@ -977,21 +996,23 @@ void refreshHotkeySettings()
 // popup 面板"填充"按钮 → SW 转发:同样只填官方输入框,绝不发送
 chrome.runtime.onMessage.addListener(
   (
-    message: { type?: string; payload?: { text?: string } },
+    // 第五十一轮:SW ↔ content 这一段也有协议类型(types/messages/fill.ts 的
+    // ContentFillMessage/ContentFillResponse),此前两端各手抄了一份形状 —— 统一取协议
+    message: Partial<ContentFillMessage>,
     _sender: unknown,
-    sendResponse: (resp: { payload: { success: boolean; error?: string } }) => void,
+    sendResponse: (resp: ContentFillResponse) => void,
   ) => {
     if (message?.type !== 'PDD_FILL_INPUT') return false
     const text = String(message.payload?.text ?? '')
     if (!text) {
-      sendResponse({ payload: { success: false, error: '填充内容为空' } })
+      sendResponse({ type: 'PDD_FILL_INPUT_RESPONSE', payload: { success: false, error: '填充内容为空' } })
       return false
     }
     if (fillInput(text)) {
       toast('已填充:标准回答 · 请手动发送')
-      sendResponse({ payload: { success: true } })
+      sendResponse({ type: 'PDD_FILL_INPUT_RESPONSE', payload: { success: true } })
     } else {
-      sendResponse({ payload: { success: false, error: '未找到输入框' } })
+      sendResponse({ type: 'PDD_FILL_INPUT_RESPONSE', payload: { success: false, error: '未找到输入框' } })
     }
     return false
   },

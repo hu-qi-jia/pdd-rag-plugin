@@ -60,8 +60,16 @@ describe('aiRowLabel', () => {
   })
 
   it('终态各自有明确说法', () => {
-    expect(aiRowLabel({ phase: 'done', text: 'x' })).toBe('✓ 已填入输入框')
     expect(aiRowLabel({ phase: 'noanswer' })).toBe('知识库内容不足以回答')
+  })
+
+  it('done 说的是"已生成"而不是"已填入输入框"(第五十一轮)', () => {
+    // 填成功的那一路会**立刻关面板**(用户"填充内容到输入框后面板退出"),
+    // 所以这个状态实际只在"生成成功但页面没有输入框"时被看见 ——
+    // 那一刻说"已填入输入框"是假话;填入与否由调用方的 toast 交代
+    const label = aiRowLabel({ phase: 'done', text: 'x' })
+    expect(label).toBe('✓ 已生成')
+    expect(label).not.toContain('输入框')
   })
 
   it('错误标签翻译成用户能看懂的话,未知标签走兜底文案', () => {

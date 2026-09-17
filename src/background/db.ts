@@ -122,10 +122,6 @@ export class PddDatabase extends Dexie {
     return this.errors.orderBy("timestamp").reverse().limit(limit).toArray();
   }
 
-  async clearErrors(): Promise<void> {
-    await this.errors.clear();
-  }
-
   // ─── 统计(P0 面板用;排除自检示例数据) ───────────────────────────────────────
 
   async getStats(): Promise<{
@@ -449,13 +445,6 @@ export class PddDatabase extends Dexie {
   async deleteGolden(id: string): Promise<void> {
     await this.goldens.delete(id);
     invalidateRetrievalCache();
-  }
-
-  async getGoldensByFolder(folderId: string | null): Promise<GoldenRecord[]> {
-    if (folderId === null) {
-      return this.goldens.filter((g) => g.folderId === null).toArray();
-    }
-    return this.goldens.where("folderId").equals(folderId).toArray();
   }
 
   // ─── 知识库(knowledge) ────────────────────────────────────────────────────────

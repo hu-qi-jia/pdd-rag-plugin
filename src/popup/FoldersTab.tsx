@@ -28,8 +28,8 @@ import type {
 import { UNCATEGORIZED_FOLDER_ID, MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
 import { buildFolderTree, countGoldensByQuestion, type FolderNode } from './logic'
 import { hashText } from '../shared/text'
-import { CreateBtn, EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
-import { controlH, fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
+import { ConfirmRow, CreateBtn, EmptyState, Notice, controlStyle, inputStyle, type NoticeMsg } from '../ui/components'
+import { controlH, fontSize, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import {
   ChevronDownIcon,
   CopyIcon,
@@ -45,8 +45,10 @@ import {
  * 操作组靠左时必须用 `-ICON_BTN_INSET` 抵消,否则**图标**会比上方正文多缩进 5.5px
  * (用户第四十四轮反馈"按钮左侧和上方文字左侧对齐":钮盒本就对齐,视觉错位来自这段留白)。
  * 铁律:图标尺寸改这里,不要在各处写 `size={13}`。
+ * 第五十一轮:值本身改取 `design.size.icon`(与聊天页覆盖层的 overlay-icons.ICON_SIZE 同源),
+ * 这里保留导出名 —— 上面那条"盒内留白"的推导是本文件的口径。
  */
-export const ICON_SIZE = 13
+export const ICON_SIZE = size.icon
 const ICON_BTN_INSET = (controlH.inline - ICON_SIZE) / 2
 
 /** 操作组对齐档:靠右(标题栏)/ 靠左·钮盒贴正文(文字钮、下拉)/ 靠左·图标贴正文(图标钮组) */
@@ -427,52 +429,10 @@ export function FoldersTab({
     </div>
   )
 
-  /** 内联确认行(删除二次确认):警示文案 + 确认/取消 */
+  /** 内联确认行(删除二次确认):文案 + 确认/取消。样式在 ui/components#ConfirmRow(第五十一轮共享) */
   const confirmRow = (text: string, onOk: () => void, onCancel: () => void): React.ReactNode => (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: spacing.sm,
-        padding: `${spacing.xs}px 0 ${spacing.xs + 2}px`,
-      }}
-    >
-      <span style={{ flex: 1, fontSize: fontSize.caption, color: tk.errorText }}>{text}</span>
-      <button
-        type="button"
-        onClick={onOk}
-        style={{
-          height: controlH.inline,
-          padding: '0 10px',
-          border: 'none',
-          borderRadius: radius.sm,
-          backgroundColor: tk.errorBg,
-          color: tk.errorText,
-          fontSize: fontSize.caption,
-          fontWeight: fontWeight.semibold,
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        确认
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        style={{
-          height: controlH.inline,
-          padding: '0 10px',
-          border: `1px solid ${tk.btnBorder}`,
-          borderRadius: radius.sm,
-          backgroundColor: 'transparent',
-          color: tk.textMuted,
-          fontSize: fontSize.caption,
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        取消
-      </button>
+    <div style={{ padding: `${spacing.xs}px 0 ${spacing.xs + 2}px` }}>
+      <ConfirmRow tk={tk} text={text} onOk={onOk} onCancel={onCancel} />
     </div>
   )
 

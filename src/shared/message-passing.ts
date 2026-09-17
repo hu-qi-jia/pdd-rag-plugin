@@ -18,13 +18,3 @@ export function sendMessage<R extends ExtensionMessageResponse>(
   })
 }
 
-/**
- * Send a message without waiting for a response.
- * Swallows any chrome.runtime.lastError silently (fire-and-forget).
- */
-export function sendMessageFireAndForget(message: ExtensionMessage): void {
-  chrome.runtime.sendMessage(message, () => {
-    // Consume lastError to prevent unhandled error logging
-    void chrome.runtime.lastError
-  })
-}

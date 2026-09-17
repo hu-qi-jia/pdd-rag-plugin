@@ -1,13 +1,13 @@
 /**
  * 通用组件库 — 各页签复用的视觉资产(设计规范的可执行形态)
  *
- * 清单:Btn / Notice / Card / Badge / EmptyState / Toggle / Slider / SearchInput / SectionLabel
+ * 清单:Btn / ConfirmRow / Notice / Card / Badge / EmptyState / Toggle / Slider / SearchInput
  * 原则:颜色一律来自 ThemeTokens,几何一律来自 design.ts;页面不得自带样式实现。
  */
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import type { ThemeTokens } from './theme'
-import { fontSize, fontWeight, radius, spacing, semantic, motion, size, formType, formGap } from './design'
+import { controlH, fontSize, fontWeight, radius, spacing, semantic, motion, size, formType, formGap } from './design'
 import { PlusIcon, SearchIcon } from './icons'
 
 // ── 胶囊按钮 ─────────────────────────────────────────────────────────────────
@@ -73,6 +73,57 @@ export function Btn({
     >
       {children}
     </button>
+  )
+}
+
+// ── 内联二次确认行 ────────────────────────────────────────────────────────────
+
+/**
+ * 删除类操作的**原位**二次确认行:警示文案 + 确认/取消(第五十一轮单点化)。
+ *
+ * 此前这套行有两份实现:文件夹页手搓一对 `<button>`、记忆页直接用通用 `Btn` ——
+ * 于是同一个交互在两页里字号不同(10.5 / 11.0)、按钮档位也不同(24 内联档 / 26 表单档),
+ * 记忆页那份还写着 `fontSize.caption + 0.5`,正是 design.ts 明令禁止的临时值。
+ * 统一取**内联档**(`controlH.inline` + `fontSize.caption`):确认行长在行内、不占表单位,
+ * 与被确认的那一行同档才是对的。
+ */
+export function ConfirmRow({
+  tk,
+  text,
+  onOk,
+  onCancel,
+}: {
+  tk: ThemeTokens
+  text: string
+  onOk: () => void
+  onCancel: () => void
+}) {
+  const btn: React.CSSProperties = {
+    height: controlH.inline,
+    padding: '0 10px',
+    borderRadius: radius.sm,
+    fontSize: fontSize.caption,
+    cursor: 'pointer',
+    flexShrink: 0,
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+      <span style={{ flex: 1, fontSize: fontSize.caption, color: tk.errorText }}>{text}</span>
+      <button
+        type="button"
+        onClick={onOk}
+        style={{ ...btn, border: 'none', backgroundColor: tk.errorBg, color: tk.errorText, fontWeight: fontWeight.semibold }}
+      >
+        确认
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        style={{ ...btn, border: `1px solid ${tk.btnBorder}`, backgroundColor: 'transparent', color: tk.textMuted }}
+      >
+        取消
+      </button>
+    </div>
   )
 }
 
@@ -454,23 +505,6 @@ export function Slider({
           backgroundImage: `linear-gradient(to right, ${tk.controlActive} ${pct}%, ${tk.inputBorder} ${pct}%)`,
         }}
       />
-    </div>
-  )
-}
-
-// ── 小节标签 ─────────────────────────────────────────────────────────────────
-
-export function SectionLabel({ tk, children }: { tk: ThemeTokens; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: fontSize.caption,
-        fontWeight: fontWeight.semibold,
-        color: tk.textTertiary,
-        letterSpacing: '0.04em',
-      }}
-    >
-      {children}
     </div>
   )
 }

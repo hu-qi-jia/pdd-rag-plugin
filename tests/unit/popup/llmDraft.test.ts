@@ -32,7 +32,7 @@ function stubLocalStorage(): void {
 async function fresh() {
   vi.resetModules()
   stubLocalStorage()
-  return import('../../../src/pdd/llm-draft')
+  return import('../../../src/popup/llmDraft')
 }
 
 beforeEach(() => {

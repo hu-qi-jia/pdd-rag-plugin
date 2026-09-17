@@ -170,7 +170,7 @@ export interface PddSettings {
   goldenPriorityEnabled: boolean
   /** 「自动回复」快捷键(默认 Ctrl+Enter):关=弹推荐回复面板再按 Enter 填第一条;开=直接填第一条 */
   autoReplyHotkey: HotkeyConfig
-  /** 推荐面板「下一候选」键(默认 Tab,可单键):Shift+同键 = 上一候选(2026-09-16 第二十二轮) */
+  /** 推荐面板「下一候选」键(默认 Tab,可单键)。反向键与 Shift+同键已于第二十四轮移除,只保留正向循环 */
   panelNavHotkey: HotkeyConfig
   /**
    * 「AI 整合」开关,默认关。关闭或未配置 API 时扩展保持完全本地:

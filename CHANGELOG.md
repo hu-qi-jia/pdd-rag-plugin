@@ -5,6 +5,37 @@
 > 上游 Personal AI Memory 的历史变更见 `docs/upstream-CHANGELOG.md`(Apache 2.0);
 > 逐轮开发明细见 `docs/工作状态-2026-09-08.md` 与 git log(每轮均有 docs+test 提交)。
 
+## 0.15.0 — 2026-09-17
+
+### 变更
+- **整合行填完即退场**(第五十一轮,用户"当用户使用快捷键调出推荐回复面板后,选择『根据知识库...』后,填充内容到输入框后面板退出"):生成结果填进输入框成功 ⇒ 面板**自行退场**,与候选行拉平(点一条候选填进去,面板同样自己走,不留着挡在刚填好的输入框前面),退场前 toast 交代「已整合并填充:知识库 · 请手动发送」。**填不进去**(页面没有输入框)则**不退场** —— 那种情况下结果只在行里,用户要从这儿手动复制,「重新生成」也得留在眼前
+- 整合行终态文案「✓ 已填入输入框」→ **「✓ 已生成」**:填成功的那一路根本看不到这一帧,而剩下来能看见它的那一路("没输入框")说"已填入"就是假话;填入与否由 toast 交代
+- **关闭钮收成裸 ×**(用户"推荐回复面板右上角的关闭按钮,仅保留 × 图标即可"):撤掉 v2.7.0 加上的常驻灰圆底 —— 在一屏全是无底文字的极简面板里,那颗圆是唯一多出来的墨点。命中区仍是 26px(视觉变小,可点范围不变),悬浮时软底回来,"点得动"由悬浮回执交代;v2.7.0 那条"关闭入口要常驻可见"仍成立 —— **常驻的是 × 本身,不是它身后的圆**
+
+### 项目结构审查(第五十一轮,用户"以架构师的身份看一下项目结构是否有问题,并修复")
+
+按"分层契约 / 单一真源 / 死代码 / 注释与文档是否还成立"四条轴扫了一遍全库。**分层没有塌**:popup 与 contents 互不引用,ui / pdd / shared / types 四层零反向依赖。修掉的是下面这些"契约没兑现"的地方 —— 全部是收敛,没有新增概念:
+
+- **协议在两端各抄了一份**:内容脚本手写 GET_STATS/GET_SUGGESTIONS/ADD_GOLDEN/DELETE_GOLDEN 四个响应形状、`background/index.ts` 手写 `PDD_FILL_INPUT` 的响应形状、内容脚本手写请求形状 —— 而 `types/messages/` 里这些类型**都有**。现全部改取协议类型(`GetStatsResponse` / `GetSuggestionsResponse` / `AddGoldenResponse` / `DeleteGoldenResponse` / `ContentFillMessage` / `ContentFillResponse`):后台改字段,前端当场编译不过,而不是运行时静默拿到 undefined
+- **`ContentFillMessage`/`ContentFillResponse` 此前是"定义了但没人用"的类型**(SW → content 这一跳的唯一契约)。不是删掉它们,而是让**两端都用上** —— 空定义是文档,用上的定义才是约束
+- **类别中文名抄了 5 份**,而且**徽标那份和提示那份说的不是一个词**(徽标「历史」/ 提示「历史回忆」):抽 `pdd/ui-logic#kindLabel` 单点,两处同词(取设计文档 §八 的「历史」)。同一轮还发现**错误文案表漏了 `no body` 这一个标签**,`http 4xx` 又只有兜底句 —— 补 `AI_ERROR_TEXT['no body']` 并按 4xx/5xx 分开兜底(`aiErrorText()`):用户现在能分清"地址/密钥不对"和"对方服务挂了"
+- **`AI_PORT_NAME` 常量存在但 `background/aiIntegrate.ts` 里硬编码了字面量**:改取常量(名字改了不会两边不同步)
+- **删死代码**(先用全库 grep 逐个确认零引用,再删):`ui/components#SectionLabel`、`ui/icons#AiSparkIcon`(第五十轮删 ✦ 后留下的孤儿)、`shared/message-passing#sendMessageFireAndForget` 及其实测、`background/db#clearErrors` 与 `#getGoldensByFolder`。同时把**假话注释**改真:`background/index.ts` 那句"全文件仅此一处 cast"实际有 7 处,现如实说明每处的理由
+- **`pdd/llm-draft.ts` 迁到 `popup/llmDraft.ts`**:`pdd/` 那一层的契约写在同目录文件头("纯逻辑,不触碰 chrome/Dexie"),而这个文件从头到尾只有 chrome.storage 的读/写/删,唯一使用者就是设置页。纯逻辑那一半(`pdd/llm-form.ts`)原地不动 —— **层契约现在靠目录就能读出来**
+- **两处重复实现合成一份**:内联二次确认行此前文件夹页手搓一对 `<button>`、记忆页直接用通用 `Btn`,于是同一个交互在两页里**字号不同(10.5 / 11.0)且按钮档位不同(24 内联档 / 26 表单档)**,记忆页那份还写着 `fontSize.caption + 0.5` —— 正是 `design.ts` 明令禁止的临时值。抽 `ui/components#ConfirmRow` 单点,统一取**内联档**;`ICON_SIZE` 的 13 也曾在 popup 与覆盖层各写一份,现同取 `design.size.icon`
+- **令牌没兑现的地方补上**:覆盖层里写死的 `rgba(184,134,11,.14)` / `rgba(20,174,92,.12)` / `rgba(217,48,38,.12)` 三个软底,色值其实全是 `semantic` 里那几个色的另一份拷贝(改色必漏一处)→ 立 `goldenSoft` / `knowledgeSoft` / `dangerSoft` 三个令牌;关闭钮的 `26px` → `controlH.form`;`:root` 里 `.pddcs-btn` / `.pddcs-input` 写死的 `font-size: 12px` → `fontSize.body`(设计规范里"按钮"本来就该是 12.5,覆盖层那颗「AI回复」钮的注释还写着"与 popup 的 .pddcs-btn 同档…12.5px 字号"—— 两边其实一直差 0.5px,现在那句话成真了);`size.railBtn` 令牌存在但 popup 里写死 36px → 改取令牌
+- **过时注释/文档修正**:`retrieval.ts` 文件头还写着旧配额(历史 2 / 知识库 1,实际 3/3/3)、`types/memory.ts` 的类型注释还在说"Shift+同键 = 上一候选"(第二十四轮已删)、README 的面板组成与「数据仅存本机,不上传任何服务器」、设置页「关于」卡同一句
+
+### 数据边界(本轮唯一涉及文案的改动)
+- 设置页「关于」与 README 的合规口径**补上 ADR-0006 的条件限定**:原先那句"不上传任何服务器"在「AI 整合」开启并手动点击后**不再成立**(ADR-0006 开了一条窄豁免)。现改为**默认不联网** + 把三条同时满足的条件、外发内容范围、历史/标准回答永不外发、结果只填不发,一并写清 —— 与 ADR-0006 的「外发内容仅限」同源同义;无遥测、无日志上报一句保留
+
+### 验收
+- 单测 **522/522**(46 文件):关闭钮静止 `background: transparent` + 命中区 26px + 两主题悬浮回执、done 文案说"已生成"且不含"输入框";新增 `kindLabel` 三类取名(并断言「历史」不含"回忆")与 `ConfirmRow` 五项(文案/回调/内联档高度/字号落在令牌阶梯/危险实底与描边幽灵)
+- `verify-ai-integrate.mjs` **51/51**(此前 44):新增「填成功 → 面板自行退场且 toast 交代」「填不进去 → 不退场、文案 ✓ 已生成」「关闭钮静止无底 + 命中区 26px」,并补了**键盘整条路径**(Ctrl+Enter 开面板 → Tab 走到整合行 → Enter → DELTA/DONE → 自行退场且文本落进输入框);⑪「生成后的展示」一组改在"页面无输入框"那条路上验(填成功就关面板了,那条路才看得到终态那一版)
+- `verify-ai-popup.mjs` **50/50**(关闭钮一条改判静止无底 + 新增悬浮回执)、`verify-ai-button-geometry.mjs` 13/13、`verify-settings-ui.mjs` 33/33
+- 结构改动后**全量复跑**:`verify-p3` 21/21、`verify-kb` 19/19、`verify-kb-doc` 11/11、`verify-golden-multi` 17/17(`verify-p2-ui.mjs` 是面向真实站点的登录态脚本,本轮未跑 —— 它要独占 `.chrome-debug-profile`,浏览器已开着时起不来)
+- `npx tsc --noEmit` 0 error;`npm run build` 通过,manifest `0.15.0`,bge 模型随包拷贝
+
 ## 0.14.0 — 2026-09-17
 
 ### 变更

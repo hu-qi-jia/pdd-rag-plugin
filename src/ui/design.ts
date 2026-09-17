@@ -156,6 +156,14 @@ export const size = {
   railWidth: 52,
   /** 图标导航按钮 */
   railBtn: 36,
+  /**
+   * 行内图标的渲染边长(第五十一轮单点化)。
+   * 此前 popup 的 `FoldersTab.ICON_SIZE` 与覆盖层的 `overlay-icons.ICON_SIZE`
+   * 各写了一个 13 —— 同一个"行内图标档"在两个渲染栈(popup 是 React + lucide,
+   * 聊天页覆盖层是 SVG 字面量)里各定义一遍,调档时会漏掉一边。
+   * 两个模块现在都从这里取,渲染栈的差异留在各自文件里。
+   */
+  icon: 13,
   /** 拨杆开关(v2.6.7 重设计:36×20 轨道 + 16 滑块,按压可拉伸) */
   toggleWidth: 36,
   toggleHeight: 20,
@@ -187,6 +195,17 @@ export const semantic = {
   goldenBg: '#fdf6e3',
   knowledge: '#14ae5c',
   knowledgeBg: 'rgba(20,174,92,0.09)',
+  /**
+   * 压在**浮层材料**上的软底(徽标底、图标钮悬浮底),比上面两档高一档 alpha
+   * (第五十一轮单点化):材料本身半透明,深色下合成出来是中灰而非近黑,9% 只剩一点色偏。
+   * 此前 overlay-css.ts 里直接写 `rgba(184,134,11,.14)` / `rgba(20,174,92,.12)` ——
+   * 同一个金色在 `semantic.golden` 与 rgb 字面量里各有一份,改色必漏一处。
+   */
+  goldenSoft: 'rgba(184, 134, 11, 0.14)',
+  knowledgeSoft: 'rgba(20, 174, 92, 0.12)',
   /** 失败态(如 AI 整合报错)—— 两主题下都用同一个红色,与 toast 的"近黑"策略一致 */
   danger: '#d93026',
+  /** 失败态软底(整合报错行)与其悬浮加深一档 */
+  dangerSoft: 'rgba(217, 48, 38, 0.12)',
+  dangerSoftHover: 'rgba(217, 48, 38, 0.18)',
 } as const

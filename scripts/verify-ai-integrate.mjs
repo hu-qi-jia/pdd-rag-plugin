@@ -11,7 +11,8 @@
  *  ③ 有 aiAvailable 但没有知识库候选 → 不出现(没有资料可整合)
  *  ④ 点整合行才发请求:Port 名 = pddcs:ai,knowledgeIds **只含面板上展示过的知识库候选**
  *     (ADR-0006 所见即所发),面板出现本身不发任何东西
- *  ⑤ 流式:DELTA 逐段累加显示草稿 →DONE 填输入框、文案「✓ 已填入输入框」、出「重新生成」
+ *  ⑤ 流式:DELTA 逐段累加显示草稿 →DONE 填输入框 + **面板自行退场**(第五十一轮,
+ *     用户"填充内容到输入框后面板退出"),退场前 toast 交代结果
  *  ⑥ NO_ANSWER → 不填输入框,文案「知识库内容不足以回答」
  *  ⑦ ERROR → 显示可读文案 + 「重试」;点重试再发一次
  *  ⑧ 生成中途 Port 断开(SW 被回收)→ 落到可重试的失败态,不永久卡在「正在整合」
@@ -25,6 +26,8 @@
  *  ⑫ 第五十轮:①面板上**每条**知识库候选都进 knowledgeIds(top-k=3,不是只发一条)、
  *     说明行如实报出条数;②说明行与生成结果同档 13.5px(整行只有一档字号,靠字重区分)、
  *     行首不再挂 ✦ 图标
+ *  ⑬ 第五十一轮:关闭钮静止时是**裸 ×**(撤掉常驻圆底,命中区仍 26px);
+ *     键盘路径(Ctrl+Enter → Tab 走到整合行 → Enter)填完后同样自行退场
  *
  * 用法:node scripts/verify-ai-integrate.mjs   (需先 npm run build)
  * 注:验证全程无网络请求 —— LLM 调用被桩在 Port 后面,不进 content script。
@@ -358,20 +361,58 @@ check(
 )
 await page.evaluate(() => window.__ai.emit({ type: 'DONE', payload: { text: '您好,支持7天无理由退换,需保持商品完好。' } }))
 await sleep(300)
-const done = await rows()
-check(
-  'DONE → 文案「✓ 已填入输入框」+ 出现「重新生成」',
-  done[1]?.label === '✓ 已填入输入框' && done[1]?.retry === '重新生成',
-  JSON.stringify({ label: done[1]?.label, retry: done[1]?.retry }),
-)
 check(
   'DONE → 生成结果**替换**输入框原有内容(不是追加)',
   (await textarea()) === '您好,支持7天无理由退换,需保持商品完好。',
   JSON.stringify(await textarea()),
 )
-check('终态后退出 busy 态', done[1]?.busy === false)
+// 第五十一轮(用户"填充内容到输入框后面板退出"):填成功后面板自行退场,
+// 与候选行的口径拉平 —— 留着它只会挡住刚填好的输入框
+const closedState = await page.evaluate(() => ({
+  popups: document.querySelectorAll('.pddcs-popup').length,
+  toast: document.querySelector('.pddcs-toast')?.textContent ?? '',
+}))
+check(
+  '⑤ 填成功 → 面板**自行退场**(不再停在「已填入输入框」那一版等用户手动关)',
+  closedState.popups === 0,
+  JSON.stringify(closedState),
+)
+check(
+  '⑤ 退场前给一条 toast 交代结果:已整合并填充 · 请手动发送',
+  closedState.toast.includes('已整合并填充') && closedState.toast.includes('请手动发送'),
+  JSON.stringify(closedState.toast),
+)
+check(
+  '整合全程零 sendMessage(流式内容只在 Port 上走,不经过一问一答)',
+  (await page.evaluate(() => window.__sent.length)) === sentBefore,
+  JSON.stringify(await page.evaluate(() => window.__sent.map((m) => m.type))),
+)
+check('终态后主动断端口(面板没了也不留着连接不放手)',
+  (await page.evaluate(() => window.__ai.lastPort().dead)) === true)
 
 // ── ⑪ 生成后的展示(重设计的一半:结果按候选正文的口径排版,而不是行内小字)──
+// 这条只能在**填不进去**的那条路上验了 —— 填成功就关面板(第五十一轮),
+// 而"页面没有输入框"正是面板该留下的那一种情况(结果还在行里,用户要从这儿手动复制)。
+// 顺手也证明了:填不进去 ≠ 失败,面板不退场、重试钮照给
+await page.evaluate(() => document.querySelector('#replyTextarea')?.remove())
+await clickAiButton(0)
+await page.locator('.pddcs-ai-row').click()
+await sleep(300)
+await page.evaluate(() => window.__ai.emit({ type: 'DELTA', payload: { text: '您好,' } }))
+await page.evaluate(() => window.__ai.emit({ type: 'DONE', payload: { text: '您好,支持7天无理由退换,需保持商品完好。' } }))
+await sleep(300)
+const done = await rows()
+check(
+  '⑪ 填不进去(页面无输入框)→ 面板**不退场**,结果留在行里供手动复制',
+  done.length > 0 && done[1]?.ai === true,
+  JSON.stringify({ rows: done.length, label: done[1]?.label }),
+)
+check(
+  '⑪ DONE → 文案「✓ 已生成」+ 出现「重新生成」',
+  done[1]?.label === '✓ 已生成' && done[1]?.retry === '重新生成',
+  JSON.stringify({ label: done[1]?.label, retry: done[1]?.retry }),
+)
+check('⑪ 终态后退出 busy 态', done[1]?.busy === false)
 {
   const rowsNow = await rows()
   const ai = rowsNow[1]
@@ -412,17 +453,10 @@ check('终态后退出 busy 态', done[1]?.busy === false)
   check(
     '⑪ 出结果后点整行不再发起请求(重试走右上角那枚钮,键盘 Enter 仍等同于点它)',
     (await page.evaluate(() => window.__ports.length)) === portsBefore &&
-      (await rows())[1]?.label === '✓ 已填入输入框',
+      (await rows())[1]?.label === '✓ 已生成',
     JSON.stringify({ before: portsBefore, after: await page.evaluate(() => window.__ports.length) }),
   )
 }
-check(
-  '整合全程零 sendMessage(流式内容只在 Port 上走,不经过一问一答)',
-  (await page.evaluate(() => window.__sent.length)) === sentBefore,
-  JSON.stringify(await page.evaluate(() => window.__sent.map((m) => m.type))),
-)
-check('终态后主动断端口(不留着连接不放手)',
-  (await page.evaluate(() => window.__ai.lastPort().dead)) === true)
 
 // ── ⑦ 重新生成:再发一次 ──
 await page.locator('.pddcs-ai-row .pddcs-ai-retry').click()
@@ -444,6 +478,14 @@ check(
   JSON.stringify({ label: dropped[1]?.label, retry: dropped[1]?.retry }),
 )
 check('掉线后不再是 busy 态(不会点不动)', dropped[1]?.busy === false)
+
+// 把输入框装回去(上面为了验"填不进去"那条路把夹具里的输入框摘了;
+// ⑥/⑨ 两个场景要用它断言"没有污染输入框")
+await page.evaluate(() => {
+  const ta = document.createElement('textarea')
+  ta.id = 'replyTextarea'
+  document.body.appendChild(ta)
+})
 
 // ── ⑥ NO_ANSWER:不填输入框 ──
 await page.evaluate(() => document.querySelector('.pddcs-popup-close')?.click())
@@ -545,6 +587,80 @@ check(
     JSON.stringify(await page.evaluate(() => window.__ports.length)) === '0',
   JSON.stringify({ ta: await textarea(), ports: await page.evaluate(() => window.__ports.length) }),
 )
+
+// ── ⑬ 键盘路径走完整条:快捷键开面板 → Tab 走到整合行 → Enter → 填完自行退场 ──
+// 用户原话就是这条路径(「当用户使用快捷键调出推荐回复面板后,选择"根据知识库..."后,
+// 填充内容到输入框后面板退出」)—— 鼠标那条路上面已经验过,这里验键盘那条
+await page.evaluate(() => document.querySelector('.pddcs-popup-close')?.click())
+await sleep(150)
+await setScenario({
+  __aiAvailable: true,
+  __suggestions: [
+    { kind: 'knowledge', text: '知识库:支持7天无理由退换,需保持商品完好。', sourceQuestion: 'q', score: 0.9, sourceId: 'kb-1' },
+    { kind: 'history', text: '历史答复:支持7天无理由,请放心下单。', sourceQuestion: 'q', score: 0.8, sourceId: 'h-1' },
+  ],
+})
+await setTextarea('')
+await page.locator('#msgListContainer').click({ position: { x: 5, y: 5 } })
+await sleep(150)
+await setTextarea('')
+await page.keyboard.press('Control+Enter')
+await sleep(700)
+// 行序 = [整合行, 知识库, 历史];初始选中跳过整合行落在第 1 行,
+// Tab 两次(1 → 2 → 回绕 0)走到整合行 —— 全程只用键盘
+await page.keyboard.press('Tab')
+await page.keyboard.press('Tab')
+await sleep(150)
+check(
+  '⑬ 键盘导航走得到整合行(Tab 从默认落点移动两格后停在它上面)',
+  (await rows())[0]?.selected === true,
+  JSON.stringify((await rows()).map((x) => x.selected)),
+)
+await page.keyboard.press('Enter')
+await sleep(400)
+const kbPort = await lastPort()
+check(
+  '⑬ 整合行上按 Enter = 点击它(发出 AI_INTEGRATE)',
+  kbPort?.name === 'pddcs:ai' && kbPort.posted[0]?.type === 'AI_INTEGRATE',
+  JSON.stringify({ name: kbPort?.name }),
+)
+await page.evaluate(() => window.__ai.emit({ type: 'DONE', payload: { text: '支持7天无理由退换,需保持商品完好。' } }))
+await sleep(350)
+check(
+  '⑬ 键盘路径填完同样自行退场,且文本落进输入框',
+  (await page.evaluate(() => document.querySelectorAll('.pddcs-popup').length)) === 0 &&
+    (await textarea()) === '支持7天无理由退换,需保持商品完好。',
+  JSON.stringify({
+    popups: await page.evaluate(() => document.querySelectorAll('.pddcs-popup').length),
+    ta: await textarea(),
+  }),
+)
+
+// ── ⑭ 关闭钮静止时是裸 ×(第五十一轮,用户"仅保留 × 图标即可")──
+await page.keyboard.press('Control+Enter')
+await sleep(700)
+const closeProbe = await page.evaluate(() => {
+  const btn = document.querySelector('.pddcs-popup-close')
+  if (!btn) return null
+  const cs = getComputedStyle(btn)
+  const box = btn.getBoundingClientRect()
+  return {
+    text: btn.textContent,
+    bg: cs.backgroundColor,
+    w: Math.round(box.width),
+    h: Math.round(box.height),
+  }
+})
+check(
+  '⑭ 关闭钮静止无底(只剩 × 字形),命中区仍是 26px',
+  closeProbe?.text === '×' &&
+    closeProbe?.bg === 'rgba(0, 0, 0, 0)' &&
+    closeProbe?.w === 26 &&
+    closeProbe?.h === 26,
+  JSON.stringify(closeProbe),
+)
+await page.evaluate(() => document.querySelector('.pddcs-popup-close')?.click())
+await sleep(150)
 
 // ── ⑩ top-k=3:面板里的知识库候选**一条不落**全部进 knowledgeIds ──
 // 用户口径(第五十轮):「ai整合是根据检索到的 top-k=3 的内容整合,而不是只有一条」。

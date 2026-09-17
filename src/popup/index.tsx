@@ -44,7 +44,7 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-page-bg, ${lightThem
 .pddcs-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   height: ${controlH.form}px; padding: 0 12px; border-radius: 6px; border: 1px solid;
-  font-size: 12px; font-weight: 500; line-height: 1.5;
+  font-size: ${fontSize.body}px; font-weight: ${fontWeight.medium}; line-height: 1.5;
   cursor: pointer; white-space: nowrap; font-family: inherit;
   transition: background-color .12s ease, border-color .12s ease, opacity .12s ease;
 }
@@ -53,7 +53,7 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-page-bg, ${lightThem
 /* ── 输入框(focus 时描边提亮,无重投影)────────────────── */
 .pddcs-input {
   width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid;
-  font-size: 12px; outline: none; font-family: inherit; line-height: 1.5;
+  font-size: ${fontSize.body}px; outline: none; font-family: inherit; line-height: 1.5;
   transition: border-color .12s ease;
 }
 
@@ -63,7 +63,7 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
 
 /* ── 导航图标按钮:任何状态下都只有图标本身,无背景块(2026-09-15 用户要求)── */
 .pddcs-rail-btn {
-  width: 36px; height: 36px; padding: 0; border: none; border-radius: 6px;
+  width: ${size.railBtn}px; height: ${size.railBtn}px; padding: 0; border: none; border-radius: 6px;
   background: transparent;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; position: relative;

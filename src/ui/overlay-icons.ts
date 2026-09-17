@@ -12,10 +12,11 @@
  *  - 渲染尺寸 13px,与 popup 行内图标钮(24px 钮 × 13px 图标)一致;
  *  - `currentColor` 继承,CSS 里由 `.pddcs-icon-btn` 决定颜色(含金色已设态)。
  */
-import { controlH } from './design'
+import { controlH, size } from './design'
 
-/** 图标渲染边长(与 popup 行内图标钮同档;钮本身取 controlH.inline) */
-export const ICON_SIZE = 13
+/** 图标渲染边长(与 popup 行内图标钮同档;钮本身取 controlH.inline)。
+ *  第五十一轮起取自 `design.size.icon` —— 与 popup 的 FoldersTab.ICON_SIZE 同源。 */
+export const ICON_SIZE = size.icon
 
 /** 图标钮边长:与 popup 行悬浮图标钮严格同档(等高铁律:同行控件同档) */
 export const ICON_BTN_SIZE = controlH.inline

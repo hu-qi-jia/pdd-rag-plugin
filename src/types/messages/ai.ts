@@ -37,4 +37,23 @@ export const AI_ERROR_TEXT: Record<string, string> = {
   timeout: '整合超时,请检查 API 配置',
   empty: '整合结果为空,请重试',
   network: '整合失败,请检查 API 配置',
+  // llm.ts 在响应没有 body 时现拼的标签(2026-09-17 审查:此前落到兜底,
+  // 用户看到的和"网络挂了"是同一句,丢掉了可行动的信息)
+  'no body': '接口没有返回内容,请检查接口地址',
+}
+
+/** `http <status>`:4xx 是这次请求本身的问题(地址/密钥),5xx 是对方服务的问题 —— 兜底话术分开 */
+const HTTP_4XX = /^http 4\d\d$/
+const HTTP_5XX = /^http 5\d\d$/
+
+/**
+ * 失败标签 → 面板文案。查表优先,再按前缀判 http 状态 ——
+ * `http 401` 这类标签是 llm.ts 运行时现拼的,没法进静态表。
+ */
+export function aiErrorText(error: string): string {
+  const exact = AI_ERROR_TEXT[error]
+  if (exact) return exact
+  if (HTTP_4XX.test(error)) return '接口拒绝了这次请求,请检查接口地址与密钥'
+  if (HTTP_5XX.test(error)) return '接口返回服务端错误,请稍后再试'
+  return '整合失败,请检查 API 配置'
 }

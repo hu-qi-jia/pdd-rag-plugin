@@ -521,20 +521,28 @@ describe('buildOverlayCss:Apple 式材料重设计(2026-09-17 第四十九轮 v2
   it('无描边小控件统一为全圆端 + 安静填充(关闭钮 / 图标钮 / 重试钮同形)', () => {
     const close = css.match(/\.pddcs-popup-close \{[^}]*\}/)![0]
     expect(close).toContain(`border-radius: ${radius.pill}px`)
-    expect(close).toContain(`background: ${lightTheme.fillQuiet}`)
-    expect(close).not.toContain('background: none') // 常驻可见,不再"悬浮才找得到"
     expect(css.match(/\.pddcs-icon-btn \{[^}]*\}/)![0]).toContain(`border-radius: ${radius.pill}px`)
     expect(css.match(/\.pddcs-icon-btn:hover \{[^}]*\}/)![0]).toContain(
       `background: ${lightTheme.fillQuietHover}`,
     )
   })
 
-  it('关闭钮恒有可见的圆底,且两主题都取本主题的安静填充', () => {
+  it('关闭钮静止时是裸 ×(第五十一轮:用户"仅保留 × 图标即可")', () => {
+    const close = css.match(/\.pddcs-popup-close \{[^}]*\}/)![0]
+    // 撤掉常驻圆底 —— 一屏无底文字里那颗圆是唯一多出来的墨点
+    expect(close).toContain('background: transparent')
+    expect(close).not.toContain(`background: ${lightTheme.fillQuiet}`)
+    // 命中区不缩水:视觉变小,可点范围仍是 26px
+    expect(close).toContain('width: 26px')
+    expect(close).toContain('height: 26px')
+    // 点得动由悬浮回执交代(静止没底 → 指上去有底)
     const dark = buildOverlayCss(darkTheme)
-    expect(dark.match(/\.pddcs-popup-close \{[^}]*\}/)![0]).toContain(
-      `background: ${darkTheme.fillQuiet}`,
-    )
-    expect(darkTheme.fillQuiet).not.toBe(lightTheme.fillQuiet)
+    for (const theme of [lightTheme, darkTheme]) {
+      const hover = buildOverlayCss(theme).match(/\.pddcs-popup-close:hover \{[^}]*\}/)![0]
+      expect(hover).toContain(`background: ${theme.fillQuiet}`)
+      expect(hover).toContain(`color: ${theme.text}`)
+    }
+    expect(dark.match(/\.pddcs-popup-close \{[^}]*\}/)![0]).toContain('background: transparent')
   })
 
   it('标题与页脚站在列表内容那条竖线上(头部不自成一套缩进)', () => {

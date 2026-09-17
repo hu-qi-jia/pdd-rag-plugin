@@ -419,10 +419,25 @@ check(
 )
 check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
 check(
-  '关闭钮常驻可见(有圆底、全圆端),不再"悬浮才找得到"',
-  visual.closeRadius === '9999px' && /^rgba\(0, 0, 0, 0\.0\d+\)$/.test(visual.closeBg),
+  '关闭钮静止是裸 ×(第五十一轮:撤掉常驻圆底,用户"仅保留 × 图标即可")、命中区仍是全圆端',
+  visual.closeRadius === '9999px' && visual.closeBg === 'rgba(0, 0, 0, 0)',
   `radius=${visual.closeRadius} bg=${visual.closeBg}`,
 )
+{
+  // 静止没底 → 指上去得有底:点得动这件事改由悬浮回执交代
+  await page.locator('.pddcs-popup-close').hover()
+  await sleep(180)
+  const hoverBg = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.pddcs-popup-close')).backgroundColor,
+  )
+  check(
+    '关闭钮悬浮时安静软底回来(静止没底不等于没反馈)',
+    /^rgba\(0, 0, 0, 0\.0\d+\)$/.test(hoverBg),
+    `hover bg=${hoverBg}`,
+  )
+  await page.mouse.move(0, 0)
+  await sleep(120)
+}
 check('回答正文为主层(13.5px)', visual.candTextFont === '13.5px', `candTextFont=${visual.candTextFont}`)
 check(
   '问题回显上置为引子(11.5px,原问题开头)',

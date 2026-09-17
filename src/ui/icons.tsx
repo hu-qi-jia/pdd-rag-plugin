@@ -35,14 +35,3 @@ export {
   Star as StarIcon,
   Loader2 as LoaderIcon,
 } from 'lucide-react'
-
-import { Sparkles as LucideSparkles } from 'lucide-react'
-
-interface IconProps {
-  size?: number
-}
-
-/** AI 徽标图标(品牌时刻:Sparkles,emerald 强调色) */
-export const AiSparkIcon = ({ size = 14 }: IconProps) => (
-  <LucideSparkles size={size} strokeWidth={2} />
-)

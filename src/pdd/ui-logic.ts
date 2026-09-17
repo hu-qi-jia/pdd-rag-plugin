@@ -25,6 +25,18 @@ export function mergeBuyerQuery(texts: string[], maxChars = 800): string {
   return joined.slice(-maxChars);
 }
 
+/**
+ * 候选类别 → 用户可见的中文名(第五十一轮单点化)。
+ *
+ * 此前这段三元表达式在内容脚本里抄了 **5 份**(徽标 1 处 + 「已填充:…」提示 4 处),
+ * 其中徽标那份写的是「历史」、提示那 4 份写的是「历史回忆」—— 同一条候选,
+ * 看到的标签和提示语说的是两个词。设计文档 §八 的类别 chip 名是「历史」,
+ * 故单点在这里,两处取同一个词。
+ */
+export function kindLabel(kind: Suggestion["kind"]): string {
+  return kind === "golden" ? "标准回答" : kind === "knowledge" ? "知识库" : "历史";
+}
+
 /** 候选列表 + 直填开关 → UI 动作 */
 export function decideUiAction(
   suggestions: Suggestion[],

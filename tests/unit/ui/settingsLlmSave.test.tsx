@@ -16,7 +16,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { GetStatsResponse, UpdateSettingsRequest } from '../../../src/types/messages'
 import type { PddSettings } from '../../../src/types/memory'
 import { DEFAULT_SETTINGS, LLM_DRAFT_STORAGE_KEY, SETTINGS_STORAGE_KEY } from '../../../src/shared/constants'
-import { LLM_DRAFT_DEBOUNCE_MS } from '../../../src/pdd/llm-draft'
+import { LLM_DRAFT_DEBOUNCE_MS } from '../../../src/popup/llmDraft'
 
 vi.mock('../../../src/shared/message-passing', () => ({
   sendMessage: vi.fn(),

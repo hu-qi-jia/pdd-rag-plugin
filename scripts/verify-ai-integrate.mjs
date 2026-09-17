@@ -17,6 +17,10 @@
  *  ⑧ 生成中途 Port 断开(SW 被回收)→ 落到可重试的失败态,不永久卡在「正在整合」
  *  ⑨ **键盘唤起时默认选中跳过整合行**:Ctrl+Enter 开面板后直接按 Enter 填的是
  *    第一条真实候选,而不是发起一次付费 API 请求(整合行是 ↑↓/Tab 走过去才触发的动作)
+ *  ⑩ 重设计(v2.6.34):整合行与候选行**等高**(按真实 rect 量,不靠 padding 虚撑)、
+ *     有知识库绿软底 + 同色描边(候选行是中性面色)、内容左缘与候选行重合;
+ *  ⑪ 生成后的展示:说明行让位给正文、正文取面板主层 13.5px、重试钮 24px 在行内右端、
+ *     整行不塌回单行;出结果后点整行不再发起请求(防误触再烧一次)
  *
  * 用法:node scripts/verify-ai-integrate.mjs   (需先 npm run build)
  * 注:验证全程无网络请求 —— LLM 调用被桩在 Port 后面,不进 content script。
@@ -24,7 +28,7 @@
 import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
 import path from 'node:path'
-import { CHROME, EXT, sleep } from './lib.mjs'
+import { CHROME, EXT, ROOT, sleep } from './lib.mjs'
 
 const CS = readdirSync(EXT).find((f) => /^pdd-ai-button\..*\.js$/.test(f))
 if (!CS) {
@@ -184,20 +188,49 @@ const clickAiButton = async (idx = 0) => {
   await sleep(500)
 }
 
+/**
+ * 读一屏所有行 —— 文字之外还量**真实几何**(第四十八轮重设计要验"高度和词条类似、
+ * 视觉和词条区分",那两条只能在真浏览器的 computedStyle / rect 上量)。
+ */
 const rows = () =>
   page.evaluate(() =>
-    [...document.querySelectorAll('.pddcs-cand')].map((r) => ({
-      ai: r.classList.contains('pddcs-ai-row'),
-      selected: r.classList.contains('pddcs-cand-selected'),
-      label: r.querySelector('.pddcs-ai-label')?.textContent ?? '',
-      draft: r.querySelector('.pddcs-ai-draft')?.textContent ?? '',
-      draftShown: (r.querySelector('.pddcs-ai-draft')?.style.display ?? '') !== 'none',
-      retry: r.querySelector('.pddcs-ai-retry')?.style.display !== 'none'
-        ? (r.querySelector('.pddcs-ai-retry')?.textContent ?? '')
-        : '',
-      text: r.querySelector('.pddcs-cand-text')?.textContent ?? '',
-      busy: r.classList.contains('is-busy'),
-    })),
+    [...document.querySelectorAll('.pddcs-cand')].map((r) => {
+      const box = r.getBoundingClientRect()
+      const cs = getComputedStyle(r)
+      const q = (s) => r.querySelector(s)
+      const shown = (el) => !!el && el.style.display !== 'none'
+      const draftEl = q('.pddcs-ai-draft')
+      const hintEl = q('.pddcs-ai-hint')
+      const retryEl = q('.pddcs-ai-retry')
+      const labelEl = q('.pddcs-ai-label')
+      const textEl = q('.pddcs-cand-text')
+      const padLeft = parseFloat(cs.paddingLeft)
+      return {
+        ai: r.classList.contains('pddcs-ai-row'),
+        selected: r.classList.contains('pddcs-cand-selected'),
+        label: labelEl?.textContent ?? '',
+        hint: hintEl?.textContent ?? '',
+        hintShown: shown(hintEl),
+        draft: draftEl?.textContent ?? '',
+        draftShown: shown(draftEl),
+        retry: shown(retryEl) ? (retryEl?.textContent ?? '') : '',
+        text: textEl?.textContent ?? '',
+        busy: r.classList.contains('is-busy'),
+        idle: r.classList.contains('is-idle'),
+        // 几何 / 配色:高度、底色、描边、内容左缘(rect 左缘 + 内边距 + 描边)
+        h: Math.round(box.height * 10) / 10,
+        bg: cs.backgroundColor,
+        borderW: cs.borderTopWidth,
+        borderColor: cs.borderTopColor,
+        cursor: cs.cursor,
+        contentLeft: Math.round(box.left + padLeft + parseFloat(cs.borderTopWidth)),
+        labelFont: labelEl ? getComputedStyle(labelEl).fontSize : '',
+        hintFont: hintEl ? getComputedStyle(hintEl).fontSize : '',
+        draftFont: draftEl ? getComputedStyle(draftEl).fontSize : '',
+        textFont: textEl ? getComputedStyle(textEl).fontSize : '',
+        retryH: retryEl ? Math.round(retryEl.getBoundingClientRect().height * 10) / 10 : 0,
+      }
+    }),
   )
 const textarea = () => page.evaluate(() => document.querySelector('#replyTextarea').value)
 const setTextarea = (v) => page.evaluate((t) => { document.querySelector('#replyTextarea').value = t }, v)
@@ -226,6 +259,64 @@ check(
   JSON.stringify(await page.evaluate(() => window.__ports.length)),
 )
 check('初始不显示草稿区与重试钮', r[1]?.draftShown === false && r[1]?.retry === '', JSON.stringify({ d: r[1]?.draftShown, retry: r[1]?.retry }))
+
+// ── ⑩ 重设计(2026-09-17 第四十八轮):高度向词条看齐 + 与词条区分开 ──
+// 用户原话:「高度太小了,修改为和词条高度类似,视觉效果要和词条区分开,请你以设计师的视角
+// 进行修改。生成后的展示效果也要重新设计」。全部按**真实渲染**的 rect / computedStyle 量,
+// 不 grep 源码字面值 —— 上面那些文案断言证明不了"看着像不像"。
+let idleAiRowH = 0
+{
+  const ai = r[1]
+  idleAiRowH = ai.h
+  const cands = r.filter((x) => !x.ai)
+  const minCandH = Math.min(...cands.map((x) => x.h))
+  const maxCandH = Math.max(...cands.map((x) => x.h))
+  check(
+    '⑩ 高度:整合行与候选行同档(矮的那条不再矮一半)',
+    ai.h >= minCandH - 8 && ai.h <= maxCandH + 8,
+    `ai=${ai.h} 候选=${cands.map((x) => x.h).join('/')}`,
+  )
+  check(
+    '⑩ 高度:不是靠 padding 虚撑 —— 第二层是两行真信息(什么出去 / 什么留下)',
+    ai.hintShown &&
+      ai.hint.split('\n').length === 2 &&
+      ai.hint.includes('1 条知识库内容') &&
+      ai.hint.includes('不出本机'),
+    JSON.stringify({ hint: ai.hint, h: ai.h }),
+  )
+  check(
+    '⑩ 视觉:整合行有知识库绿软底 + 1px 描边,候选行两条都没有(素材 vs 动作)',
+    ai.bg !== 'rgba(0, 0, 0, 0)' &&
+      ai.borderW === '1px' &&
+      ai.bg !== cands[0].bg &&
+      cands.every((x) => x.borderW === '0px' && x.bg === 'rgba(0, 0, 0, 0)'),
+    `ai=${ai.bg}/${ai.borderW} 候选=${cands[0].bg}/${cands[0].borderW}`,
+  )
+  check(
+    '⑩ 视觉:描边与底色同出知识库绿系(不是中性灰边框)',
+    ai.borderColor.includes('20, 174, 92') && ai.bg.includes('20, 174, 92'),
+    `${ai.borderColor} / ${ai.bg}`,
+  )
+  check(
+    '⑩ 对齐:整合行内容左缘 = 候选行内容左缘(11px 内边距 + 1px 描边 = 12px)',
+    ai.contentLeft === cands[0].contentLeft,
+    `ai=${ai.contentLeft} 候选=${cands[0].contentLeft}`,
+  )
+  check(
+    '⑩ 字号:主文案与候选正文同为面板主层 13.5px,说明行次级 11.5px',
+    ai.labelFont === cands[0].textFont &&
+      ai.labelFont === '13.5px' &&
+      ai.hintFont === '11.5px',
+    `主=${ai.labelFont} 候选正文=${cands[0].textFont} 说明=${ai.hintFont}`,
+  )
+  check(
+    '⑩ 手型只给 idle 态(还没点过才是"点哪儿都行"的大按钮)',
+    ai.cursor === 'pointer' && ai.idle === true && cands.every((x) => x.cursor === 'pointer'),
+    `ai=${ai.cursor} idle=${ai.idle}`,
+  )
+  // 版面留档(人工回看用,不是验收手段 —— 验收一律走上面的真实几何断言)
+  await page.locator('.pddcs-popup').screenshot({ path: path.join(ROOT, 'logs', 'ui-0917-ai-row-idle.png') })
+}
 
 // ── ④ 点它才发请求,且只带面板上展示过的知识库候选 ──
 const sentBefore = await page.evaluate(() => window.__sent.length)
@@ -276,6 +367,52 @@ check(
   JSON.stringify(await textarea()),
 )
 check('终态后退出 busy 态', done[1]?.busy === false)
+
+// ── ⑪ 生成后的展示(重设计的一半:结果按候选正文的口径排版,而不是行内小字)──
+{
+  const rowsNow = await rows()
+  const ai = rowsNow[1]
+  const candText = rowsNow.find((x) => !x.ai && x.text)?.textFont
+  check(
+    '⑪ 生成结果:说明行让位给正文(第二块一次只有一块,行高才停在候选那一档)',
+    ai.draftShown === true && ai.hintShown === false,
+    JSON.stringify({ draftShown: ai.draftShown, hintShown: ai.hintShown, hint: ai.hint }),
+  )
+  check(
+    '⑪ 生成结果:正文取面板主层字号(13.5px,与候选正文同档),不是 11.5px 的小字',
+    ai.draftFont === '13.5px' && ai.draftFont === candText,
+    `结果=${ai.draftFont} 候选=${candText}`,
+  )
+  check(
+    '⑪ 生成结果:重试钮搬进主行右端、按 24px 行内控件档等高(不再自占一行)',
+    done[1]?.retry === '重新生成' && ai.retryH === 24,
+    `retryH=${ai.retryH}`,
+  )
+  // 行高随正文长短走(与候选行同理),但**不能塌回去** —— 出结果那一瞬整行缩水,
+  // 看着就像内容丢了。容差取一行正文的高度(13.5px × 1.6 = 21.6),再多就是塌了。
+  check(
+    '⑪ 生成结果:行高随正文走但不塌回单行(缩水不超过一行正文)',
+    ai.h >= idleAiRowH - 22,
+    `done=${ai.h} idle=${idleAiRowH} 候选=${rowsNow.filter((x) => !x.ai).map((x) => x.h).join('/')}`,
+  )
+  check(
+    '⑪ 生成结果:整行底色与描边仍是知识库绿(出结果不换成中性面色)',
+    ai.bg.includes('20, 174, 92') && ai.borderColor.includes('20, 174, 92'),
+    `${ai.bg} / ${ai.borderColor}`,
+  )
+  await page.locator('.pddcs-popup').screenshot({ path: path.join(ROOT, 'logs', 'ui-0917-ai-row-done.png') })
+
+  // 出结果后整行不再是触发器:想复制生成内容的人点一下文字,不该再烧一次 API 请求
+  const portsBefore = await page.evaluate(() => window.__ports.length)
+  await page.locator('.pddcs-ai-row').click({ position: { x: 40, y: 8 } })
+  await sleep(300)
+  check(
+    '⑪ 出结果后点整行不再发起请求(重试走右上角那枚钮,键盘 Enter 仍等同于点它)',
+    (await page.evaluate(() => window.__ports.length)) === portsBefore &&
+      (await rows())[1]?.label === '✓ 已填入输入框',
+    JSON.stringify({ before: portsBefore, after: await page.evaluate(() => window.__ports.length) }),
+  )
+}
 check(
   '整合全程零 sendMessage(流式内容只在 Port 上走,不经过一问一答)',
   (await page.evaluate(() => window.__sent.length)) === sentBefore,

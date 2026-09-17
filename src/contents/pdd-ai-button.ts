@@ -28,6 +28,7 @@ import {
   aiRowBusy,
   aiRowDraft,
   aiRowInitialSelection,
+  aiRowHint,
   aiRowInsertIndex,
   aiRowLabel,
   aiRowRetryLabel,
@@ -441,16 +442,21 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
   icon.textContent = '✦'
   const label = document.createElement('span')
   label.className = 'pddcs-ai-label'
-  const main = document.createElement('div')
-  main.className = 'pddcs-ai-main'
-  main.append(icon, label)
-
-  const draft = document.createElement('div')
-  draft.className = 'pddcs-ai-draft'
+  // 重试钮在主行右端(margin-left:auto 顶上),不再另起一行把自己的高度加到行上
   const retry = document.createElement('button')
   retry.type = 'button'
   retry.className = 'pddcs-ai-retry'
-  row.append(main, draft, retry)
+  const main = document.createElement('div')
+  main.className = 'pddcs-ai-main'
+  main.append(icon, label, retry)
+
+  // 第二层:说明行 / 正文**二选一**(见 render)—— 同一时刻行内只有一个"第二块",
+  // 行高才与候选行的「小字行 + 大字行」结构对齐
+  const hint = document.createElement('div')
+  hint.className = 'pddcs-ai-hint'
+  const draft = document.createElement('div')
+  draft.className = 'pddcs-ai-draft'
+  row.append(main, hint, draft)
 
   let state: AiRowState = { phase: 'idle' }
   let loadingTimer: number | null = null
@@ -460,10 +466,16 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
   const render = (): void => {
     row.classList.toggle('is-busy', aiRowBusy(state))
     row.classList.toggle('is-error', state.phase === 'error')
+    row.classList.toggle('is-idle', state.phase === 'idle')
     label.textContent = aiRowLabel(state, loadingVisible)
     const text = aiRowDraft(state)
     draft.textContent = text
     draft.style.display = text ? '' : 'none'
+    // 正文出现时说明行让位:出结果后"会发生什么"已是既成事实,
+    // 再说一遍只会把行撑成三层、比候选行高出一截
+    const hintText = text ? '' : aiRowHint(state, knowledgeIds.length)
+    hint.textContent = hintText
+    hint.style.display = hintText ? '' : 'none'
     const canRetry = aiRowRetryable(state)
     retry.style.display = canRetry ? '' : 'none'
     retry.textContent = aiRowRetryLabel(state)
@@ -521,9 +533,11 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
     p.postMessage(req)
   }
 
+  // 整行只在 **idle** 时是"点哪儿都行"的大按钮。出结果后整行不再是触发器:
+  // 想选中/复制生成内容的人点一下文字,不该因此再烧一次 API 请求(重试走右上角那枚钮)
   row.addEventListener('click', (ev) => {
     ev.stopPropagation()
-    start()
+    if (state.phase === 'idle') start()
   })
   retry.addEventListener('click', (ev) => {
     ev.stopPropagation()
@@ -911,8 +925,14 @@ document.addEventListener(
       const picked = armedPanel.rows[armedPanel.selected]
       // AI 整合行:Enter 等同于点击该行(面板不关,好让「重新生成」留在眼前)
       if (picked.ai) {
-        const aiRow = popupEl?.querySelectorAll('.pddcs-cand')[armedPanel.selected]
-        ;(aiRow as HTMLElement | undefined)?.click()
+        const aiRow = popupEl?.querySelectorAll('.pddcs-cand')[armedPanel.selected] as
+          | HTMLElement
+          | undefined
+        // 整行点击只在 idle 生效(防鼠标误触再烧一次请求);键盘走到这一行是**明确意图**,
+        // 故出结果后改走行内那枚「重试 / 重新生成」钮 —— 与鼠标点它是同一个入口
+        const retry = aiRow?.querySelector<HTMLElement>('.pddcs-ai-retry')
+        if (retry && retry.style.display !== 'none') retry.click()
+        else aiRow?.click()
         return
       }
       if (fillInput(picked.s.text)) {

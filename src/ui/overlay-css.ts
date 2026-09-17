@@ -142,21 +142,61 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    注意 padding-left 与 text-overflow:ellipsis 不冲突:省略号仍落在行右缘 */
 .pddcs-cand-q { padding-left: ${BADGE_PAD_X}px; margin-bottom: 4px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 「根据知识库内容整合并回复」行(AI 整合,默认关闭时不渲染):
-   与候选行同族但要有"这是一次动作、不是一条素材"的观感 —— 左侧一枚 ✦ +
-   primary 色主文案;生成中的草稿沿用候选正文的排版,免得流式时行高跳动 */
-.pddcs-ai-row { display: flex; flex-direction: column; gap: 4px; }
-.pddcs-ai-main { display: flex; align-items: center; gap: 6px; padding-left: ${BADGE_PAD_X}px; }
-.pddcs-ai-icon { color: ${semantic.knowledge}; font-size: ${fontSize.secondary}px; line-height: 1; }
-.pddcs-ai-label { color: ${semantic.knowledge}; font-size: ${fontSize.secondary}px; font-weight: 500; }
+/* ── 「根据知识库内容整合并回复」行(AI 整合,默认关闭时不渲染)────────────────────
+   v2.6.34 重设计(2026-09-17 用户:「高度太小了,修改为和词条高度类似,视觉效果要和词条区分开」)。
+   ① **高度同族** —— 沿用候选行同一套盒子(margin 1px 8px + 圆角 radius.lg),
+      行内同样是「小字行 + 大字行」两层:主行(min-height 取 controlH.inline 顶住 24px 操作钮)
+      + 说明行 11.5px;出结果后说明行让位给正文,第三块正好顶到候选正文那一档 ——
+      整行高度于是与候选行**自然同档**,不靠 padding 虚撑;
+   ② **视觉区分** —— 候选行是「中性面色 + 彩色类别徽标」= 一条素材;
+      本行是「知识库绿软底 + 同色细描边」= 一次动作,且不挂类别徽标(它不是类别)。
+      悬浮/选中时绿底加深一档,与候选行的中性灰填充一眼可分;
+      失败态整行转语义红(描边 + 软底 + 文案同色),不再是只变个文字色;
+   ③ **左缘同线** —— 内边距 11px + 1px 描边 = 候选行的 12px,两类行的内容左缘重合,
+      行内文字再各自缩进 BADGE_PAD_X(与候选正文、徽标文字同一条竖线);
+   ④ **特异度** —— 选择器带双类(0-2-0)会盖过单类的 .pddcs-cand:hover / .pddcs-cand-selected,
+      故悬浮与选中态必须在此**显式**补写,失败态规则排在悬浮之后 */
+.pddcs-cand.pddcs-ai-row { display: flex; flex-direction: column; gap: ${spacing.xs}px;
+  padding: ${spacing.xs}px 11px; cursor: default;
+  border: 1px solid rgba(20, 174, 92, 0.3); background: ${semantic.knowledgeBg}; }
+/* 只有"还没点过"的整行才是大按钮(点哪儿都行);出结果后整行不再是触发器 ——
+   想复制生成内容的人不该因为点了一下文字就再花一次 API 请求,重试走右上角那枚钮 */
+.pddcs-cand.pddcs-ai-row.is-idle { cursor: pointer; }
+.pddcs-cand.pddcs-ai-row:hover,
+.pddcs-cand.pddcs-ai-row.pddcs-cand-selected,
+.pddcs-cand.pddcs-ai-row.pddcs-cand-selected:hover {
+  background: rgba(20, 174, 92, 0.16); border-color: rgba(20, 174, 92, 0.45); }
+.pddcs-cand.pddcs-ai-row.is-error {
+  border-color: rgba(217, 48, 38, 0.32); background: rgba(217, 48, 38, 0.07); }
+.pddcs-cand.pddcs-ai-row.is-error:hover { background: rgba(217, 48, 38, 0.12); }
+/* 主行:✦ + 动作名(13.5px = 面板唯一主层,与候选正文同档)+ 右侧「重试/重新生成」钮。
+   min-height 取行内控件档,使操作钮显隐不改变主行高度(等高铁律) */
+.pddcs-ai-main { display: flex; align-items: center; gap: ${spacing.sm}px;
+  min-height: ${controlH.inline}px; padding-left: ${BADGE_PAD_X}px; }
+.pddcs-ai-icon { color: ${semantic.knowledge}; font-size: ${fontSize.title}px; line-height: 1; }
+.pddcs-ai-label { color: ${semantic.knowledge}; font-size: ${fontSize.title}px; font-weight: 500;
+  line-height: 1.6; }
 .pddcs-ai-row.is-error .pddcs-ai-icon,
 .pddcs-ai-row.is-error .pddcs-ai-label { color: ${semantic.danger}; }
-.pddcs-ai-draft { padding-left: ${BADGE_PAD_X}px; color: ${tk.textMuted};
-  font-size: ${fontSize.secondary}px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.pddcs-ai-retry { align-self: flex-start; margin-left: ${BADGE_PAD_X}px; padding: 2px 8px;
-  border: 1px solid ${tk.border}; border-radius: ${radius.sm}px; background: ${tk.bg};
-  color: ${tk.textMuted}; font-size: ${fontSize.caption}px; cursor: pointer; }
+/* 说明行(v2.6.34 新增):两行真信息 —— 什么出去、什么留下。这行动作**会出网**,
+   得在点之前就把边界写在脸上(ADR-0006 靠用户知情兜底),也是本行与候选行等高的那一层。
+   pre-line:认文案里的**语义换行**,同时在窄处仍可自然折行 ——
+   不出网声明绝不用省略号截断(截掉的正是要用户看清的那半句)。 */
+.pddcs-ai-hint { padding-left: ${BADGE_PAD_X}px; color: ${tk.textMuted};
+  font-size: ${fontSize.secondary}px; line-height: 1.5;
+  white-space: pre-line; overflow-wrap: break-word; }
+/* 生成结果 = 一段正文,照候选正文的排版(13.5px / 1.6 / 4 行截断),
+   而不是"行内小字的补充说明" —— 用户要的就是能直接发出去的话术 */
+.pddcs-ai-draft { padding-left: ${BADGE_PAD_X}px; color: ${tk.text};
+  font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+/* 「重试 / 重新生成」钮:搬到主行右端(不再另起一行拉高行高),24px 行内档。
+   box-sizing 显式声明 —— 本样式注入平台页面,不享受 popup 的全局 border-box 重置 */
+.pddcs-ai-retry { box-sizing: border-box; flex: 0 0 auto; margin-left: auto;
+  height: ${controlH.inline}px; padding: 0 ${spacing.lg}px;
+  border: 1px solid ${tk.border}; border-radius: ${radius.md}px; background: ${tk.bg};
+  color: ${tk.textMuted}; font-size: ${fontSize.secondary}px; line-height: 1; cursor: pointer;
+  transition: background-color .12s ease, color .12s ease; }
 .pddcs-ai-retry:hover { background: ${tk.btnHoverBg}; color: ${tk.text}; }
 .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin .9s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }

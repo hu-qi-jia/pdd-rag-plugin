@@ -4,6 +4,7 @@ import {
   AI_LOADING_DELAY_MS,
   aiRowBusy,
   aiRowDraft,
+  aiRowHint,
   aiRowInitialSelection,
   aiRowInsertIndex,
   aiRowLabel,
@@ -67,6 +68,66 @@ describe('aiRowLabel', () => {
     expect(aiRowLabel({ phase: 'error', error: 'timeout' })).toBe('整合超时,请检查 API 配置')
     expect(aiRowLabel({ phase: 'error', error: 'unconfigured' })).toBe('请先在设置中配置 LLM API')
     expect(aiRowLabel({ phase: 'error', error: '谁知道呢' })).toBe('整合失败,请检查 API 配置')
+  })
+})
+
+describe('aiRowHint:行内第二行(v2.6.34 重设计)', () => {
+  it('idle 说清"发出去的是哪几条、发给谁" —— 这条动作会出网,点之前就得写在脸上', () => {
+    const hint = aiRowHint({ phase: 'idle' }, 3)
+    expect(hint).toContain('3')
+    expect(hint).toContain('知识库')
+    expect(hint).toContain('接口')
+    // 条数是**实数**,不是泛泛的"几条"
+    expect(aiRowHint({ phase: 'idle' }, 1)).toContain('1')
+  })
+
+  it('两行分工:一行说"什么出去",一行说"什么留下"(换行是语义换行,不是宽度折行)', () => {
+    const [out, stays] = aiRowHint({ phase: 'idle' }, 3).split('\n')
+    expect(aiRowHint({ phase: 'idle' }, 3).split('\n')).toHaveLength(2)
+    expect(out).toContain('发给你配置的接口')
+    expect(stays).toContain('历史回复')
+    expect(stays).toContain('标准回答')
+    expect(stays).toContain('不出本机')
+    // 在途也得留着这句 —— 内容正在路上,此刻最该被看见
+    expect(aiRowHint({ phase: 'working' }, 3).split('\n')[1]).toBe(stays)
+  })
+
+  it('在途沿用同一个条数,前后说的是同一件事', () => {
+    expect(aiRowHint({ phase: 'working' }, 2)).toContain('2')
+    expect(aiRowHint({ phase: 'streaming', draft: '甲' }, 2)).not.toContain('2') // 已在生成,不再重复发送口径
+  })
+
+  it('完成态**没有**说明行:正文占的就是第二块,行高才不会长到三层', () => {
+    expect(aiRowHint({ phase: 'done', text: '甲' }, 2)).toBe('')
+  })
+
+  it('终态各自给出下一步动作,而不是复述主行', () => {
+    const noanswer = aiRowHint({ phase: 'noanswer' }, 2)
+    expect(noanswer).not.toContain('不足以回答') // 主行已经说了
+    expect(noanswer).toContain('知识库') // 指向可操作的出口:补内容
+    const err = aiRowHint({ phase: 'error', error: 'timeout' }, 2)
+    expect(err).toContain('设置')
+  })
+
+  it('行内第二块一次只有一块:完成态由正文占位,说明行让开', () => {
+    // done 必有正文(后台把空答案映射成 NO_ANSWER),第二块归正文,说明行让位 ——
+    // 两块一起渲染,行高就会比候选行高出一整行
+    expect(aiRowDraft({ phase: 'done', text: '甲' })).not.toBe('')
+    expect(aiRowHint({ phase: 'done', text: '甲' }, 2)).toBe('')
+    // streaming 的说明只是**首字未到时的兜底**(组件在正文非空时本就不渲染说明行);
+    // 兜底留成非空,行高才不会在"已开始生成、还没有字"那一瞬塌回一行
+    expect(aiRowHint({ phase: 'streaming', draft: '' }, 2)).not.toBe('')
+  })
+
+  it('每个状态都有话可说(只有完成态是刻意的空)', () => {
+    const all: AiRowState[] = [
+      { phase: 'idle' },
+      { phase: 'working' },
+      { phase: 'streaming', draft: '' },
+      { phase: 'noanswer' },
+      { phase: 'error', error: 'x' },
+    ]
+    for (const s of all) expect(aiRowHint(s, 1).length).toBeGreaterThan(0)
   })
 })
 

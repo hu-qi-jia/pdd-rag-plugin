@@ -9,7 +9,7 @@ import {
   THEME_STORAGE_KEY,
 } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
-import { semantic } from '../../../src/ui/design'
+import { controlH, fontSize, semantic, spacing } from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底 + 主/次级文本色,且不混入深色文本', () => {
@@ -231,46 +231,127 @@ describe('buildOverlayCss:词条留白重配 + 折叠数归位(2026-09-16 第三
   })
 })
 
-describe('buildOverlayCss:AI 整合行(2026-09-17 第四十八轮 P2-5)', () => {
-  it('整合行三件套齐备(主行 / 草稿 / 重试钮),默认不渲染由 JS 决定(CSS 只管长相)', () => {
-    const css = buildOverlayCss(lightTheme)
-    expect(css).toContain('.pddcs-ai-row {')
+describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八轮)', () => {
+  // 用户原话:「高度太小了,修改为和词条高度类似,视觉效果要和词条区分开」。
+  // 这组用例把"类似"和"区分"各自拆成可断言的不变量:
+  //   类似 = 与候选行同一套盒子(外边距/圆角/内容左缘)+ 同一套两层结构(小字行 + 大字行);
+  //   区分 = 候选行是中性面色 + 类别徽标(素材),整合行是知识库绿软底 + 同色描边(动作)。
+  const css = buildOverlayCss(lightTheme)
+  const rule = (sel: RegExp) => css.match(sel)![0]
+  const aiRow = rule(/\.pddcs-cand\.pddcs-ai-row \{[^}]*\}/)
+
+  it('五块组件齐备(主行 / 说明行 / 正文 / 重试钮),纵向排布由 JS 决定显隐', () => {
+    expect(css).toContain('.pddcs-cand.pddcs-ai-row {')
+    expect(css).toContain('.pddcs-ai-main {')
+    expect(css).toContain('.pddcs-ai-hint {')
     expect(css).toContain('.pddcs-ai-draft {')
     expect(css).toContain('.pddcs-ai-retry {')
-    // 行内纵向排布:主文案在上、草稿/重试在下
-    expect(css.match(/\.pddcs-ai-row \{[^}]*\}/)![0]).toContain('flex-direction: column')
+    expect(aiRow).toContain('flex-direction: column')
   })
-  it('✦ 与主文案走知识库语义绿(与 .pddcs-badge.knowledge 同源,一眼看出"这是动作不是素材")', () => {
-    const css = buildOverlayCss(lightTheme)
-    expect(css.match(/\.pddcs-ai-icon \{[^}]*\}/)![0]).toContain(`color: ${semantic.knowledge}`)
-    expect(css.match(/\.pddcs-ai-label \{[^}]*\}/)![0]).toContain(`color: ${semantic.knowledge}`)
+
+  it('高度同族:沿用候选行同一套盒子(外边距/圆角不另起一套)', () => {
+    // 整合行靠 .pddcs-cand 类继承外边距与圆角 —— 自己再写一遍就会和候选行错位
+    expect(aiRow).not.toContain('margin:')
+    expect(aiRow).not.toContain('border-radius:')
   })
-  it('失败态整体转语义红(图标 + 文案),不靠文案里的"失败"二字表意', () => {
-    const css = buildOverlayCss(lightTheme)
-    const errRule = css.match(/\.pddcs-ai-row\.is-error[\s\S]*?\}/)![0]
-    expect(errRule).toContain(`color: ${semantic.danger}`)
-    expect(errRule).toContain('.pddcs-ai-icon')
-    expect(errRule).toContain('.pddcs-ai-label')
+
+  it('内容左缘与候选行重合:11px 内边距 + 1px 描边 = 候选行的 12px', () => {
+    const padX = (r: string) => Number(r.match(/padding:\s*[\d.]+px\s+([\d.]+)px/)![1])
+    const candPadX = padX(rule(/\.pddcs-cand \{[^}]*\}/))
+    expect(padX(aiRow) + 1).toBe(candPadX)
+    expect(aiRow).toContain('border: 1px solid') // 那条 1px 描边就是被"算进来"的那 1px
   })
-  it('草稿与重试钮吃主题令牌 → 浅/深两套产物不同(不硬编码颜色)', () => {
-    const light = buildOverlayCss(lightTheme)
+
+  it('两层结构撑起高度:主行顶 24px 行内控件档 + 说明行 11.5px(不靠 padding 虚撑)', () => {
+    expect(rule(/\.pddcs-ai-main \{[^}]*\}/)).toContain(`min-height: ${controlH.inline}px`)
+    const hint = rule(/\.pddcs-ai-hint \{[^}]*\}/)
+    expect(hint).toContain(`font-size: ${fontSize.secondary}px`)
+    // 认语义换行(idle 的"什么出去 / 什么留下"各占一行),窄处仍可折行;
+    // 不用省略号截断 —— 截掉的正是要用户看清的那半句边界声明
+    expect(hint).toContain('white-space: pre-line')
+    expect(hint).not.toContain('text-overflow')
+  })
+
+  it('视觉区分:整合行是知识库绿软底 + 同色描边,候选行只有中性面色', () => {
+    expect(aiRow).toContain(`background: ${semantic.knowledgeBg}`)
+    expect(aiRow).toContain('border: 1px solid rgba(20, 174, 92,')
+    // 候选行本体不带描边、不带语义底色(它的颜色全在类别徽标里)
+    const cand = rule(/\.pddcs-cand \{[^}]*\}/)
+    expect(cand).not.toContain('border:')
+    expect(cand).not.toContain(semantic.knowledgeBg)
+    // 整合行不挂类别徽标:它是一次动作,不是一个类别
+    expect(css).not.toContain('.pddcs-ai-row .pddcs-badge')
+  })
+
+  it('悬浮/选中态显式补写(双类选择器会盖过单类的 .pddcs-cand:hover / -selected)', () => {
+    // 不补写的话,整合行悬浮时会被自己的基础规则压住,看着像"没反应"
+    expect(css).toContain('.pddcs-cand.pddcs-ai-row:hover')
+    expect(css).toContain('.pddcs-cand.pddcs-ai-row.pddcs-cand-selected')
+    // 且悬浮态是同色加深,不是候选行那层中性灰
+    const hover = rule(/\.pddcs-cand\.pddcs-ai-row:hover,[\s\S]*?\{[^}]*\}/)
+    expect(hover).toContain('rgba(20, 174, 92,')
+    expect(hover).not.toContain(`background: ${lightTheme.selectedBg}`)
+  })
+
+  it('只有 idle 态整行可点(idle 才给手型),其余态的整行不再是触发器', () => {
+    expect(aiRow).toContain('cursor: default')
+    expect(rule(/\.pddcs-cand\.pddcs-ai-row\.is-idle \{[^}]*\}/)).toContain('cursor: pointer')
+  })
+
+  it('✦ 与主文案走知识库语义绿,且主文案取面板唯一主层(13.5px,与候选正文同档)', () => {
+    expect(rule(/\.pddcs-ai-icon \{[^}]*\}/)).toContain(`color: ${semantic.knowledge}`)
+    const label = rule(/\.pddcs-ai-label \{[^}]*\}/)
+    expect(label).toContain(`color: ${semantic.knowledge}`)
+    expect(label).toContain(`font-size: ${fontSize.title}px`)
+    expect(rule(/\.pddcs-cand-text \{[^}]*\}/)).toContain(`font-size: ${fontSize.title}px`)
+  })
+
+  it('失败态:文案转红 + 整行转红软底红描边(不靠文案里的"失败"二字表意)', () => {
+    const colorRule = rule(/\.pddcs-ai-row\.is-error \.pddcs-ai-icon,[\s\S]*?\{[^}]*\}/)
+    expect(colorRule).toContain(`color: ${semantic.danger}`)
+    expect(colorRule).toContain('.pddcs-ai-label')
+    const surface = rule(/\.pddcs-cand\.pddcs-ai-row\.is-error \{[^}]*\}/)
+    expect(surface).toContain('rgba(217, 48, 38,')
+    expect(surface).not.toContain(semantic.knowledgeBg)
+  })
+
+  it('生成结果按候选正文口径排版(同字号同截断行数),流式时行高不跳', () => {
+    const draft = rule(/\.pddcs-ai-draft \{[^}]*\}/)
+    const text = rule(/\.pddcs-cand-text \{[^}]*\}/)
+    for (const decl of [`font-size: ${fontSize.title}px`, 'line-height: 1.6']) {
+      expect(draft).toContain(decl)
+      expect(text).toContain(decl)
+    }
+    expect(draft).toContain('white-space: pre-wrap')
+    expect(draft).toContain('word-break: break-word')
+    expect(draft.match(/-webkit-line-clamp: (\d+)/)![1]).toBe(text.match(/-webkit-line-clamp: (\d+)/)![1])
+  })
+
+  it('正文与说明行走主题令牌(浅/深两套产物不同,不硬编码),正文取主文本色', () => {
     const dark = buildOverlayCss(darkTheme)
-    expect(light.match(/\.pddcs-ai-draft \{[^}]*\}/)![0]).toContain(`color: ${lightTheme.textMuted}`)
-    expect(light.match(/\.pddcs-ai-retry \{[^}]*\}/)![0]).toContain(`border: 1px solid ${lightTheme.border}`)
-    expect(light).not.toBe(dark)
+    expect(rule(/\.pddcs-ai-draft \{[^}]*\}/)).toContain(`color: ${lightTheme.text}`)
+    expect(rule(/\.pddcs-ai-hint \{[^}]*\}/)).toContain(`color: ${lightTheme.textMuted}`)
+    expect(dark.match(/\.pddcs-ai-draft \{[^}]*\}/)![0]).toContain(`color: ${darkTheme.text}`)
+    expect(css).not.toBe(dark)
   })
-  it('草稿行高/换行沿用候选正文口径(流式时行高不跳);比正文少一行(3 行截断,正文 4 行)', () => {
-    const css = buildOverlayCss(lightTheme)
-    const draftRule = css.match(/\.pddcs-ai-draft \{[^}]*\}/)![0]
-    expect(draftRule).toContain('white-space: pre-wrap')
-    expect(draftRule).toContain('word-break: break-word')
-    expect(draftRule).toContain('-webkit-line-clamp: 3')
-    expect(css.match(/\.pddcs-cand-text \{[^}]*\}/)![0]).toContain('-webkit-line-clamp: 4')
+
+  it('重试钮在主行右端、按 24px 行内控件档等高,不另起一行拉高行高', () => {
+    const retry = rule(/\.pddcs-ai-retry \{[^}]*\}/)
+    expect(retry).toContain(`height: ${controlH.inline}px`)
+    expect(retry).toContain('margin-left: auto')
+    expect(retry).toContain('box-sizing: border-box') // 覆盖层注入平台页面,不享受 popup 的全局重置
+    expect(retry).toContain(`border: 1px solid ${lightTheme.border}`)
   })
+
   it('在途 = ✦ 原地转圈,且尊重"减少动态效果"', () => {
-    const css = buildOverlayCss(lightTheme)
     expect(css).toContain('.pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin')
     expect(css).toContain('@media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }')
+  })
+
+  it('说明行不参与行高竞争:不给它 -webkit-line-clamp(那是正文的截断规则)', () => {
+    expect(rule(/\.pddcs-ai-hint \{[^}]*\}/)).not.toContain('line-clamp')
+    expect(spacing.xs).toBeGreaterThan(0) // 主行与第二层之间的 4px 间距走栅格常量
+    expect(aiRow).toContain(`gap: ${spacing.xs}px`)
   })
 })
 

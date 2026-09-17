@@ -41,6 +41,39 @@ export function aiRowLabel(state: AiRowState, loadingVisible = true): string {
   }
 }
 
+/**
+ * 行内第二块(说明行,v2.6.34 重设计新增)。
+ *
+ * 两件事:①说清"点下去会发生什么" —— 主行只写了动作名,而这条动作**会出网**,
+ * 出去的是哪几条、发给谁、什么留在本机,必须在点之前就写在脸上(ADR-0006 的边界靠用户知情兜底);
+ * ②供给高度 —— 只有一行文字时,整行比候选行矮一整行,看着像条漏排的标签
+ * (用户 2026-09-17:「高度太小了,修改为和词条高度类似」)。
+ * 说明行是真信息,不是占位:两行分别回答"什么出去"与"什么留下"。
+ *
+ * 换行是**语义换行**(`\n`,CSS 侧 white-space: pre-line):出网内容一行、不出网内容一行,
+ * 而不是让宽度随便找个字断开。与正文互斥(调用方负责):streaming/done 时第二块是生成结果本身。
+ */
+export function aiRowHint(state: AiRowState, knowledgeCount: number): string {
+  /** 不出网的东西 —— 每次点击都值得再写一遍(ADR-0006 的三条件之一就是"用户此刻知情") */
+  const staysHome = '只发送这条买家问题,历史回复与标准回答不出本机'
+  switch (state.phase) {
+    case 'idle':
+      // 带上实际条数:用户据此知道**具体**有多少内容会离开本机
+      return `点击后把命中的 ${knowledgeCount} 条知识库内容发给你配置的接口\n${staysHome}`
+    case 'working':
+      // 在途沿用同一句边界声明 —— 内容正在路上,这句话此刻最该被看见
+      return `正在发送 ${knowledgeCount} 条知识库内容…\n${staysHome}`
+    case 'streaming':
+      return '正在生成…'
+    case 'done':
+      return '' // 结果本身就是第二块,不再赘述"已填入输入框"(主行已说)
+    case 'noanswer':
+      return '换个问法试试,或往知识库补充这条内容'
+    case 'error':
+      return '检查设置页的接口地址与密钥后重试'
+  }
+}
+
 /** 流式草稿:只有这两个阶段有内容可展示 */
 export function aiRowDraft(state: AiRowState): string {
   if (state.phase === 'streaming') return state.draft

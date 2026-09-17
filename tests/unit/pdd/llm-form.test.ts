@@ -1,11 +1,14 @@
 // 设置页 AI 表单纯逻辑单测:主机权限推导 / 测试连接文案 / 与后台判据的一致性。
 import { describe, it, expect } from 'vitest'
 import {
+  llmFormFromSettings,
   llmFormReady,
+  llmSettingsPatch,
   llmTestErrorText,
   llmTestFailed,
   llmTestLabel,
   originsForBaseUrl,
+  sameLlmFields,
   type LlmTestState,
 } from '../../../src/pdd/llm-form'
 import { isLlmConfigured, testLlmConnection } from '../../../src/background/llm'
@@ -167,5 +170,39 @@ describe('testLlmConnection:打完就收,不花用户的钱和时间', () => {
     const r = await testLlmConnection({ ...cfg, timeoutMs: 200 })
     expect(r).toEqual({ ok: false, error: 'timeout' })
     expect(aborted).toBe(true)
+  })
+})
+
+// 第四十八轮(用户反馈"保存后内容全部消失"的真实根因):
+// 表单字段叫 baseUrl/apiKey/model,设置字段叫 llmBaseUrl/llmApiKey/llmModel ——
+// 两个名字都"看起来对",摊错了不报错:展开表达式不过 TS 的多余属性检查,
+// 后台按自己的字段名一读全是旧值。保存于是"成功"了,内容却一个没进去。
+describe('表单 ↔ 设置 的字段名映射(第四十八轮)', () => {
+  const form = { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-1', model: 'deepseek-chat' }
+  const settings = {
+    llmBaseUrl: 'https://api.deepseek.com/v1',
+    llmApiKey: 'sk-1',
+    llmModel: 'deepseek-chat',
+  }
+
+  it('llmSettingsPatch 输出的是设置自己的键名(不能把 baseUrl 原样带过去)', () => {
+    expect(llmSettingsPatch(form)).toEqual(settings)
+    expect(llmSettingsPatch(form)).not.toHaveProperty('baseUrl')
+    expect(llmSettingsPatch(form)).not.toHaveProperty('apiKey')
+    expect(llmSettingsPatch(form)).not.toHaveProperty('model')
+  })
+
+  it('llmFormFromSettings 是它的逆(读回来要能填进框里)', () => {
+    expect(llmFormFromSettings(settings)).toEqual(form)
+    expect(llmFormFromSettings(llmSettingsPatch(form))).toEqual(form)
+  })
+
+  it('sameLlmFields 逐字段比,全同才 true(判断"有没有未保存的改动")', () => {
+    expect(sameLlmFields(form, { ...form })).toBe(true)
+    expect(sameLlmFields(form, { ...form, apiKey: 'sk-2' })).toBe(false)
+    expect(sameLlmFields(form, { ...form, baseUrl: 'https://other/v1' })).toBe(false)
+    expect(sameLlmFields(form, { ...form, model: 'gpt-4o-mini' })).toBe(false)
+    // 空 vs 填了也算改动(否则"填完点保存按钮是灰的")
+    expect(sameLlmFields(form, { baseUrl: '', apiKey: '', model: '' })).toBe(false)
   })
 })

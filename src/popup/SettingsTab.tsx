@@ -26,11 +26,14 @@ import {
   saveLlmDraft,
 } from '../pdd/llm-draft'
 import {
+  llmFormFromSettings,
   llmFormReady,
   type LlmFormFields,
+  llmSettingsPatch,
   llmTestFailed,
   llmTestLabel,
   originsForBaseUrl,
+  sameLlmFields,
   type LlmTestState,
 } from '../pdd/llm-form'
 import { LLM_TIMEOUT_MAX_MS, LLM_TIMEOUT_MIN_MS } from '../shared/constants'
@@ -78,7 +81,7 @@ export function SettingsTab({
     // 草稿优先:上次没保存就关掉的输入,原样还给用户
     void (async () => {
       const saved = await loadLlmDraft()
-      setLlm(saved ?? { baseUrl: draft.llmBaseUrl, apiKey: draft.llmApiKey, model: draft.llmModel })
+      setLlm(saved ?? llmFormFromSettings(draft))
     })()
   }, [draft])
 
@@ -94,13 +97,11 @@ export function SettingsTab({
       return next
     })
   }
+  // 卸载时掐掉挂起的那次落盘。弹窗本身被销毁时定时器随之消失,但切到别的页签
+  // (设置页被卸载、弹窗还活着)时它会按时跑完 —— 迟到的草稿会盖掉此后发生的事。
+  useEffect(() => () => window.clearTimeout(draftTimer.current), [])
 
-  const llmDirty =
-    !!draft &&
-    !!llm &&
-    (llm.baseUrl !== draft.llmBaseUrl ||
-      llm.apiKey !== draft.llmApiKey ||
-      llm.model !== draft.llmModel)
+  const llmDirty = !!draft && !!llm && !sameLlmFields(llm, llmFormFromSettings(draft))
 
   const refreshStorageInfo = useCallback(async () => {
     try {
@@ -172,16 +173,22 @@ export function SettingsTab({
   const saveLlm = async () => {
     if (!draft || !llm) return
     setBusy(true)
+    // 先掐掉挂起的草稿落盘:**保存后草稿是被清掉的**,若上一次敲字排的定时器
+    // 还在,几百毫秒后它会把旧值又写回去 —— 再打开时框里是那份复活了的草稿,
+    // 而不是刚保存的配置(差异会被后台夹取放大成"有未保存的修改")。
+    window.clearTimeout(draftTimer.current)
     const origins = originsForBaseUrl(llm.baseUrl)
     const granted = origins.length > 0 ? await ensureHostPermission(llm.baseUrl) : true
-    const next = { ...draft, ...llm }
+    // 必须经 llmSettingsPatch 换名:表单叫 baseUrl、设置叫 llmBaseUrl,
+    // 直接 `{...draft, ...llm}` 摊进去的话一个字段都落不了库(第四十八轮真实 bug)。
+    const next = { ...draft, ...llmSettingsPatch(llm) }
     setTest({ phase: 'idle' }) // 改了配置,上一次的测试结论作废
     const saved = await persist(next)
     if (saved) {
       // 回填夹取后的值,并清掉草稿 —— 存住了就没有"未保存的改动"可言。
       // (不清的话,后台对 baseUrl 去尾斜杠这类夹取会让草稿永远比正式配置多一个斜杠,
       //  「有未保存的修改」从此常驻,用户怎么点保存都消不掉。)
-      setLlm({ baseUrl: saved.llmBaseUrl, apiKey: saved.llmApiKey, model: saved.llmModel })
+      setLlm(llmFormFromSettings(saved))
       await clearLlmDraft()
     }
     if (!granted) {
@@ -502,12 +509,7 @@ export function SettingsTab({
         </div>
 
         {/* 两处"配了但不会生效"的自查提示:开启未配置 / 改了没保存,都是静默失效的重灾区 */}
-        {draft.aiIntegrateEnabled &&
-          !llmFormReady({
-            baseUrl: draft.llmBaseUrl,
-            apiKey: draft.llmApiKey,
-            model: draft.llmModel,
-          }) && (
+        {draft.aiIntegrateEnabled && !llmFormReady(llmFormFromSettings(draft)) && (
             <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
               已开启,但接口地址 / API Key / 模型名尚未填全,推荐面板不会出现整合行。
             </div>

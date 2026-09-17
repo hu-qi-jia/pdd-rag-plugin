@@ -5,12 +5,37 @@
  * 也是 popup 打包体积与分层的既有约定),于是判据在两个进程边界各有一份实现。
  * 一致性不靠自觉,靠 llm-form.test.ts 里那张对照表 —— 两边对同一组输入必须同判。
  */
+import type { PddSettings } from '../types/memory'
 
 /** 表单里与"配没配好"有关的三个字段 */
 export interface LlmFormFields {
   baseUrl: string
   apiKey: string
   model: string
+}
+
+/**
+ * 表单字段 ↔ 设置字段的**唯一**映射处。
+ *
+ * 设置里这三个字段带 `llm` 前缀(llmBaseUrl/llmApiKey/llmModel),表单里不带 ——
+ * 两个名字都"看起来对",所以写错不会有任何提示:`{...draft, ...llm}` 展开后
+ * 多出来的键既不过 TS 的多余属性检查,PddSettings 那一侧读到的又只是旧值。
+ * 第四十八轮的"保存后内容全消失"就是这么来的:提交没写进去、回填把表单清空。
+ * 于是映射收敛成下面两个函数,任何一处需要转换都必须走它们。
+ */
+export type LlmSettingsFields = Pick<PddSettings, 'llmBaseUrl' | 'llmApiKey' | 'llmModel'>
+
+export function llmSettingsPatch(f: LlmFormFields): LlmSettingsFields {
+  return { llmBaseUrl: f.baseUrl, llmApiKey: f.apiKey, llmModel: f.model }
+}
+
+export function llmFormFromSettings(s: LlmSettingsFields): LlmFormFields {
+  return { baseUrl: s.llmBaseUrl, apiKey: s.llmApiKey, model: s.llmModel }
+}
+
+/** 表单值是否与设置一致(逐字段比,不依赖对象身份;调用方负责先把设置转成表单形) */
+export function sameLlmFields(a: LlmFormFields, b: LlmFormFields): boolean {
+  return a.baseUrl === b.baseUrl && a.apiKey === b.apiKey && a.model === b.model
 }
 
 /** 三项都填了才算配好(与 background/llm.ts 的 isLlmConfigured 同判据) */

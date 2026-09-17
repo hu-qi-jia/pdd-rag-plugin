@@ -17,6 +17,7 @@ import {
 } from "./offscreen";
 import { processPendingEmbeddings } from "./syncEmbeddings";
 import { resplitStaleKbDocs } from "./kbResplit";
+import { registerAiPort } from "./aiIntegrate";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { hashText } from "../shared/text";
@@ -376,6 +377,9 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     .catch((err) => console.error("[PDD CS] message handler failed:", err));
   return true; // 保持通道等待异步响应
 });
+
+// AI 整合走 Port 长连接(流式增量回推),不占 onMessage 的一问一答通道
+registerAiPort();
 
 // ─── 保留期清理(TTL) ───────────────────────────────────────────────────────────
 

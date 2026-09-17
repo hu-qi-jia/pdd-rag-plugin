@@ -28,6 +28,11 @@ export interface GetSuggestionsRequest {
 export interface UiSettings {
   directFillEnabled: boolean
   goldenPriorityEnabled: boolean
+  /**
+   * 是否渲染「根据知识库内容整合并回复」那一行。SW 单方判定(开关 + 已配 API +
+   * 非自动回复 + 本轮有知识库候选),content 不自行推断 —— 免得两边口径漂移。
+   */
+  aiAvailable: boolean
 }
 
 export interface GetSuggestionsResponse {

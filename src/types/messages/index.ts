@@ -12,6 +12,8 @@ export * from './kb'
 export * from './settings'
 export * from './transfer'
 export * from './fill'
+// ai 走 Port 长连接(流式),不进 ExtensionMessage 并集 —— 单独出口
+export * from './ai'
 
 // ─── 并集 ──────────────────────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ import {
   type Suggestion,
 } from "./retrieval";
 import { loadSettings } from "./settings";
+import { aiRowAvailable } from "./aiIntegrate";
 import { normalizeText } from "../shared/text";
 import type { GoldenRecord, KnowledgeRecord } from '../types/memory';
 import type { UiSettings } from "../types/messages";
@@ -104,13 +105,18 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     goldenPriority: settings.goldenPriorityEnabled,
     now,
   });
-  return { suggestions, settings: uiSettings(settings) };
+  return { suggestions, settings: uiSettings(settings, suggestions) };
 }
 
-function uiSettings(s: Awaited<ReturnType<typeof loadSettings>>): UiSettings {
+function uiSettings(
+  s: Awaited<ReturnType<typeof loadSettings>>,
+  suggestions: Suggestion[] = [],
+): UiSettings {
   return {
     directFillEnabled: s.directFillEnabled,
     goldenPriorityEnabled: s.goldenPriorityEnabled,
+    // 门禁在 SW 单方判定(aiIntegrate.ts),content 只照渲染 —— 免得两边口径漂移
+    aiAvailable: aiRowAvailable(s, suggestions.some((x) => x.kind === "knowledge")),
   };
 }
 

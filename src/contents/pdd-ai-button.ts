@@ -261,7 +261,11 @@ async function fetchSuggestions(query: string): Promise<{
   settings: UiSettings
   error?: string
 }> {
-  const fallback: UiSettings = { directFillEnabled: false, goldenPriorityEnabled: true }
+  const fallback: UiSettings = {
+    directFillEnabled: false,
+    goldenPriorityEnabled: true,
+    aiAvailable: false,
+  }
   try {
     const resp = await chrome.runtime.sendMessage({
       type: 'GET_SUGGESTIONS',

@@ -36,7 +36,17 @@ export const DEFAULT_SETTINGS: PddSettings = {
   goldenPriorityEnabled: true,
   autoReplyHotkey: DEFAULT_HOTKEY,
   panelNavHotkey: DEFAULT_PANEL_NAV_HOTKEY,
+  // AI 整合默认关:不配置、不开启时扩展保持完全本地(ADR-0006)
+  aiIntegrateEnabled: false,
+  llmBaseUrl: '',
+  llmApiKey: '',
+  llmModel: '',
+  llmTimeoutMs: 8000,
 }
+
+/** 单次整合超时的可配置区间(毫秒):下限防误填 0 变成秒断,上限防变成事实上的无限等待 */
+export const LLM_TIMEOUT_MIN_MS = 2000
+export const LLM_TIMEOUT_MAX_MS = 30000
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
 

@@ -172,4 +172,17 @@ export interface PddSettings {
   autoReplyHotkey: HotkeyConfig
   /** 推荐面板「下一候选」键(默认 Tab,可单键):Shift+同键 = 上一候选(2026-09-16 第二十二轮) */
   panelNavHotkey: HotkeyConfig
+  /**
+   * 「AI 整合」开关,默认关。关闭或未配置 API 时扩展保持完全本地:
+   * 不发起任何网络请求,面板与未引入该功能时零差异。
+   */
+  aiIntegrateEnabled: boolean
+  /** LLM API 端点(OpenAI 兼容 base url,如 https://api.example.com/v1),默认 '' */
+  llmBaseUrl: string
+  /** API key,默认 ''。仅存 chrome.storage.local,永不同步到云端 */
+  llmApiKey: string
+  /** 模型名,默认 ''。建议选不带深度思考的快速模型 */
+  llmModel: string
+  /** 单次整合超时(毫秒),默认 8000,夹取 2000~30000 */
+  llmTimeoutMs: number
 }

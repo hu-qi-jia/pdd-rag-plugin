@@ -8,6 +8,9 @@
  *  ② 点取消 → 发 DELETE_GOLDEN { 该候选的标准回答 id },回执后原位翻回描边星
  *  ③ 历史候选 → 点星标发 ADD_GOLDEN,成功后原位翻为实心金星
  *  ④ 达到每问上限时 → 提示且不误报成功
+ *  ⑨ 第五十三轮(用户"快捷键呼出的面板,鼠标不可控制"):键盘面板的选中态只认键盘 ——
+ *    鼠标悬浮不改选中、也不给悬浮回执(无软灰底、不显操作钮),面板在指针底下重开时
+ *    选中的仍是初始第一条;同一张样式表下**鼠标面板的悬浮回执照旧**(守卫按面板类型分岔)
  *  ⑤ 快捷键面板键盘导航(2026-09-16 第二十一轮引入,第二十四轮改循环):初始选中第一条,
  *    Tab 单键循环切换 —— 末条再按回绕到首条(Shift+Tab 反向已删,不再拦截;↑↓ 亦让位平台切换会话),
  *    Enter 填充**选中项**(非固定第一条)
@@ -247,6 +250,21 @@ check(
   `toast=${copyToast} textarea=${afterCopy.slice(0, 12)}`,
 )
 
+// ── ③c 鼠标面板的悬浮回执**不受键盘面板守卫影响**(第五十三轮)──
+// 守卫是挂在 .pddcs-popup:not(.pddcs-popup-keyboard) 上的:两种面板共用一张样式表,
+// 一旦写法失手(比如漏了 :not 或写反),先坏的就是这里 —— 鼠标面板失去悬浮底色,
+// 操作钮也不再显现(上面 ①②③ 的 hover→click 会当场点不动)
+await page.locator('.pddcs-cand').nth(1).hover()
+await sleep(200)
+const mousePanelHoverBg = await page.evaluate(
+  () => getComputedStyle(document.querySelectorAll('.pddcs-cand')[1]).backgroundColor,
+)
+check(
+  '鼠标面板:悬浮仍给软灰底(守卫不越过面板类型)',
+  mousePanelHoverBg === 'rgba(0, 0, 0, 0.06)',
+  `hover bg=${mousePanelHoverBg}`,
+)
+
 // ── ④ 快捷键:Ctrl+Enter 唤起面板 → ↑↓ 选择 → Enter 填充选中项(2026-09-16 第二十一轮)──
 await page.evaluate(() => {
   document.querySelector('.pddcs-popup-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -276,6 +294,74 @@ const selIdx = () =>
     return rows.findIndex((r) => r.classList.contains('pddcs-cand-selected'))
   })
 check('面板打开 → 选中态初始落在第一条', (await selIdx()) === 0, `selected=${await selIdx()}`)
+
+// ── ④b 键盘面板:鼠标不可控(2026-09-17 第五十三轮,用户"快捷键呼出的面板,鼠标不可控制")──
+// 症状:面板弹出时指针恰好停在某一行上,那条就被选中且一直留着 —— 用户是在
+// "面板就在这时开在自己手底下"的场景里撞上的。两条独立检查:
+//   ① 悬浮改不改选中(机制)—— 指针划到第 2 行上,选中必须还停在第 1 行;
+//   ② 悬浮给不给回执(观感)—— 同一行不得出现软灰底/操作钮,否则"看着像选中"照旧
+await page.locator('.pddcs-cand').nth(1).hover()
+await sleep(250)
+const hoverProbe = await page.evaluate(() => {
+  const row = document.querySelectorAll('.pddcs-cand')[1]
+  const actions = row.querySelector('.pddcs-cand-actions')
+  return {
+    rowSelCls: row.classList.contains('pddcs-cand-selected'),
+    selected: [...document.querySelectorAll('.pddcs-cand')].findIndex((r) =>
+      r.classList.contains('pddcs-cand-selected'),
+    ),
+    bg: getComputedStyle(row).backgroundColor,
+    actionsOpacity: actions ? getComputedStyle(actions).opacity : '',
+    actionsPe: actions ? getComputedStyle(actions).pointerEvents : '',
+  }
+})
+check(
+  '键盘面板:鼠标悬浮不改选中(选中仍停在第一条,悬浮行不长选中类)',
+  hoverProbe.selected === 0 && !hoverProbe.rowSelCls,
+  `selected=${hoverProbe.selected} 悬浮行带选中类=${hoverProbe.rowSelCls}`,
+)
+check(
+  '键盘面板:悬浮零回执(不给软灰底、不显操作钮 —— 看着也不能像选中)',
+  hoverProbe.bg === 'rgba(0, 0, 0, 0)' &&
+    hoverProbe.actionsOpacity === '0' &&
+    hoverProbe.actionsPe === 'none',
+  `bg=${hoverProbe.bg} opacity=${hoverProbe.actionsOpacity} pe=${hoverProbe.actionsPe}`,
+)
+// 键盘仍照常:Tab 走到第 2 行(证明上面"没动"是守卫在挡,不是面板整体失灵)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+})
+await sleep(200)
+check('同一面板里键盘照常移动选中项(鼠标被挡,不是面板失灵)', (await selIdx()) === 1, `selected=${await selIdx()}`)
+// ② 真实场景复现:指针**停在面板上**时重开面板 —— 新面板就开在指针底下,
+// 那一行不得因此被选中(旧实现靠 mouseenter,这一下就会把选中挪过去)
+await page.locator('.pddcs-cand').nth(2).hover()
+await sleep(150)
+await page.evaluate(() => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))
+})
+await sleep(900)
+const reopened = await page.evaluate(() => {
+  const popup = document.querySelector('.pddcs-popup')
+  return {
+    keyboardCls: popup?.classList.contains('pddcs-popup-keyboard') ?? false,
+    selected: [...document.querySelectorAll('.pddcs-cand')].findIndex((r) =>
+      r.classList.contains('pddcs-cand-selected'),
+    ),
+  }
+})
+check(
+  '面板在指针底下重开 → 选中仍是初始第一条(悬浮不参与选中)',
+  reopened.selected === 0,
+  `selected=${reopened.selected}`,
+)
+check(
+  '键盘面板带 pddcs-popup-keyboard 标记(样式侧的守卫靠它认面板)',
+  reopened.keyboardCls,
+  `keyboardCls=${reopened.keyboardCls}`,
+)
+await page.mouse.move(5, 5) // 归还"静止态":下面的视觉断言按无悬浮量
+await sleep(150)
 
 // ── ⑥ 视觉规格(2026-09-16 第二十三轮:不透明/灰选中/细滚动条;第二十五轮:ChatGPT 化;
 //      第三十二轮:内缩圆角行/操作钮悬浮显现/三段式壳)──

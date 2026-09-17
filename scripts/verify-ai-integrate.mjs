@@ -28,6 +28,9 @@
  *     行首不再挂 ✦ 图标
  *  ⑬ 第五十一轮:关闭钮静止时是**裸 ×**(撤掉常驻圆底,命中区仍 26px);
  *     键盘路径(Ctrl+Enter → Tab 走到整合行 → Enter)填完后同样自行退场
+ *  ⑮ 第五十三轮(用户"快捷键呼出的面板,鼠标不可控制"):悬浮整合行不改选中、绿底不加深 ——
+ *     否则"面板开在指针底下 → 顺手按 Enter"就等于静默发起一次付费外发请求(与 ADR-0006 的
+ *     "必须是一次明确动作"相悖)
  *
  * 用法:node scripts/verify-ai-integrate.mjs   (需先 npm run build)
  * 注:验证全程无网络请求 —— LLM 调用被桩在 Port 后面,不进 content script。
@@ -577,6 +580,25 @@ check(
   '⑨ 默认选中**跳过**整合行,落在第一条真实候选上',
   kbPanel[0]?.selected === false && kbPanel[1]?.selected === true,
   JSON.stringify(kbPanel.map((x) => x.selected)),
+)
+// ⑮ 键盘面板鼠标不可控(第五十三轮):悬浮整合行既不改选中,也不给它那套
+// "悬浮加深一档"的绿底 —— 否则下一步按 Enter 会从"填第一条候选"变成"发起付费 API 请求"
+await page.locator('.pddcs-cand').nth(0).hover()
+await sleep(250)
+const aiHoverProbe = await page.evaluate(() => {
+  const row = document.querySelectorAll('.pddcs-cand')[0]
+  return {
+    rowSelCls: row.classList.contains('pddcs-cand-selected'),
+    selected: [...document.querySelectorAll('.pddcs-cand')].findIndex((r) =>
+      r.classList.contains('pddcs-cand-selected'),
+    ),
+    bg: getComputedStyle(row).backgroundColor,
+  }
+})
+check(
+  '⑮ 悬浮整合行:选中不动(仍在候选行上),绿底不加深(还是静止那一档)',
+  aiHoverProbe.selected === 1 && !aiHoverProbe.rowSelCls && aiHoverProbe.bg === 'rgba(20, 174, 92, 0.09)',
+  `selected=${aiHoverProbe.selected} 悬浮行带选中类=${aiHoverProbe.rowSelCls} bg=${aiHoverProbe.bg}`,
 )
 await page.keyboard.press('Enter')
 await sleep(400)

@@ -9,7 +9,7 @@
  *     快捷键唤起的面板与此完全同构,共用 openPopup)
  *  - 快捷键面板(自动回复关):Tab/Shift+Tab 移动选中项(键可在设置自定义,
  *    第二十二轮;↑↓ 与平台切换会话冲突已让位),Enter 填充**选中项**
- *    (鼠标悬浮同步选中,两套高亮共用一态)
+ *    (选中态**只认键盘**:鼠标悬浮不改选中、也不给悬浮回执 —— 第五十三轮)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
  *  - 主题:覆盖层跟随 popup 的主题设置(storage pddcs:theme + onChanged 实时切换,
  *    2026-09-15 设计1;样式生成纯逻辑见 ui/overlay-css.ts)
@@ -361,6 +361,12 @@ let popupEl: HTMLDivElement | null = null
  * 由快捷键唤起的推荐回复面板:导航键(默认 Tab,循环)移动选中项,Enter 填充**选中项**
  * (2026-09-16 第二十一轮引入,第二十四轮:Shift+Tab 反向删除,末条回绕首条;
  * 点外部/Esc 关闭即解除)。仅快捷键路径持有选中态 —— 点击「AI回复」打开的面板保持纯点击交互,不抢键盘。
+ *
+ * 选中态**只由键盘写**(第五十三轮,用户"快捷键呼出的面板,鼠标不可控制"):面板弹出时
+ * 指针**恰好停在某一行上**是常态,而那时的 mouseenter 会把选中挪过去 —— 用户看到的是
+ * "悬浮处那条一直是选中态",Enter 填哪条也就跟着说不清了。原来挂的 mouseenter
+ * ("悬浮即选中,两套高亮共用一态")整条移除;悬浮底色与悬浮操作钮由样式侧的
+ * `pddcs-popup-keyboard` 守卫一并关掉,免得视觉上仍像是选中。
  */
 let armedPanel: { rows: PanelRow[]; selected: number } | null = null
 
@@ -376,7 +382,7 @@ function closePopup(): void {
  */
 type PanelRow = { ai: false; s: Suggestion } | { ai: true }
 
-/** 把选中态渲染到行上:唯一高亮源,导航键与鼠标悬浮都写这里 */
+/** 把选中态渲染到行上:唯一高亮源,**只有键盘**写这里(导航键;第五十三轮起鼠标不再参与) */
 function applySelection(): void {
   if (!popupEl || !armedPanel) return
   const rows = popupEl.querySelectorAll('.pddcs-cand')
@@ -715,7 +721,9 @@ function openPopup(
   closePopup()
   const overlay = ensureOverlay()
   const el = document.createElement('div')
-  el.className = 'pddcs-popup'
+  // 键盘面板挂标记类:鼠标不可控(不改选中、不给悬浮底色、不显悬浮操作钮)全靠它,
+  // 样式侧的守卫见 ui/overlay-css.ts#pddcs-popup-keyboard
+  el.className = opts.keyboard ? 'pddcs-popup pddcs-popup-keyboard' : 'pddcs-popup'
   // 背景双保险(第二十三轮):本样式注入平台页面,类样式可能被页面级 !important 规则盖掉,
   // 内联背景优先级更高,直观兜底。
   // v2.7.0 起这个兜底要**跟着材料走**:支持背景模糊时面板是半透明的,内联若仍写不透明面色,
@@ -755,14 +763,6 @@ function openPopup(
   for (const [i, r] of rows.entries()) {
     const row = r.ai ? aiIntegrateRow(query, kbIds) : candidateRow(r.s, query)
     row.dataset.idx = String(i)
-    if (opts.keyboard) {
-      // 键盘模式:悬浮即选中(两套高亮共用一态,避免 hover 底色与选中描边打架)
-      row.addEventListener('mouseenter', () => {
-        if (!armedPanel || armedPanel.selected === i) return
-        armedPanel.selected = i
-        applySelection()
-      })
-    }
     body.appendChild(row)
   }
   el.appendChild(body)

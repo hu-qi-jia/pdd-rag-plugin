@@ -164,7 +164,18 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-cand { position: relative; margin: 0 0 ${ROW_GAP_Y}px; padding: ${ROW_PAD_Y}px ${ROW_PAD_X}px;
   border-radius: ${ROW_RADIUS}px;
   cursor: pointer; transition: background-color .12s ease; }
-.pddcs-cand:hover, .pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
+/* ── 悬浮样式只属于「鼠标面板」──────────────────────────────────────────────
+   面板有两种开法:点「AI回复」开的是**鼠标面板**,鼠标是它唯一的选择工具;
+   快捷键开的是**键盘面板**(.pddcs-popup-keyboard,由 openPopup 加在面板根上),
+   在那里选中态由 Tab 独占 —— 鼠标一悬浮就把选中带过去,会让"Enter 到底填哪条"
+   在视觉上说不清(2026-09-17 用户反馈:悬浮处那条一直是选中态)。
+   故键盘面板的整条规则是:**悬浮不改变任何可见状态** ——
+   不改选中(JS 侧不再挂 mouseenter,见 contents/pdd-ai-button.ts)、
+   不给悬浮底色、不显悬浮操作钮(下面三处 :hover 一律加这个守卫)。
+   选中态 -selected 不守:两种面板都照旧,键盘面板里它是**唯一**的高亮源。
+   点击不受影响(点行 = 填入该条;那是明确动作,不是悬浮) */
+.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand:hover,
+.pddcs-cand-selected, .pddcs-cand-selected:hover { background: ${tk.selectedBg}; }
 /* 行首行:徽标居左 → 折叠数紧随徽标 → 操作图标钮居右(margin-left:auto 顶到行末);
    行首行自身**不加左缩进**(徽标外框即整行左缘),
    下方「原问题 / 正文」各自 padding-left: BADGE_PAD_X → 三处**文字**左缘同一条线
@@ -193,7 +204,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    把这组钮自行内边距(ROW_PAD_X)推向面板右缘(仍留在悬浮底色块内) */
 .pddcs-cand-actions { margin-left: auto; margin-right: -6px; display: flex; gap: 2px;
   opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-.pddcs-cand:hover .pddcs-cand-actions, .pddcs-cand-selected .pddcs-cand-actions {
+.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand:hover .pddcs-cand-actions,
+.pddcs-cand-selected .pddcs-cand-actions {
   opacity: 1; pointer-events: auto; }
 /* 图标操作钮(第三十七轮 v2.6.24):24px(controlH.inline)方钮 + 13px lucide 图标 ——
    与 popup 行悬浮图标钮同档同语言(透明底 → 悬浮浅灰,颜色由 currentColor 继承)。
@@ -248,7 +260,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 只有"还没点过"的整行才是大按钮(点哪儿都行);出结果后整行不再是触发器 ——
    想复制生成内容的人不该因为点了一下文字就再花一次 API 请求,重试走右上角那枚钮 */
 .pddcs-cand.pddcs-ai-row.is-idle { cursor: pointer; }
-.pddcs-cand.pddcs-ai-row:hover,
+.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand.pddcs-ai-row:hover,
 .pddcs-cand.pddcs-ai-row.pddcs-cand-selected,
 .pddcs-cand.pddcs-ai-row.pddcs-cand-selected:hover {
   background: ${tk.knowledgeSurfaceHover}; }
@@ -256,7 +268,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    (动作名 + 说明行两处一起变),底色只是补一层。故它不像动作面那样必须随主题 —
    深色下被材料冲淡一点也不影响"这行出错了"读不读得出来 */
 .pddcs-cand.pddcs-ai-row.is-error { background: ${semantic.dangerSoft}; }
-.pddcs-cand.pddcs-ai-row.is-error:hover { background: ${semantic.dangerSoftHover}; }
+.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand.pddcs-ai-row.is-error:hover {
+  background: ${semantic.dangerSoftHover}; }
 /* 主行:动作名 + 右侧「重试/重新生成」钮。min-height 取行内控件档,
    使操作钮显隐不改变主行高度(等高铁律)。
    v2.7.1 去掉行首的 ✦ 图标(用户"删除图标"):这一行整块已经是知识库绿底,

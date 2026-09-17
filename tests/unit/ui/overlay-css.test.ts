@@ -569,6 +569,63 @@ describe('buildOverlayCss:Apple 式材料重设计(2026-09-17 第四十九轮 v2
   })
 })
 
+describe('buildOverlayCss:快捷键面板鼠标不可控(2026-09-17 第五十三轮)', () => {
+  const css = buildOverlayCss(lightTheme)
+  /**
+   * 行级 `:hover` 选择器逐条抽出(选择器组按逗号拆开,组内跨行也算一条)。
+   * 选中态 `.pddcs-cand-selected*` 是豁免项:键盘面板里它才是唯一高亮源,
+   * 两种面板都要保留。其余每一条都必须挂 `:not(.pddcs-popup-keyboard)` 守卫。
+   */
+  const rowHoverSelectors = () =>
+    // 先去掉注释:注释里也会出现 ":hover" 这个词,留着会被当成一条选择器
+    [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*\.pddcs-cand[^{}]*:hover[^{}]*)\{/g)]
+      .flatMap((m) => m[1].split(','))
+      .map((s) => s.trim())
+      .filter(
+        (s) =>
+          s.includes('.pddcs-cand') &&
+          s.includes(':hover') &&
+          !s.includes('.pddcs-cand-selected'),
+      )
+
+  it('候选行的悬浮底色只在鼠标面板生效(选中态不守,两种面板都有)', () => {
+    const rule = css.match(/[^\n]*\.pddcs-cand:hover,[^{]*\{[^}]*\}/)![0]
+    expect(rule).toContain('.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand:hover')
+    expect(rule).toContain(lightTheme.selectedBg)
+    expect(rule).toContain('.pddcs-cand-selected')
+  })
+
+  it('悬浮显现操作钮同样被挡住;选中态显现照旧(键盘面板靠它够到星标/复制)', () => {
+    // 带上行首,把守卫前缀一并括进来(不带 `[^\n]*` 的话匹配从 .pddcs-cand 起,守卫在窗口外)
+    const rule = css.match(/[^\n]*\.pddcs-cand:hover \.pddcs-cand-actions[^{]*\{[^}]*\}/)![0]
+    expect(rule).toContain('.pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand:hover')
+    expect(css).toMatch(/\.pddcs-cand-selected \.pddcs-cand-actions[^{]*\{[^}]*opacity: 1/)
+  })
+
+  it('整合行的悬浮底色(含失败态)被挡住,常驻绿底/红底不因此变形', () => {
+    const aiHover = css.match(/[^\n]*\.pddcs-cand\.pddcs-ai-row:hover[^{]*\{[^}]*\}/)![0]
+    expect(aiHover).toContain('.pddcs-popup:not(.pddcs-popup-keyboard)')
+    expect(css.match(/\.pddcs-cand\.pddcs-ai-row \{[^}]*\}/)![0]).toContain(
+      `background: ${lightTheme.knowledgeSurface}`,
+    )
+    expect(css.match(/[^\n]*\.pddcs-cand\.pddcs-ai-row\.is-error:hover[^{]*\{[^}]*\}/)![0]).toContain(
+      '.pddcs-popup:not(.pddcs-popup-keyboard)',
+    )
+    expect(css.match(/\.pddcs-cand\.pddcs-ai-row\.is-error \{[^}]*\}/)![0]).toContain(
+      `background: ${semantic.dangerSoft}`,
+    )
+  })
+
+  it('结构不变量:表里每一条行级悬浮规则都带守卫(日后新增悬浮规则不会漏网)', () => {
+    const selectors = rowHoverSelectors()
+    // 候选行底色 / 操作钮显现 / 整合行底色 / 整合行失败态底色 —— 四条都在
+    expect(selectors.length).toBe(4)
+    for (const sel of selectors) {
+      expect(sel).toContain('.pddcs-popup:not(.pddcs-popup-keyboard)')
+    }
+  })
+})
+
 describe('parseThemeMode:存储值容错解析', () => {
   it("有效值 'light'/'dark' 原样返回", () => {
     expect(parseThemeMode('light')).toBe('light')

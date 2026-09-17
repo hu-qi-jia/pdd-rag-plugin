@@ -439,9 +439,6 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
   row.className = 'pddcs-cand pddcs-ai-row'
   row.title = '把本轮命中的知识库内容整合成一段可直接发送的话术(会调用你在设置里配置的 API)'
 
-  const icon = document.createElement('span')
-  icon.className = 'pddcs-ai-icon'
-  icon.textContent = '✦'
   const label = document.createElement('span')
   label.className = 'pddcs-ai-label'
   // 重试钮在主行右端(margin-left:auto 顶上),不再另起一行把自己的高度加到行上
@@ -450,7 +447,9 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
   retry.className = 'pddcs-ai-retry'
   const main = document.createElement('div')
   main.className = 'pddcs-ai-main'
-  main.append(icon, label, retry)
+  // v2.7.1 去掉行首 ✦(用户"删除图标"):整块绿底已经在说"这是一次动作",
+  // 装饰符号只是噪音;在途反馈由主行文案 + 第二块的流式正文承担
+  main.append(label, retry)
 
   // 第二层:说明行 / 正文**二选一**(见 render)—— 同一时刻行内只有一个"第二块",
   // 行高才与候选行的「小字行 + 大字行」结构对齐

@@ -92,6 +92,21 @@ describe('collectMaterials', () => {
     expect(m).toEqual(['T2\nC2', 'T1\nC1'])
   })
 
+  it('面板配额内的知识库候选**全部**并入(top-k=3,不是只发一条)', async () => {
+    // 用户口径(第五十轮):「ai整合是根据检索到的 top-k=3 的内容整合,而不是只有一条」。
+    // 面板每类候选至多 3 条(retrieval.ts#PANEL_QUOTA.knowledge),内容是这里的入参 ——
+    // 三条候选就该产出三份材料,顺序与候选顺序一致,一份都不许被"顺手取第一条"吃掉
+    const { collectMaterials, db } = await fresh()
+    for (const i of [1, 2, 3]) {
+      await db.addKnowledge(
+        kb({ id: `k${i}`, title: `T${i}`, content: `C${i}`, chunkKind: 'qa', sectionSeq: i }),
+      )
+    }
+    const m = await collectMaterials(['k1', 'k2', 'k3'])
+    expect(m).toHaveLength(3)
+    expect(m).toEqual(['T1\nC1', 'T2\nC2', 'T3\nC3'])
+  })
+
   it('停用/不存在的候选跳过', async () => {
     const { collectMaterials, db } = await fresh()
     await db.addKnowledge(kb({ id: 'k1', title: 'T1', content: 'C1', chunkKind: 'qa' }))

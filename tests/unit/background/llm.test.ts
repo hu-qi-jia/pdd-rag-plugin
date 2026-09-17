@@ -87,6 +87,16 @@ describe('buildMessages', () => {
     const u = m.find((x) => x.role === 'user')!.content
     expect(u.indexOf('资料甲')).toBeLessThan(u.indexOf('资料乙'))
   })
+
+  it('面板配额内的资料**一份不落**全部入提示词(第五十轮:top-k=3,不是只发一条)', () => {
+    // 用户口径:「ai整合是根据检索到的 top-k=3 的内容整合,而不是只有一条」——
+    // 上游(面板配额 → knowledgeIds → collectMaterials)给了几条,这里就必须带几条
+    const three = ['资料甲\n正文甲', '资料乙\n正文乙', '资料丙\n正文丙']
+    const u = buildMessages('q', three).find((x) => x.role === 'user')!.content
+    for (const mat of three) {
+      for (const line of mat.split('\n')) expect(u).toContain(line)
+    }
+  })
 })
 
 describe('integrateReply', () => {

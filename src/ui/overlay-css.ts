@@ -7,7 +7,17 @@
  * (2026-09-16 工程审查③-V2:自 utils/ 迁入 ui/,与令牌/尺寸/滚动条同层)
  */
 import type { ThemeMode, ThemeTokens } from './theme'
-import { controlH, fontFamily, fontSize, fontWeight, material, radius, semantic, spacing } from './design'
+import {
+  controlH,
+  fontFamily,
+  fontSize,
+  fontWeight,
+  material,
+  panelType,
+  radius,
+  semantic,
+  spacing,
+} from './design'
 import { thinScrollbarCss } from './scrollbar'
 import { ICON_BTN_SIZE } from './overlay-icons'
 
@@ -111,7 +121,9 @@ export function buildOverlayCss(tk: ThemeTokens): string {
   -webkit-backdrop-filter: saturate(${material.saturate}) blur(${material.blurPx}px);
   border: none; border-radius: ${radius.xl}px;
   box-shadow: ${tk.shadow}; opacity: 1;
-  font-size: ${fontSize.body}px; color: ${tk.text};
+  /* 面板基础字号 = 辅助档(v2.7.1):面板内每一处可见文字都显式取三档之一,
+     这条只是**兜底** —— 万一有文字漏挂类名,也落在规范内,不会冒出第四个字号 */
+  font-size: ${panelType.meta.size}px; color: ${tk.text};
   animation: pddcs-pop-in .22s cubic-bezier(0.32, 0.72, 0, 1); }
 @keyframes pddcs-pop-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { .pddcs-popup { animation: none; } }
@@ -121,9 +133,11 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    无 hairline(sticky 早已取消,头本就在滚动视口之外) */
 .pddcs-popup-head { display: flex; align-items: center; gap: ${spacing.sm}px; flex: 0 0 auto;
   padding: ${spacing.xxl}px ${PANEL_PAD_X}px ${spacing.md}px; color: ${tk.text}; }
-.pddcs-popup-title { font-size: ${fontSize.heading}px; font-weight: ${fontWeight.semibold};
+.pddcs-popup-title { font-size: ${panelType.title.size}px; font-weight: ${panelType.title.weight};
   letter-spacing: -0.02em; line-height: 1.3; color: ${tk.text}; }
-.pddcs-popup-count { font-size: ${fontSize.body}px; font-weight: ${fontWeight.regular};
+/* 计数与标题同排、比标题低两档:面板里"次要信息"只有辅助档一种字号(v2.7.1 规范),
+   原先单开的 12.5px 是夹在标题与辅助之间的第三档,已收掉 */
+.pddcs-popup-count { font-size: ${panelType.meta.size}px; font-weight: ${panelType.meta.weight};
   line-height: 1.3; color: ${tk.textTertiary}; }
 /* 关闭钮(v2.7.0):从"24px 无底 × 悬浮才显"改成**常驻的安静圆形填充** ——
    浮层的关闭入口不该要用户先找到它才看得见(Apple 的浮层关闭语言) */
@@ -131,7 +145,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   width: 26px; height: 26px; padding: 0; border: none; cursor: pointer;
   border-radius: ${radius.pill}px; display: flex; align-items: center;
   justify-content: center; background: ${tk.fillQuiet}; color: ${tk.textMuted};
-  font-size: 15px; line-height: 1; transition: background-color .12s ease, color .12s ease; }
+  font-size: ${fontSize.heading}px; line-height: 1; transition: background-color .12s ease, color .12s ease; }
 .pddcs-popup-close:hover { background: ${tk.fillQuietHover}; color: ${tk.text}; }
 /* 滚动中段:唯一滚动容器(6px 细轨挂此)。左右 ${ROW_INSET_X}px 就是行的内缩量 ——
    行自己不再带左右外边距,行的左右缘由这里单点决定(ROW_INSET_X / ROW_RADIUS 同源) */
@@ -160,7 +174,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    历史 = 中性灰软底灰字。
    v2.7.0 保留 chip 形态:面板越安静,这行"这是什么"的标签越得自己立得住 */
 .pddcs-badge { display: inline-flex; align-items: center; padding: 3px ${BADGE_PAD_X}px;
-  border-radius: ${radius.md}px; font-size: ${fontSize.secondary}px; font-weight: 500;
+  border-radius: ${radius.md}px; font-size: ${panelType.meta.size}px; font-weight: ${fontWeight.semibold};
   background: ${tk.selectedBg}; color: ${tk.textMuted}; }
 .pddcs-badge.golden { background: rgba(184, 134, 11, 0.14); color: ${semantic.golden}; }
 .pddcs-badge.knowledge { background: rgba(20, 174, 92, 0.12); color: ${semantic.knowledge}; }
@@ -168,7 +182,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    回到行首行、紧贴徽标右侧,与徽标共用行首行的 align-items 中线;
    随之**常驻显示**(右下角那版是浮动覆盖物,才需要悬浮才显来避让正文),
    absolute 定位与折叠行的底边条位预留规则一并删除 —— 折叠与否不再改变词条高度 */
-.pddcs-fold { color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; line-height: 1;
+.pddcs-fold { color: ${tk.textTertiary}; font-size: ${panelType.meta.size}px; line-height: 1;
   white-space: nowrap; }
 /* 操作钮(v2.6.18 悬浮显现;v2.6.24 文字 → 图标):静止时行内只有徽标 + 回显 + 正文,
    悬浮/选中才显两枚图标钮;margin-right -6px = 按用户"按钮向右移动一点"
@@ -200,13 +214,14 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
    左缩进 BADGE_PAD_X = 对齐上方徽标**内文字**左缘(v2.6.26 用户:v2.6.24 那版对齐的是徽标外框,
    视觉上正文比标签文字凸出 9px,看着"不齐") */
 .pddcs-cand-text { padding-left: ${BADGE_PAD_X}px;
-  font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap;
+  font-size: ${panelType.content.size}px; line-height: 1.6; white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 /* 问题回显上置为引子(v2.6.17,原底部「原问题:…」来源行移此):11.5px 灰字单行省略;
    左缩进与正文同一个 BADGE_PAD_X(三处文字左缘同线),下间距 2→4px(v2.6.25 留白重配)。
    注意 padding-left 与 text-overflow:ellipsis 不冲突:省略号仍落在行右缘 */
-.pddcs-cand-q { padding-left: ${BADGE_PAD_X}px; margin-bottom: ${ROW_GAP_Y}px; color: ${tk.textTertiary}; font-size: ${fontSize.secondary}px;
+.pddcs-cand-q { padding-left: ${BADGE_PAD_X}px; margin-bottom: ${ROW_GAP_Y}px; color: ${tk.textTertiary};
+  font-size: ${panelType.meta.size}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* ── 「根据知识库内容整合并回复」行(AI 整合,默认关闭时不渲染)────────────────────
    v2.6.34 立规(用户:「高度太小了,修改为和词条高度类似,视觉效果要和词条区分开」),
@@ -234,51 +249,55 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-cand.pddcs-ai-row.pddcs-cand-selected:hover {
   background: ${tk.knowledgeSurfaceHover}; }
 /* 失败面仍是固定字面量(跟知识库绿不同):失败态的主信号是**文字转红**
-   (✦ + 动作名 + 说明行三处一起变),底色只是补一层。故它不像动作面那样必须随主题 —
+   (动作名 + 说明行两处一起变),底色只是补一层。故它不像动作面那样必须随主题 —
    深色下被材料冲淡一点也不影响"这行出错了"读不读得出来 */
 .pddcs-cand.pddcs-ai-row.is-error { background: rgba(217, 48, 38, 0.12); }
 .pddcs-cand.pddcs-ai-row.is-error:hover { background: rgba(217, 48, 38, 0.18); }
-/* 主行:✦ + 动作名(13.5px = 面板唯一主层,与候选正文同档)+ 右侧「重试/重新生成」钮。
-   min-height 取行内控件档,使操作钮显隐不改变主行高度(等高铁律) */
+/* 主行:动作名 + 右侧「重试/重新生成」钮。min-height 取行内控件档,
+   使操作钮显隐不改变主行高度(等高铁律)。
+   v2.7.1 去掉行首的 ✦ 图标(用户"删除图标"):这一行整块已经是知识库绿底,
+   "这是一次 AI 动作"由底色说得很清楚,再挂一枚装饰符号只是噪音;
+   在途状态也不再转圈 —— 主行文案会变成「正在整合知识库…」、第二块同时在流式吐字,
+   两个信号都比一枚自转的图标更直接 */
 .pddcs-ai-main { display: flex; align-items: center; gap: ${spacing.sm}px;
   min-height: ${controlH.inline}px; padding-left: ${BADGE_PAD_X}px; }
-.pddcs-ai-icon { color: ${semantic.knowledge}; font-size: ${fontSize.title}px; line-height: 1; }
-.pddcs-ai-label { color: ${semantic.knowledge}; font-size: ${fontSize.title}px; font-weight: 500;
-  line-height: 1.6; }
-.pddcs-ai-row.is-error .pddcs-ai-icon,
+.pddcs-ai-label { color: ${semantic.knowledge}; font-size: ${panelType.action.size}px;
+  font-weight: ${panelType.action.weight}; line-height: 1.6; }
 .pddcs-ai-row.is-error .pddcs-ai-label { color: ${semantic.danger}; }
-/* 说明行:两行真信息 —— 什么出去、什么留下。这行动作**会出网**,
-   得在点之前就把边界写在脸上(ADR-0006 靠用户知情兜底),也是本行与候选行同档高的那一层。
+/* 第二块(v2.7.1 规范):说明行与生成结果**同档同排版**(13.5 / 1.6),
+   两者只是同一个槽位在不同状态下的内容,换状态时行内不该跳字号 ——
+   用户反馈"小字和生成后的文字字号不同"即此。区分靠**颜色**:
+   说明是元信息(textMuted),生成结果是要发出去的正文(tk.text)。
    pre-line:认文案里的**语义换行**,同时在窄处仍可自然折行 ——
-   不出网声明绝不用省略号截断(截掉的正是要用户看清的那半句)。
-   行高 1.6 与候选正文同一节奏:低半档的字 + 同一行高,两层才像一段文字而不是两种排版 */
+   不出网声明绝不用省略号截断(截掉的正是要用户看清的那半句) */
 .pddcs-ai-hint { padding-left: ${BADGE_PAD_X}px; color: ${tk.textMuted};
-  font-size: ${fontSize.secondary}px; line-height: 1.6;
+  font-size: ${panelType.content.size}px; line-height: 1.6;
   white-space: pre-line; overflow-wrap: break-word; }
-/* 生成结果 = 一段正文,照候选正文的排版(13.5px / 1.6 / 4 行截断),
+/* 生成结果 = 一段正文,照候选正文的排版(13.5 / 1.6 / 4 行截断),
    而不是"行内小字的补充说明" —— 用户要的就是能直接发出去的话术 */
 .pddcs-ai-draft { padding-left: ${BADGE_PAD_X}px; color: ${tk.text};
-  font-size: ${fontSize.title}px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  font-size: ${panelType.content.size}px; line-height: 1.6; white-space: pre-wrap;
+  word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 /* 「重试 / 重新生成」钮:主行右端,24px 行内档,与关闭钮同一套"安静填充 + 全圆端"语言。
-   box-sizing 显式声明 —— 本样式注入平台页面,不享受 popup 的全局 border-box 重置 */
+   box-sizing 显式声明 —— 本样式注入平台页面,不享受 popup 的全局 border-box 重置。
+   字号走辅助档:它是行内小控件,不该和动作名抢层级 */
 .pddcs-ai-retry { box-sizing: border-box; flex: 0 0 auto; margin-left: auto;
   height: ${controlH.inline}px; padding: 0 ${spacing.lg}px;
   border: none; border-radius: ${radius.pill}px; background: ${tk.fillQuiet};
-  color: ${tk.textMuted}; font-size: ${fontSize.secondary}px; line-height: 1; cursor: pointer;
+  color: ${tk.textMuted}; font-size: ${panelType.meta.size}px; line-height: 1; cursor: pointer;
   transition: background-color .12s ease, color .12s ease; }
 .pddcs-ai-retry:hover { background: ${tk.fillQuietHover}; color: ${tk.text}; }
-.pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin .9s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }
 /* 页脚常驻壳:v2.7.0 撤掉 hairline 与独立底色,改**居中**的静音说明 ——
    旧版是"贴了条灰带的页脚",新版是面板这张材料下缘的一行小字,不再自成一段 */
 .pddcs-popup-foot { flex: 0 0 auto; padding: 0 ${PANEL_PAD_X}px ${spacing.lg}px; text-align: center;
-  color: ${tk.textTertiary}; font-size: ${fontSize.caption}px; line-height: 1.5; }
-/* 键位键帽(v2.6.16):与 popup 设置页 HotkeyRow 的 <kbd> 同语言(灰底细边圆角等宽字) */
+  color: ${tk.textTertiary}; font-size: ${panelType.meta.size}px; line-height: 1.5; }
+/* 键位键帽(v2.6.16):与 popup 设置页 HotkeyRow 的 <kbd> 同语言(灰底细边圆角等宽字)。
+   字号随所在行的辅助档(v2.7.1,原为写死的 10px) */
 .pddcs-kbd { display: inline-block; margin: 0 2px; padding: 1px 6px;
   border: 1px solid ${tk.border}; border-radius: ${radius.sm}px;
   background: ${tk.bg}; color: ${tk.textMuted};
-  font-size: 10px; line-height: 1.4; font-family: ui-monospace, Consolas, monospace; }
+  font-size: ${panelType.meta.size}px; line-height: 1.4; font-family: ui-monospace, Consolas, monospace; }
 
 /* 轻提示 — 近黑 toast(两主题下都深底白字,可读性不随主题切换)。
    v2.7.0:圆角提到 radius.xl —— 单行时两端正好收成胶囊,与面板里那批无描边小控件同形;

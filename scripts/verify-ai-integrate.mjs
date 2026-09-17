@@ -22,6 +22,9 @@
  *     靠"常驻知识库绿软底"(候选行静止时是彻底无底的纸)与素材区分、内容左缘与候选行重合;
  *  ⑪ 生成后的展示:说明行让位给正文、正文取面板主层 13.5px、重试钮 24px 在行内右端、
  *     整行不塌回单行;出结果后点整行不再发起请求(防误触再烧一次)
+ *  ⑫ 第五十轮:①面板上**每条**知识库候选都进 knowledgeIds(top-k=3,不是只发一条)、
+ *     说明行如实报出条数;②说明行与生成结果同档 13.5px(整行只有一档字号,靠字重区分)、
+ *     行首不再挂 ✦ 图标
  *
  * 用法:node scripts/verify-ai-integrate.mjs   (需先 npm run build)
  * 注:验证全程无网络请求 —— LLM 调用被桩在 Port 后面,不进 content script。
@@ -300,11 +303,13 @@ let idleAiRowH = 0
     ai.contentLeft === cands[0].contentLeft,
     `ai=${ai.contentLeft} 候选=${cands[0].contentLeft}`,
   )
+  // v2.7.1(第五十轮):说明行从辅助档提到内容档 —— 整行的字号只剩一档,
+  // 出结果时不再"小字换大字"跳一下。字重仍分两档:.pddcs-ai-label 600 / 说明行 400
   check(
-    '⑩ 字号:主文案与候选正文同为面板主层 13.5px,说明行次级 11.5px',
+    '⑩ 字号:主文案 / 说明行 / 候选正文同一档 13.5px(整行只有一档字号)',
     ai.labelFont === cands[0].textFont &&
       ai.labelFont === '13.5px' &&
-      ai.hintFont === '11.5px',
+      ai.hintFont === '13.5px',
     `主=${ai.labelFont} 候选正文=${cands[0].textFont} 说明=${ai.hintFont}`,
   )
   check(
@@ -539,6 +544,79 @@ check(
     (await lastPort()) === null &&
     JSON.stringify(await page.evaluate(() => window.__ports.length)) === '0',
   JSON.stringify({ ta: await textarea(), ports: await page.evaluate(() => window.__ports.length) }),
+)
+
+// ── ⑩ top-k=3:面板里的知识库候选**一条不落**全部进 knowledgeIds ──
+// 用户口径(第五十轮):「ai整合是根据检索到的 top-k=3 的内容整合,而不是只有一条」。
+// 面板每类配额 3(retrieval.ts#PANEL_QUOTA.knowledge),内容脚本负责把**展示过的几条**
+// 原样带上;后台 collectMaterials 再按 id/正文去重、按字数上限整块截断(单测覆盖)。
+await page.evaluate(() => document.querySelector('.pddcs-popup-close')?.click())
+await sleep(150)
+await setScenario({
+  __aiAvailable: true,
+  // 顺序照抄后台真实装配结果(retrieval.ts#assembleSuggestions 按 golden → history →
+  // knowledge 分段,知识库段内按相关度降序),这样 stub 出来的面板与真机同序
+  __suggestions: [
+    { kind: 'golden', text: '标准回答:支持7天无理由退换,运费我们承担。', sourceQuestion: 'q', score: 0.93, sourceId: 'gd-1' },
+    { kind: 'knowledge', text: '知识库:支持7天无理由退换,需保持商品完好。', sourceQuestion: 'q', score: 0.91, sourceId: 'kb-1' },
+    { kind: 'knowledge', text: '知识库:退换运费由我方承担,7 个工作日内退款。', sourceQuestion: 'q', score: 0.88, sourceId: 'kb-2' },
+    { kind: 'knowledge', text: '知识库:生鲜类商品不支持无理由退换。', sourceQuestion: 'q', score: 0.84, sourceId: 'kb-3' },
+  ],
+})
+await clickAiButton(0)
+const three = await rows()
+check(
+  '⑩ 三条知识库候选 → 全部渲染(整合行插在首个知识库候选之前)',
+  three.length === 5 && three.map((x) => x.ai).join() === 'false,true,false,false,false',
+  JSON.stringify(three.map((x) => x.ai)),
+)
+check(
+  '⑩ 说明行如实报出条数:3(不是恒写 1)',
+  three[1]?.hint.includes('3 条知识库内容'),
+  JSON.stringify(three[1]?.hint),
+)
+await page.locator('.pddcs-ai-row').click()
+await sleep(400)
+const threePort = await lastPort()
+const threeReq = threePort?.posted?.[0]
+check(
+  '⑩ 点整合行 → knowledgeIds = 面板上那 3 条,顺序一致(不是只取第一条)',
+  JSON.stringify(threeReq?.payload?.knowledgeIds) === JSON.stringify(['kb-1', 'kb-2', 'kb-3']),
+  JSON.stringify(threeReq?.payload?.knowledgeIds),
+)
+check(
+  '⑩ 顺带:本轮面板上**没有**标准回答进 knowledgeIds(只有知识库会外发)',
+  !JSON.stringify(threeReq?.payload?.knowledgeIds ?? []).includes('gd-'),
+  JSON.stringify(threeReq?.payload?.knowledgeIds),
+)
+
+// ── ⑫ 字型规范(第五十轮):说明行与生成结果同档,且行首没有图标 ──
+// 用户原话:「说明文案简化,而且小字和生成后的文字字号不同。删除图标」「规范一下字号和权重」。
+const aiRow = three[1]
+const candTextFont = three.find((x) => !x.ai && x.text)?.textFont
+check(
+  '⑫ 说明行与候选正文同档字号(不再比正文小一号;面板只有 15 / 13.5 / 11.5 三档)',
+  aiRow?.hintFont === '13.5px' && aiRow?.hintFont === candTextFont,
+  JSON.stringify({ 说明行: aiRow?.hintFont, 候选正文: candTextFont, 动作名: aiRow?.labelFont }),
+)
+check(
+  '⑫ 动作名仍是同档 semibold(与说明行同字号、靠字重区分,不靠字号)',
+  aiRow?.labelFont === aiRow?.hintFont,
+  JSON.stringify({ 动作名: aiRow?.labelFont, 说明行: aiRow?.hintFont }),
+)
+const iconProbe = await page.evaluate(() => {
+  const row = document.querySelector('.pddcs-ai-row')
+  const main = row?.querySelector('.pddcs-ai-main')
+  return {
+    icon: !!row?.querySelector('.pddcs-ai-icon'),
+    sparkle: (row?.textContent ?? '').includes('✦'),
+    mainKids: main ? [...main.children].map((c) => c.className) : [],
+  }
+})
+check(
+  '⑫ 行首不再挂 ✦ 图标(用户"删除图标"),主行只剩动作名 + 重试钮',
+  iconProbe.icon === false && iconProbe.sparkle === false,
+  JSON.stringify(iconProbe),
 )
 
 // ── 汇总 ──

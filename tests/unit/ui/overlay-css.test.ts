@@ -16,7 +16,16 @@ import {
   THEME_STORAGE_KEY,
 } from '../../../src/ui/overlay-css'
 import { lightTheme, darkTheme } from '../../../src/ui/theme'
-import { controlH, fontSize, fontWeight, material, radius, semantic, spacing } from '../../../src/ui/design'
+import {
+  controlH,
+  fontSize,
+  fontWeight,
+  material,
+  panelType,
+  radius,
+  semantic,
+  spacing,
+} from '../../../src/ui/design'
 
 describe('buildOverlayCss:按主题令牌生成覆盖层样式', () => {
   it('浅色令牌 → 浅色面板底 + 主/次级文本色,且不混入深色文本', () => {
@@ -92,7 +101,7 @@ describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六
     expect(qRule).toContain('text-overflow: ellipsis')
     expect(css).not.toContain('.pddcs-cand-src')
   })
-  it('面板名与候选数分属两档(v2.7.0):15px 半粗主文本 + 12.5px 三级灰,不再挤在一个灰字串里', () => {
+  it('面板名与候选数分属两档(v2.7.0):15px 半粗主文本 + 三级灰计数,不再挤在一个灰字串里', () => {
     const css = buildOverlayCss(lightTheme)
     const rule = (sel: RegExp) => css.match(sel)![0]
     const head = rule(/\.pddcs-popup-head \{[^}]*\}/)
@@ -100,15 +109,15 @@ describe('buildOverlayCss:对话式排版与字号主次(2026-09-16 第二十六
     expect(head).not.toContain('font-size')
     expect(head).toContain(`color: ${lightTheme.text}`)
     const title = rule(/\.pddcs-popup-title \{[^}]*\}/)
-    expect(title).toContain(`font-size: ${fontSize.heading}px`)
-    expect(title).toContain(`font-weight: ${fontWeight.semibold}`)
+    expect(title).toContain(`font-size: ${panelType.title.size}px`)
+    expect(title).toContain(`font-weight: ${panelType.title.weight}`)
     expect(title).toContain('letter-spacing: -0.02em')
     const count = rule(/\.pddcs-popup-count \{[^}]*\}/)
-    expect(count).toContain(`font-size: ${fontSize.body}px`)
-    expect(count).toContain(`font-weight: ${fontWeight.regular}`)
+    // v2.7.1:计数并入**辅助档**(原为单开的 12.5px —— 面板里"次要信息"只有一种字号)
+    expect(count).toContain(`font-size: ${panelType.meta.size}px`)
+    expect(count).toContain(`font-weight: ${panelType.meta.weight}`)
     expect(count).toContain(`color: ${lightTheme.textTertiary}`)
-    // 计数比面板名小两档:它是补充信息,不是第二个标题
-    expect(fontSize.heading).toBeGreaterThan(fontSize.body)
+    expect(panelType.title.size).toBeGreaterThan(panelType.meta.size)
   })
   it('死规则清理:score 元素早已移除,规则不再生成', () => {
     expect(buildOverlayCss(lightTheme)).not.toContain('.pddcs-score')
@@ -303,10 +312,10 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(aiRow).not.toContain('border')
   })
 
-  it('两层结构撑起高度:主行顶 24px 行内控件档 + 说明行 11.5px(不靠 padding 虚撑)', () => {
+  it('两层结构撑起高度:主行顶 24px 行内控件档 + 说明行走内容档(不靠 padding 虚撑)', () => {
     expect(rule(/\.pddcs-ai-main \{[^}]*\}/)).toContain(`min-height: ${controlH.inline}px`)
     const hint = rule(/\.pddcs-ai-hint \{[^}]*\}/)
-    expect(hint).toContain(`font-size: ${fontSize.secondary}px`)
+    expect(hint).toContain(`font-size: ${panelType.content.size}px`)
     // 认语义换行(idle 的"什么出去 / 什么留下"各占一行),窄处仍可折行;
     // 不用省略号截断 —— 截掉的正是要用户看清的那半句边界声明
     expect(hint).toContain('white-space: pre-line')
@@ -357,18 +366,30 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(rule(/\.pddcs-cand\.pddcs-ai-row\.is-idle \{[^}]*\}/)).toContain('cursor: pointer')
   })
 
-  it('✦ 与主文案走知识库语义绿,且主文案取面板唯一主层(13.5px,与候选正文同档)', () => {
-    expect(rule(/\.pddcs-ai-icon \{[^}]*\}/)).toContain(`color: ${semantic.knowledge}`)
+  it('主文案走知识库语义绿,取动作档(与候选正文同字号、靠字重与颜色区分)', () => {
     const label = rule(/\.pddcs-ai-label \{[^}]*\}/)
     expect(label).toContain(`color: ${semantic.knowledge}`)
-    expect(label).toContain(`font-size: ${fontSize.title}px`)
-    expect(rule(/\.pddcs-cand-text \{[^}]*\}/)).toContain(`font-size: ${fontSize.title}px`)
+    expect(label).toContain(`font-size: ${panelType.action.size}px`)
+    expect(label).toContain(`font-weight: ${panelType.action.weight}`)
+    // 动作名与候选正文**同字号**(同档不同色/重),不再另开一档
+    expect(panelType.action.size).toBe(panelType.content.size)
+    expect(rule(/\.pddcs-cand-text \{[^}]*\}/)).toContain(`font-size: ${panelType.action.size}px`)
+  })
+
+  it('第五十轮:行首 ✦ 图标整个删掉(含在途转圈),在途反馈交给文案与流式正文', () => {
+    // 用户原话「删除图标」—— 整块绿底已经在说"这是一次动作",装饰符号只是噪音。
+    // 断言前先剥掉注释:注释里会**提到**这个类名(说明它为什么被删),但样式表里不许再有它
+    const noComments = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(noComments).not.toContain('.pddcs-ai-icon')
+    expect(noComments).not.toContain('✦')
+    // 在途不再有自转的图标,主行只剩「动作名 + 重试钮」两件东西;
+    // 反馈由主行文案(「正在整合知识库…」)与第二块正在吐字的正文承担
+    expect(rule(/\.pddcs-ai-main \{[^}]*\}/)).toContain('padding-left:')
   })
 
   it('失败态:文案转红 + 整行转红软底(不靠文案里的"失败"二字表意)', () => {
-    const colorRule = rule(/\.pddcs-ai-row\.is-error \.pddcs-ai-icon,[\s\S]*?\{[^}]*\}/)
+    const colorRule = rule(/\.pddcs-ai-row\.is-error \.pddcs-ai-label \{[^}]*\}/)
     expect(colorRule).toContain(`color: ${semantic.danger}`)
-    expect(colorRule).toContain('.pddcs-ai-label')
     const surface = rule(/\.pddcs-cand\.pddcs-ai-row\.is-error \{[^}]*\}/)
     expect(surface).toContain('rgba(217, 48, 38,')
     expect(surface).not.toContain(lightTheme.knowledgeSurface)
@@ -408,9 +429,37 @@ describe('buildOverlayCss:AI 整合行(v2.6.34 重设计,2026-09-17 第四十八
     expect(retry).not.toContain('border: 1px')
   })
 
-  it('在途 = ✦ 原地转圈,且尊重"减少动态效果"', () => {
-    expect(css).toContain('.pddcs-ai-row.is-busy .pddcs-ai-icon { animation: pddcs-spin')
-    expect(css).toContain('@media (prefers-reduced-motion: reduce) { .pddcs-ai-row.is-busy .pddcs-ai-icon { animation: none; } }')
+  it('说明行与生成结果同档同排版(第五十轮:小字和生成后的文字字号不再不同)', () => {
+    // 同一个槽位在不同状态下的两种内容 —— 换状态时行内不该跳字号(用户原话
+    // 「小字和生成后的文字字号不同」),区分只靠颜色:说明是元信息、结果是待发正文
+    const hint = rule(/\.pddcs-ai-hint \{[^}]*\}/)
+    const draft = rule(/\.pddcs-ai-draft \{[^}]*\}/)
+    for (const decl of [`font-size: ${panelType.content.size}px`, 'line-height: 1.6']) {
+      expect(hint).toContain(decl)
+      expect(draft).toContain(decl)
+    }
+    expect(hint).toContain(`color: ${lightTheme.textMuted}`)
+    expect(draft).toContain(`color: ${lightTheme.text}`)
+  })
+
+  it('面板字型只有三档字号与两档字重(第五十轮"规范一下字号和权重")', () => {
+    const sizes = new Set<number>([panelType.title.size, panelType.content.size, panelType.meta.size])
+    expect([...sizes].sort((a, b) => a - b)).toEqual([fontSize.secondary, fontSize.title, fontSize.heading])
+    const weights = new Set<number>([panelType.title.weight, panelType.content.weight, panelType.meta.weight])
+    expect([...weights].sort()).toEqual([fontWeight.regular, fontWeight.semibold])
+    // 面板内的每一条规则都不得出现三档之外的字号:10.5(折叠数/脚注)与 12.5(计数)
+    // 是 v2.7.0 遗留的第三、第四档,第五十轮已收掉。
+    // `.pddcs-ai-btn` 是**页面上那枚按钮**、`.pddcs-toast` 是独立轻提示,都不属于面板,
+    // 各自沿用 popup 的按钮语言与 HUD 口径 —— 本规范只管面板,故从扫描范围里排掉
+    const panelRules = (css.match(/\.pddcs-(popup|cand|ai|badge|fold|kbd)[^{]*\{[^}]*\}/g) ?? [])
+      .filter((r) => !r.startsWith('.pddcs-ai-btn'))
+    expect(panelRules.length).toBeGreaterThan(10)
+    for (const r of panelRules) {
+      const size = r.match(/font-size: ([\d.]+)px/)
+      if (size) expect(sizes.has(Number(size[1]))).toBe(true)
+      const weight = r.match(/font-weight: (\d+)/)
+      if (weight) expect(weights.has(Number(weight[1]))).toBe(true)
+    }
   })
 
   it('说明行不参与行高竞争:不给它 -webkit-line-clamp(那是正文的截断规则)', () => {

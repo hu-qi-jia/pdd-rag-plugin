@@ -81,15 +81,44 @@ describe('aiRowHint:行内第二行(v2.6.34 重设计)', () => {
     expect(aiRowHint({ phase: 'idle' }, 1)).toContain('1')
   })
 
-  it('两行分工:一行说"什么出去",一行说"什么留下"(换行是语义换行,不是宽度折行)', () => {
-    const [out, stays] = aiRowHint({ phase: 'idle' }, 3).split('\n')
-    expect(aiRowHint({ phase: 'idle' }, 3).split('\n')).toHaveLength(2)
-    expect(out).toContain('发给你配置的接口')
-    expect(stays).toContain('历史回复')
+  it('两行分工:上行说"什么出去",下行说"去哪儿 + 什么留下"(语义换行,不是宽度折行)', () => {
+    const lines = aiRowHint({ phase: 'idle' }, 3).split('\n')
+    expect(lines).toHaveLength(2)
+    const [out, stays] = lines
+    // 上行 = 外发内容清单(知识库内容 + 买家问题),ADR-0006「外发内容仅限」的逐字对应
+    expect(out).toContain('3 条知识库内容')
+    expect(out).toContain('买家问题')
+    // 下行 = 去向 + 不出网声明
+    expect(stays).toContain('发给你配置的接口')
+    expect(stays).toContain('历史')
     expect(stays).toContain('标准回答')
     expect(stays).toContain('不出本机')
     // 在途也得留着这句 —— 内容正在路上,此刻最该被看见
     expect(aiRowHint({ phase: 'working' }, 3).split('\n')[1]).toBe(stays)
+  })
+
+  it('第五十轮"文案简化":不复述 —— 外发清单与去向/不出网各说一次,不重复主语', () => {
+    const hint = aiRowHint({ phase: 'idle' }, 3)
+    // 旧版下行还写着「只发送这条买家问题,…」,与上行重复;简化后"买家问题"只出现一次
+    expect(hint.match(/买家问题/g)).toHaveLength(1)
+    expect(hint).not.toContain('只发送这条买家问题')
+    expect(hint).not.toContain('命中的')
+    // 信息量不减:外发清单、去向、不出网声明三件事一件不少
+    for (const must of ['知识库内容', '买家问题', '发给你配置的接口', '不出本机']) {
+      expect(hint).toContain(must)
+    }
+  })
+
+  it('每句都短到一行放得下(第二块字号 = 生成结果的 13.5px,放不下就会把行撑高)', () => {
+    // 面板可用宽度:360 − PANEL_PAD_X×2 − BADGE_PAD_X = 311px;13.5px 中文字 ≈ 13.5px/字
+    const MAX_CHARS = 22
+    for (const count of [1, 3, 12]) {
+      for (const phase of [{ phase: 'idle' as const }, { phase: 'working' as const }]) {
+        for (const line of aiRowHint(phase, count).split('\n')) {
+          expect(line.length).toBeLessThanOrEqual(MAX_CHARS)
+        }
+      }
+    }
   })
 
   it('在途沿用同一个条数,前后说的是同一件事', () => {

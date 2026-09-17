@@ -43,7 +43,11 @@ const FIXTURE = `<!doctype html><html><head><meta charset="utf-8"><style>
   </div></li>
 </ul></div></body></html>`
 
-const browser = await chromium.launch({ executablePath: CHROME })
+// 与 lib.mjs 同一约定:CHROME 缺省是 null,直接当 executablePath 传会被 Playwright
+// 拒掉(expected string, got object)—— 未指定时走完整 chromium(channel)
+const browser = await chromium.launch({
+  ...(CHROME ? { executablePath: CHROME } : { channel: 'chromium' }),
+})
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
 await page.addInitScript(() => {
   // content script 依赖的最小 chrome 桩(本用例不点击,不触发 sendMessage)

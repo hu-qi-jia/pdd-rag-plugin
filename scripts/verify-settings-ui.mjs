@@ -101,6 +101,7 @@ for (const theme of ['light', 'dark']) {
       return { error: '设置卡片未渲染', text: (tabRoot?.textContent ?? '(无 .pddcs-scroll)').slice(0, 300) }
     }
     const px = (v) => Math.round(parseFloat(v) * 100) / 100
+    const sw0 = card.querySelector('[role="switch"]')
 
     // ── 字号:卡片标题 / 配置项字段 / 说明文字 ──
     const titleEl = [...card.querySelectorAll('div')].find(
@@ -108,7 +109,9 @@ for (const theme of ['light', 'dark']) {
     )
     const ts = getComputedStyle(titleEl)
 
-    const toggleRow = card.querySelector('label')
+    // 第四十八轮:整行容器由 <label> 改为 <div>(用户"只有在点击开关时才开/关,
+    // 点配置文字不该触发"),文字块不再由 label 包着 —— 从开关本体反查同一行
+    const toggleRow = sw0.parentElement
     const textWrap = toggleRow.querySelector(':scope > span')
     const labelEl = textWrap.children[0]
     const descEl = textWrap.children[1]
@@ -133,7 +136,7 @@ for (const theme of ['light', 'dark']) {
     )
 
     // ── 开关 / 滑杆配色 ──
-    const sw = card.querySelector('[role="switch"]')
+    const sw = sw0
     const knob = sw.querySelector('.pddcs-switch-knob')
     const knobBg = getComputedStyle(knob).backgroundColor
     // 令牌 → CSS 变量的桥挂在 popup 最外层 div 上,自定义属性会向下继承,

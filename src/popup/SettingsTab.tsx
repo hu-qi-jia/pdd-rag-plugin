@@ -15,10 +15,19 @@ import type {
   UpdateSettingsResponse,
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
-import { Btn, Card, Notice, Slider, Toggle, type NoticeMsg } from '../ui/components'
+import { Btn, Card, Notice, Slider, Toggle, controlStyle, type NoticeMsg } from '../ui/components'
 import { controlH, fontSize, formGap, formType, spacing } from '../ui/design'
-import { DownloadIcon, PencilIcon, UploadIcon } from '../ui/icons'
+import { DownloadIcon, LoaderIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
+import {
+  llmFormReady,
+  llmTestFailed,
+  llmTestLabel,
+  originsForBaseUrl,
+  type LlmTestState,
+} from '../pdd/llm-form'
+import { LLM_TIMEOUT_MAX_MS, LLM_TIMEOUT_MIN_MS } from '../shared/constants'
+import type { TestLlmResponse } from '../types/messages'
 
 /**
  * 设置页所有卡片的统一行距(配置项之间,第四十一轮用户"各配置项之间间距增大,并做统一")——
@@ -43,6 +52,32 @@ export function SettingsTab({
   const [busy, setBusy] = useState(false)
   const [includeMemory, setIncludeMemory] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // ── AI 整合(第四十八轮 P2-6)──────────────────────────────────────────────
+  // 三个文本框**不走自动保存**:①API Key 不该每敲一个字符就落一次库;
+  // ②申请主机权限必须发生在用户手势里,只有"点保存"这一刻才有手势可用。
+  // 于是本卡片是全页唯一的"显式保存"处(超时滑杆仍随大流即时落库)。
+  const [llm, setLlm] = useState<{
+    baseUrl: string
+    apiKey: string
+    model: string
+  } | null>(null)
+  const [showKey, setShowKey] = useState(false)
+  const [test, setTest] = useState<LlmTestState>({ phase: 'idle' })
+  // 只在首次拿到设置时灌一次初值:此后 llm 是用户的输入,不被后台回写覆盖
+  const llmSeeded = useRef(false)
+  useEffect(() => {
+    if (!draft || llmSeeded.current) return
+    llmSeeded.current = true
+    setLlm({ baseUrl: draft.llmBaseUrl, apiKey: draft.llmApiKey, model: draft.llmModel })
+  }, [draft])
+
+  const llmDirty =
+    !!draft &&
+    !!llm &&
+    (llm.baseUrl !== draft.llmBaseUrl ||
+      llm.apiKey !== draft.llmApiKey ||
+      llm.model !== draft.llmModel)
 
   const refreshStorageInfo = useCallback(async () => {
     try {
@@ -103,6 +138,53 @@ export function SettingsTab({
     sliderTimer.current = window.setTimeout(() => {
       void persist(next)
     }, 500)
+  }
+
+  /** 保存 AI 接口配置:先要权限、再落库(顺序不能反 —— 见 ensureHostPermission 注释) */
+  const saveLlm = async () => {
+    if (!draft || !llm) return
+    setBusy(true)
+    const origins = originsForBaseUrl(llm.baseUrl)
+    const granted = origins.length > 0 ? await ensureHostPermission(llm.baseUrl) : true
+    const next = { ...draft, ...llm }
+    setTest({ phase: 'idle' }) // 改了配置,上一次的测试结论作废
+    await persist(next)
+    if (!granted) {
+      setMsg({
+        ok: false,
+        text: `已保存,但未授权访问 ${origins[0] ?? '该域名'} —— 整合时会直接失败,请重试并点「允许」`,
+      })
+    }
+  }
+
+  /** 测试连接:拿**表单里的草稿**去测(改了地址还没存的场景才是真正会踩的坑) */
+  const testLlm = async () => {
+    if (!llm) return
+    const origins = originsForBaseUrl(llm.baseUrl)
+    if (origins.length === 0) {
+      setTest({ phase: 'fail', error: 'badurl' })
+      return
+    }
+    setTest({ phase: 'testing' })
+    const granted = await ensureHostPermission(llm.baseUrl)
+    if (!granted) {
+      setTest({ phase: 'fail', error: 'network' })
+      setMsg({ ok: false, text: `未授权访问 ${origins[0]},请重试并点「允许」` })
+      return
+    }
+    try {
+      const resp = await sendMessage<TestLlmResponse>({
+        type: 'TEST_LLM',
+        payload: { ...llm, timeoutMs: draft?.llmTimeoutMs ?? LLM_TIMEOUT_MAX_MS },
+      })
+      setTest(
+        resp.payload.ok
+          ? { phase: 'ok' }
+          : { phase: 'fail', error: resp.payload.error ?? 'unknown' },
+      )
+    } catch (err) {
+      setTest({ phase: 'fail', error: String(err) })
+    }
   }
 
   /** 清空问答记忆(PM6a):qa+replies 全清,长期资产保留;danger 二次确认 */
@@ -274,6 +356,142 @@ export function SettingsTab({
         />
       </Card>
 
+      <Card tk={tk} title="AI 整合" style={SETTINGS_CARD_STYLE}>
+        <Toggle
+          tk={tk}
+          label="AI 整合"
+          desc="开:推荐面板的知识库候选上方多一行「根据知识库内容整合并回复」,点它才把检索到的知识库内容整合成一段可直接发送的回复;关:一切照旧,全程本地,不产生任何网络请求"
+          checked={draft.aiIntegrateEnabled}
+          onChange={(v) => void persist({ ...draft, aiIntegrateEnabled: v })}
+        />
+
+        {/* 数据边界说明(ADR-0006):必须写清楚"什么会被发出去",这是开关说明文案的核心 */}
+        <div
+          style={{
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
+            color: tk.textMuted,
+            lineHeight: 1.7,
+          }}
+        >
+          开启并点那行之后,<b style={{ fontWeight: formType.label.weight, color: tk.text }}>本轮检索出的知识库候选内容</b>
+          与<b style={{ fontWeight: formType.label.weight, color: tk.text }}>当前买家问题</b>
+          会发送到你下面填的接口,用于生成回复。
+          <b style={{ fontWeight: formType.label.weight, color: tk.text }}>历史回答与标准回答永不外发</b>
+          ,它们始终只走本地检索;生成结果只填进输入框,发送仍由你手动完成。
+          密钥仅存本机,不随浏览器账号同步。
+          {draft.directFillEnabled && (
+            <>
+              <br />
+              当前已开启「自动回复」,面板不会出现整合行,本功能不会生效。
+            </>
+          )}
+        </div>
+
+        <Slider
+          tk={tk}
+          label="整合超时"
+          value={draft.llmTimeoutMs}
+          min={LLM_TIMEOUT_MIN_MS / 1000}
+          max={LLM_TIMEOUT_MAX_MS / 1000}
+          step={1}
+          onChange={(v) => persistSlider({ llmTimeoutMs: Math.round(v) * 1000 })}
+          format={(v) => `${v} 秒`}
+        />
+
+        <Field tk={tk} label="接口地址" desc="OpenAI 兼容的 /chat/completions,填到 /v1 为止即可(不带尾斜杠)">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="https://api.deepseek.com/v1"
+            spellCheck={false}
+            value={llm?.baseUrl ?? ''}
+            onChange={(e) => setLlm((p) => (p ? { ...p, baseUrl: e.target.value } : p))}
+          />
+        </Field>
+
+        <Field tk={tk} label="API Key" desc="只存这台电脑的本地存储,不会同步到云端,也不会随导出外发">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="sk-…"
+            spellCheck={false}
+            autoComplete="off"
+            type={showKey ? 'text' : 'password'}
+            value={llm?.apiKey ?? ''}
+            onChange={(e) => setLlm((p) => (p ? { ...p, apiKey: e.target.value } : p))}
+          />
+          <Btn tk={tk} variant="ghost" onClick={() => setShowKey((v) => !v)}>
+            {showKey ? '隐藏' : '显示'}
+          </Btn>
+        </Field>
+
+        <Field tk={tk} label="模型名" desc="如 deepseek-chat、qwen-plus、gpt-4o-mini —— 请填非思考型模型">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="deepseek-chat"
+            spellCheck={false}
+            value={llm?.model ?? ''}
+            onChange={(e) => setLlm((p) => (p ? { ...p, model: e.target.value } : p))}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+          <Btn
+            tk={tk}
+            variant="primary"
+            disabled={busy || !llmDirty}
+            title={llmDirty ? '保存接口配置' : '没有改动'}
+            onClick={() => void saveLlm()}
+          >
+            保存
+          </Btn>
+          <Btn
+            tk={tk}
+            disabled={busy || test.phase === 'testing' || !llmFormReady(llm ?? { baseUrl: '', apiKey: '', model: '' })}
+            title="用当前填写的地址与模型发一次最小请求,验证是否可用"
+            onClick={() => void testLlm()}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {/* 只在途时给转圈;成功/失败的结论交给右侧那行文字,不进按钮(免得读成"✕ 测试连接") */}
+              {test.phase === 'testing' && <LoaderIcon size={12} strokeWidth={2} />}
+              测试连接
+            </span>
+          </Btn>
+          {/* 测试结论就地显示在按钮右侧(不弹 toast:用户正盯着这一行等结果) */}
+          {test.phase !== 'idle' && (
+            <span
+              style={{
+                fontSize: formType.desc.size,
+                fontWeight: formType.desc.weight,
+                color: test.phase === 'ok' ? tk.textMuted : llmTestFailed(test) ? tk.errorText : tk.textMuted,
+                lineHeight: 1.5,
+              }}
+            >
+              {llmTestLabel(test)}
+            </span>
+          )}
+        </div>
+
+        {/* 两处"配了但不会生效"的自查提示:开启未配置 / 改了没保存,都是静默失效的重灾区 */}
+        {draft.aiIntegrateEnabled &&
+          !llmFormReady({
+            baseUrl: draft.llmBaseUrl,
+            apiKey: draft.llmApiKey,
+            model: draft.llmModel,
+          }) && (
+            <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
+              已开启,但接口地址 / API Key / 模型名尚未填全,推荐面板不会出现整合行。
+            </div>
+          )}
+        {llmDirty && (
+          <div style={{ fontSize: formType.desc.size, color: tk.textMuted, lineHeight: 1.6 }}>
+            有未保存的修改。
+          </div>
+        )}
+      </Card>
+
       <Card tk={tk} title="导入与导出" style={SETTINGS_CARD_STYLE}>
         <Toggle
           tk={tk}
@@ -379,6 +597,58 @@ export function SettingsTab({
   )
 }
 
+
+// ─── AI 整合:带标签与说明的输入行 ───────────────────────────────────────────────
+
+/**
+ * 文本框行(标签 / 控件 / 说明三件套),与 Toggle、Slider、HotkeyRow 完全同构:
+ * 字号走 formType 三档、标签与说明的间距走 formGap.labelDesc —— 设置页不允许出现第四种行样式。
+ */
+function Field({
+  tk,
+  label,
+  desc,
+  children,
+}: {
+  tk: ThemeTokens
+  label: string
+  desc: string
+  children: React.ReactNode
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelDesc }}>
+      <span style={{ fontSize: formType.label.size, fontWeight: formType.label.weight }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>{children}</div>
+      <span
+        style={{
+          fontSize: formType.desc.size,
+          fontWeight: formType.desc.weight,
+          color: tk.textMuted,
+          lineHeight: 1.5,
+        }}
+      >
+        {desc}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * 申请访问该地址所在域名的权限(MV3 optional_host_permissions)。
+ *
+ * **调用点必须是用户手势里的第一个 await** —— 之前不能有任何 await,
+ * 否则手势令牌失效,request() 会直接抛错。故这里不做"先 contains 再 request"的
+ * 预检(那次查询本身就是个 await):已授权时 request() 本就立即返回 true,不弹窗。
+ */
+async function ensureHostPermission(baseUrl: string): Promise<boolean> {
+  const origins = originsForBaseUrl(baseUrl)
+  if (origins.length === 0) return false
+  try {
+    return await chrome.permissions.request({ origins })
+  } catch {
+    return false
+  }
+}
 
 // ─── 快捷键行:展示 + 按键录入 ────────────────────────────────────────────────────
 

@@ -18,6 +18,7 @@ import {
 import { processPendingEmbeddings } from "./syncEmbeddings";
 import { resplitStaleKbDocs } from "./kbResplit";
 import { registerAiPort } from "./aiIntegrate";
+import { isLlmConfigured, testLlmConnection } from "./llm";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { hashText } from "../shared/text";
@@ -338,6 +339,25 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       return { settings: await loadSettings() };
     },
     (err) => ({ error: String(err) }),
+  ),
+
+  // 测试连接:走的是真正会用的端点与模型(见 llm.ts 注释)。配置体来自设置页草稿,
+  // 库里的旧值不参与 —— 用户改完地址点测试,测的必须是刚改的那份。
+  TEST_LLM: route(
+    "TEST_LLM",
+    async (message) => {
+      const p = message.payload;
+      const config = {
+        baseUrl: String(p?.baseUrl ?? ""),
+        apiKey: String(p?.apiKey ?? ""),
+        model: String(p?.model ?? ""),
+        timeoutMs: Number(p?.timeoutMs) || DEFAULT_SETTINGS.llmTimeoutMs,
+      };
+      if (!isLlmConfigured(config)) return { ok: false, error: "unconfigured" };
+      const r = await testLlmConnection(config);
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
+    },
+    (err) => ({ ok: false, error: String(err) }),
   ),
 
   EXPORT_DATA: route(

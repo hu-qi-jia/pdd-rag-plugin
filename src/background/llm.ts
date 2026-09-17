@@ -72,6 +72,11 @@ export function buildMessages(query: string, materials: string[]): ChatMessage[]
   ]
 }
 
+/** 聊天补全端点(baseUrl 已由设置层规整为无尾斜杠)。测试与整合共用,免得两处拼错两回事 */
+export function endpointUrl(baseUrl: string): string {
+  return `${baseUrl}/chat/completions`
+}
+
 /** SSE data 行里取出增量文本;非增量事件(role 帧、心跳、[DONE])返回 '' */
 function pickDelta(raw: string): string {
   try {
@@ -101,7 +106,7 @@ export async function integrateReply(opts: {
   ac.signal.addEventListener('abort', onAbort)
 
   try {
-    const res = await fetch(`${config.baseUrl}/chat/completions`, {
+    const res = await fetch(endpointUrl(config.baseUrl), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -147,6 +152,51 @@ export async function integrateReply(opts: {
     // 空回复不返回 ok:否则会把输入框里已有的内容清成空白
     if (!text) return { ok: false, error: 'empty' }
     return { ok: true, text }
+  } catch {
+    return { ok: false, error: timedOut ? 'timeout' : 'network' }
+  } finally {
+    clearTimeout(timer)
+    ac.signal.removeEventListener('abort', onAbort)
+  }
+}
+
+/**
+ * 「测试连接」:打的是**真正会用的那个端点**、真正会用的那个模型 ——
+ * 只校验 /models 列表会漏掉"模型名写错""该 key 没有这个模型的权限"这两类最常见的配错,
+ * 而这两类恰恰是用户点测试时最想知道的。
+ *
+ * 代价是一次 1 token 的请求。非流式、max_tokens 压到 1:
+ * 这里只要"通不通",不在测试环节花用户的钱和时间。
+ */
+export async function testLlmConnection(
+  config: LlmConfig,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ac = new AbortController()
+  // 测试用的超时上限收紧到 10s:等这么久还没通,配置本身就该改了
+  const timer = setTimeout(() => ac.abort('timeout'), Math.min(config.timeoutMs, 10000))
+  let timedOut = false
+  const onAbort = () => {
+    timedOut = true
+  }
+  ac.signal.addEventListener('abort', onAbort)
+
+  try {
+    const res = await fetch(endpointUrl(config.baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [{ role: 'user', content: '你好' }],
+        stream: false,
+        max_tokens: 1,
+      }),
+      signal: ac.signal,
+    })
+    if (!res.ok) return { ok: false, error: `http ${res.status}` }
+    return { ok: true }
   } catch {
     return { ok: false, error: timedOut ? 'timeout' : 'network' }
   } finally {

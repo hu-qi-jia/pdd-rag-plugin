@@ -2,7 +2,7 @@
 // 按域拆分(2026-09-16 工程审查③-V8):system 诊断 / capture 捕获 / retrieval 检索 /
 // panel 面板 / kb 知识库 / settings 设置 / transfer 导入导出 / fill 填充。
 // 目录 index 出口 —— 现有 `types/messages` 导入路径不变;
-// ExtensionMessage 恰为 24 个请求类型,响应用 `${K}_RESPONSE` 命名约定。
+// ExtensionMessage 恰为 25 个请求类型,响应用 `${K}_RESPONSE` 命名约定。
 
 export * from './system'
 export * from './capture'
@@ -37,7 +37,7 @@ import type {
   FlattenFoldersRequest,
 } from './panel'
 import type { CreateKbRequest, UpdateKbRequest, DeleteKbRequest, UploadKbDocRequest } from './kb'
-import type { UpdateSettingsRequest } from './settings'
+import type { UpdateSettingsRequest, TestLlmRequest } from './settings'
 import type { ExportDataRequest, ImportDataRequest } from './transfer'
 import type { FillInputRequest } from './fill'
 
@@ -63,6 +63,7 @@ export type ExtensionMessage =
   | DeleteKbRequest
   | UploadKbDocRequest
   | UpdateSettingsRequest
+  | TestLlmRequest
   | ExportDataRequest
   | ImportDataRequest
   | FillInputRequest
@@ -92,7 +93,7 @@ import type {
   DeleteKbResponse,
   UploadKbDocResponse,
 } from './kb'
-import type { UpdateSettingsResponse } from './settings'
+import type { UpdateSettingsResponse, TestLlmResponse } from './settings'
 import type { ExportDataResponse, ImportDataResponse } from './transfer'
 import type { FillInputResponse } from './fill'
 
@@ -118,6 +119,7 @@ export type ExtensionMessageResponse =
   | DeleteKbResponse
   | UploadKbDocResponse
   | UpdateSettingsResponse
+  | TestLlmResponse
   | ExportDataResponse
   | ImportDataResponse
   | FillInputResponse

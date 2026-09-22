@@ -45,7 +45,7 @@ export interface ExportedReply {
   hasEmbedding: number
 }
 
-/** 导出知识库条目(向量剥离;enabled/source/docId 原样保留) */
+/** 导出知识库条目(向量剥离;enabled/source/docId/chunkKind/sectionSeq 原样保留) */
 export interface ExportedKnowledge {
   id: string
   title: string
@@ -55,6 +55,29 @@ export interface ExportedKnowledge {
   enabled: number
   source?: 'manual' | 'doc'
   docId?: string
+  /**
+   * 块类型(v0.16 起导出;旧文件没有这两个字段,导入端按缺省处理)。
+   * 缺了它,导入的文档块会退化成"来源不明"的条目 —— 重新分块要靠它判断
+   * 这段是问答体还是小节,分块器版本号也要靠它对齐。
+   */
+  chunkKind?: 'qa' | 'section'
+  /** 源节在文档中的序号(0 起);同一节被拆成多块时共享 */
+  sectionSeq?: number
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 导出知识库文档原文(v0.16):kbDocs 是"按新分块规则重切"的唯一事实源。
+ * 不带它,导入到新机器上的文档块就是一坨无法重切的死数据 —— 旧版导出正是如此,
+ * 结果是知识库页常年挂一条"请重新上传原文"的提示,而原文在用户手里、只是没人告诉他要传。
+ */
+export interface ExportedKbDoc {
+  docId: string
+  content: string
+  /** 导出时的分块器版本;导入后与当前版本不符即自动重切(见 kbResplit.ts) */
+  splitterVersion: string
+  chunkCount: number
   createdAt: number
   updatedAt: number
 }
@@ -67,6 +90,8 @@ export interface ExportEnvelope {
   goldens: ExportedGolden[]
   /** 知识库:人工精选数据,与金标准同级,始终导出(不受 includeMemory 门控) */
   knowledge?: ExportedKnowledge[]
+  /** 知识库文档原文(v0.16 新增;旧文件无此字段,导入端按空数组处理) */
+  kbDocs?: ExportedKbDoc[]
   qaRecords?: ExportedQa[]
   replies?: ExportedReply[]
 }

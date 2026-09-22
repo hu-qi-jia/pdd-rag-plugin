@@ -10,6 +10,9 @@ import {
   countGoldensByQuestion,
   orderGoldensByRecency,
   legacyDocNotice,
+  missRate,
+  usageIsEmpty,
+  usageRows,
   type PanelFolder,
   type PanelGolden,
   type FolderNode,
@@ -186,5 +189,42 @@ describe('legacyDocNotice:旧文档重新上传提示', () => {
     const t = legacyDocNotice(['常见问答', '售后政策']) as string
     expect(t).toContain('《常见问答》')
     expect(t).toContain('《售后政策》')
+  })
+})
+
+// v0.16:使用统计的展示口径。未命中率是"工具有没有帮上忙"的那一眼,
+// 分母为 0 时给百分比是在编数字,不是结论 —— 这条单独钉住。
+describe('使用统计展示行', () => {
+  it('检索行把总数与未命中合在一起,并给出整数百分比', () => {
+    const rows = usageRows({ 'search.total': 40, 'search.miss': 10, 'fill.golden': 7 })
+    expect(rows[0].label).toBe('检索次数')
+    expect(rows[0].value).toBe('40 次 · 未命中 10 次(25%)')
+  })
+
+  it('没检索过时不显示 0%(分母都没有,百分比是错觉)', () => {
+    expect(usageRows({}).find((r) => r.key === 'search')?.value).toBe('0 次')
+  })
+
+  it('缺省字段按 0 处理,不抛错', () => {
+    expect(() => usageRows(undefined)).not.toThrow()
+    expect(usageRows(undefined).length).toBeGreaterThan(0)
+  })
+
+  it('每个填充类别各占一行(顺序与口径单源一致)', () => {
+    const keys = usageRows({}).map((r) => r.key)
+    expect(keys).toEqual(['search', 'panel.open.click', 'panel.open.hotkey', 'fill.golden', 'fill.history', 'fill.knowledge', 'fill.ai'])
+  })
+
+  it('missRate 单独可算;未检索过返回 0 而不是 NaN', () => {
+    expect(missRate({ 'search.total': 3, 'search.miss': 1 })).toBe(33)
+    expect(missRate({})).toBe(0)
+    expect(missRate(undefined)).toBe(0)
+  })
+
+  it('usageIsEmpty 只认口径内的键:全 0 / 无数据 → true', () => {
+    expect(usageIsEmpty(undefined)).toBe(true)
+    expect(usageIsEmpty({})).toBe(true)
+    expect(usageIsEmpty({ 'search.total': 0 })).toBe(true)
+    expect(usageIsEmpty({ 'search.total': 1 })).toBe(false)
   })
 })

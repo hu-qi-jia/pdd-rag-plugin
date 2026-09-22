@@ -87,17 +87,23 @@ export async function clearMemoryData(
   }
 }
 
-/** 面板数据:文件夹 + 金标准 + 知识库(剥离向量字段) */
+/** 面板数据:文件夹 + 金标准 + 知识库(剥离向量字段)+ 逐条用量 */
 export async function getPanelData(
   _message: GetPanelDataRequest,
 ): Promise<
-  Pick<GetPanelDataResponse["payload"], "folders" | "goldens" | "knowledge" | "legacyDocs">
+  Pick<
+    GetPanelDataResponse["payload"],
+    "folders" | "goldens" | "knowledge" | "legacyDocs" | "itemUsage"
+  >
 > {
-  const [folders, goldens, knowledge, legacyDocs] = await Promise.all([
+  const [folders, goldens, knowledge, legacyDocs, itemUsage] = await Promise.all([
     db.listFolders(),
     db.goldens.toArray(),
     db.listKnowledge(),
     db.getLegacyDocIds(),
+    // 逐条用量随面板数据一起回:面板与知识库页本就每次开都取这份数据,
+    // 顺手带上比再开一条"取用量"的消息少一趟往返(计数只有几十行,可忽略)
+    db.listItemUsage(),
   ]);
   return {
     folders: folders.map((f) => ({
@@ -124,6 +130,7 @@ export async function getPanelData(
       updatedAt: k.updatedAt,
     })),
     legacyDocs,
+    itemUsage,
   };
 }
 

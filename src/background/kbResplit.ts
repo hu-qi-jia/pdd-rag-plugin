@@ -31,7 +31,8 @@ export async function resplitStaleKbDocs(): Promise<number> {
     const pendingEmbeds: Array<{ id: string; anchor: string }> = []
 
     // 删旧块 + 写新块 + 更新版本同事务:中途失败时文档保持旧状态,下轮再试
-    await db.transaction('rw', db.knowledge, db.kbDocs, async () => {
+    // (metrics 也要列入:删块会连带清掉这些块的逐条用量键,属同一事务的一部分)
+    await db.transaction('rw', db.knowledge, db.kbDocs, db.metrics, async () => {
       await db.deleteKnowledgeByDoc(doc.docId)
       for (let i = 0; i < chunks.length; i++) {
         const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`

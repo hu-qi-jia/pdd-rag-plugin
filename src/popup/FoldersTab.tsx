@@ -77,6 +77,8 @@ export function FoldersTab({
 }) {
   const [folders, setFolders] = useState<PanelFolder[]>([])
   const [goldens, setGoldens] = useState<PanelGolden[]>([])
+  // 逐条用量(v0.16):条目 id → 被填充次数;"哪条话术真在用"只有这里看得出来
+  const [itemUsage, setItemUsage] = useState<Record<string, number>>({})
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
 
@@ -125,6 +127,7 @@ export function FoldersTab({
       } else {
         setFolders(resp.payload.folders)
         setGoldens(resp.payload.goldens)
+        setItemUsage(resp.payload.itemUsage ?? {})
       }
     } catch (err) {
       setMsg({ ok: false, text: `读取失败:${String(err)}` })
@@ -526,6 +529,16 @@ export function FoldersTab({
               </span>
             )
           })()}
+          {/* 被用次数(v0.16):只在真被填过时出现 —— 0 次的行平白多一枚灰标,
+              新库满屏"被用 0 次",噪声盖过信息 */}
+          {itemUsage[g.id] > 0 && (
+            <span
+              title={`这条标准回答已被填入输入框 ${itemUsage[g.id]} 次(仅本机计数)`}
+              style={{ fontSize: fontSize.caption, color: tk.textTertiary, flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              被用 {itemUsage[g.id]} 次
+            </span>
+          )}
           {g.hasEmbedding === 0 && (
             <span style={{ fontSize: fontSize.caption, color: tk.textTertiary, flexShrink: 0 }}>
               向量生成中

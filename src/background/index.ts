@@ -21,12 +21,16 @@ import { registerAiPort } from "./aiIntegrate";
 import { isLlmConfigured, testLlmConnection } from "./llm";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
+import { clearMetrics, metricsSnapshot, trackEvent } from "./metrics";
+import { getBacklog, ignoreBacklog } from "./backlog";
 import { hashText } from "../shared/text";
+import { fillEventOf } from "../shared/metrics";
 import { DEFAULT_SETTINGS, SELF_TEST_SESSION_KEY } from '../shared/constants';
 import type { QaRecord, ReplyRecord } from '../types/memory';
 import type {
   ExtensionMessage,
   ExtensionMessageResponse,
+  FillInputRequest,
   PingEmbedResponse,
   SelfTestWriteRequest,
   SelfTestWriteResponse,
@@ -125,8 +129,9 @@ async function selfTestWritePayload(
 
 /** 金标准卡"填充":转发文本到聊天页 content(只填官方输入框,绝不发送) */
 async function fillToChatPage(
-  text: string,
+  payload: FillInputRequest["payload"],
 ): Promise<FillInputResponse["payload"]> {
+  const text = String(payload?.text ?? "");
   if (!text) return { success: false, error: "填充内容为空" };
   const tabs = await chrome.tabs.query({
     url: "https://mms.pinduoduo.com/chat-merchant/*",
@@ -144,6 +149,15 @@ async function fillToChatPage(
       success: false,
       error: resp?.payload?.error ?? "页面未就绪,请刷新聊天页后重试",
     };
+  }
+  // 填进去了才记账(v0.16):未就绪/空文本的失败不算"用过这条话术"。
+  // 即发即忘 —— 填充已经从页面往返一次,不该再等一次写库。
+  if (payload.itemKind) {
+    void trackEvent({
+      event: fillEventOf(payload.itemKind),
+      itemKind: payload.itemKind,
+      itemId: typeof payload.itemId === "string" ? payload.itemId : undefined,
+    });
   }
   return { success: true };
 }
@@ -205,8 +219,12 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   GET_STATS: route(
     "GET_STATS",
     async () => {
-      const [stats, settings] = await Promise.all([db.getStats(), loadSettings()]);
-      return { ...stats, settings, embeddingModel: MODEL_NAME };
+      const [stats, settings, metrics] = await Promise.all([
+        db.getStats(),
+        loadSettings(),
+        metricsSnapshot(),
+      ]);
+      return { ...stats, settings, embeddingModel: MODEL_NAME, metrics };
     },
     (err) => ({
       qaCount: 0,
@@ -216,6 +234,7 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       knowledgeCount: 0,
       settings: { ...DEFAULT_SETTINGS },
       embeddingModel: MODEL_NAME,
+      metrics: {},
       error: String(err),
     }),
   ),
@@ -381,9 +400,33 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
 
   FILL_INPUT: route(
     "FILL_INPUT",
-    (message) => fillToChatPage(String(message.payload?.text ?? "")),
+    (message) => fillToChatPage(message.payload),
     (err) => ({ success: false, error: String(err) }),
   ),
+
+  // 页面内发生的事(content 侧填充/打开面板)只能由当事方回报 —— 见 types/messages/metrics.ts
+  TRACK_EVENT: route(
+    "TRACK_EVENT",
+    (message) => trackEvent(message.payload),
+    (err) => ({ success: false, error: String(err) }),
+  ),
+
+  CLEAR_METRICS: route("CLEAR_METRICS", () => clearMetrics(), (err) => ({
+    success: false,
+    cleared: 0,
+    error: String(err),
+  })),
+
+  GET_BACKLOG: route("GET_BACKLOG", (message) => getBacklog(message), (err) => ({
+    items: [],
+    total: 0,
+    error: String(err),
+  })),
+
+  IGNORE_BACKLOG: route("IGNORE_BACKLOG", (message) => ignoreBacklog(message), (err) => ({
+    success: false,
+    error: String(err),
+  })),
 };
 
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {

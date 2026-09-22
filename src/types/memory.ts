@@ -135,6 +135,29 @@ export interface KbDocRecord {
   updatedAt: number
 }
 
+// ─── 使用统计 / 待沉淀清单(v0.16) ──────────────────────────────────────────────
+
+/**
+ * 使用统计计数器(metrics):本地自用的埋点,回答"这工具到底帮没帮上忙"。
+ * 键的口径(事件键、逐条用量键)统一定义在 shared/metrics.ts,此处只声明存储形状。
+ */
+export interface MetricRecord {
+  /** 主键:`<事件>`(全局计数)或 `item.<类别>:<条目id>`(逐条用量,条目删则键删) */
+  key: string
+  count: number
+  /** 最近一次自增时间 —— 让"这周还在用吗"这类问题可答,也便于排查僵尸键 */
+  updatedAt: number
+}
+
+/** 待沉淀清单的"不再提示"(backlogIgnores):问题已被判为不值得沉淀 */
+export interface BacklogIgnoreRecord {
+  /** 主键:问题归一化哈希(`qaRecords.questionHash` 同口径) */
+  questionHash: string
+  /** 忽略时的问题原文(清单里不展示,留着便于将来恢复/排查) */
+  question: string
+  createdAt: number
+}
+
 /** 错误日志(errors) */
 export interface ErrorLog {
   id?: number

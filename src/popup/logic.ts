@@ -5,6 +5,11 @@
  *  的命名撞车解除 —— 后者是 SW 侧 DB 读取,本文件是 UI 侧纯逻辑)
  */
 import { hashText, normalizeText } from '../shared/text'
+import {
+  METRIC_EVENT_KEYS,
+  METRIC_LABELS,
+  type MetricEventKey,
+} from '../shared/metrics'
 import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants'
 import type { PanelFolder, PanelGolden } from '../types/messages'
 
@@ -15,6 +20,47 @@ export function filterQaRecords<T extends { question: string }>(items: T[], keyw
   const kw = normalizeText(keyword)
   if (!kw) return items
   return items.filter((it) => normalizeText(it.question).includes(kw))
+}
+
+/**
+ * 使用统计展示行(v0.16 设置页)——
+ * 「检索次数 / 其中未命中」合并成一行:未命中单独一行会让人误以为它是另一类动作,
+ * 它其实是分母的一部分。未命中率随行给出,这才是"工具有没有帮上忙"的那一眼。
+ * 其余事件各占一行,顺序取 METRIC_EVENT_KEYS(口径单处定义,展示端不另排一遍)。
+ */
+export function usageRows(
+  metrics: Record<string, number> | undefined,
+): Array<{ key: string; label: string; value: string }> {
+  const m = metrics ?? {}
+  const n = (k: MetricEventKey): number => m[k] ?? 0
+  const total = n('search.total')
+  const miss = n('search.miss')
+  const rows = [
+    {
+      key: 'search',
+      label: METRIC_LABELS['search.total'],
+      // 总数为 0 时不显示"0%":分母都没有,那个百分比不是结论而是错觉
+      value: total === 0 ? '0 次' : `${total} 次 · 未命中 ${miss} 次(${missRate(m)}%)`,
+    },
+  ]
+  for (const key of METRIC_EVENT_KEYS) {
+    if (key === 'search.total' || key === 'search.miss') continue
+    rows.push({ key, label: METRIC_LABELS[key], value: `${n(key)} 次` })
+  }
+  return rows
+}
+
+/** 检索未命中率(整数百分比 0~100);未检索过时返回 0 */
+export function missRate(metrics: Record<string, number> | undefined): number {
+  const total = metrics?.['search.total'] ?? 0
+  if (total <= 0) return 0
+  return Math.round(((metrics?.['search.miss'] ?? 0) / total) * 100)
+}
+
+/** 是否一条统计都还没有(全是 0)—— 新装/刚重置,展示端据此给一句说明而不是一排 0 */
+export function usageIsEmpty(metrics: Record<string, number> | undefined): boolean {
+  if (!metrics) return true
+  return METRIC_EVENT_KEYS.every((k) => !metrics[k])
 }
 
 /** 剩余保留天数:向上取整,过期夹为 0 */

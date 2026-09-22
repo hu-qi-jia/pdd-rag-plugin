@@ -10,13 +10,26 @@
  *   folders   — 回复文件夹(两层,parentId=null 即根层)
  *   knowledge — 知识库条目(人工维护"标题+正文"话术卡,豁免保留期)
  *   kbDocs    — 知识库文档原文(分块器版本变更时重新分块的事实源,豁免保留期)
+ *   metrics   — 使用统计计数器(本地埋点,不参与检索)
+ *   backlogIgnores — 待沉淀清单的"不再提示"标记
  *   errors    — 错误日志
  *
  * hasEmbedding 三态:0=待嵌(启动扫描重试) 1=已嵌 -1=嵌入失败(记录 errors,下次启动扫描重试)
  */
 import Dexie, { type Table } from "dexie";
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants';
-import type { ErrorLog, FolderRecord, GoldenRecord, KbDocRecord, KnowledgeRecord, QaRecord, ReplyRecord } from '../types/memory';
+import { itemMetricKey, parseItemMetricKey } from '../shared/metrics';
+import type {
+  BacklogIgnoreRecord,
+  ErrorLog,
+  FolderRecord,
+  GoldenRecord,
+  KbDocRecord,
+  KnowledgeRecord,
+  MetricRecord,
+  QaRecord,
+  ReplyRecord,
+} from '../types/memory';
 
 // 检索缓存失效钩子(工程5b):改变"已嵌三源"集合的写路径必须调用。
 // 循环依赖安全:本模块只在方法体内(运行时)使用它,模块求值期不触碰。
@@ -29,6 +42,8 @@ export class PddDatabase extends Dexie {
   folders!: Table<FolderRecord, string>;
   knowledge!: Table<KnowledgeRecord, string>;
   kbDocs!: Table<KbDocRecord, string>;
+  metrics!: Table<MetricRecord, string>;
+  backlogIgnores!: Table<BacklogIgnoreRecord, string>;
   errors!: Table<ErrorLog, number>;
 
   constructor() {
@@ -65,6 +80,15 @@ export class PddDatabase extends Dexie {
     // 存下原文才能在启动时按新规则重切,用户不必手动重传文档。
     this.version(5).stores({
       kbDocs: "docId, splitterVersion",
+    });
+
+    // v0.16 使用统计与待沉淀清单:
+    //   metrics        — 本地计数器(检索/未命中、面板打开、按类别填充、逐条用量)
+    //   backlogIgnores — 待沉淀清单的"不再提示"标记
+    // 两者都不参与检索,故本文件里唯一一类**不**失效检索缓存的写路径(见 bumpMetrics)。
+    this.version(6).stores({
+      metrics: "key",
+      backlogIgnores: "questionHash",
     });
   }
 
@@ -443,7 +467,11 @@ export class PddDatabase extends Dexie {
   }
 
   async deleteGolden(id: string): Promise<void> {
-    await this.goldens.delete(id);
+    await this.transaction("rw", this.goldens, this.metrics, async () => {
+      await this.goldens.delete(id);
+      // 逐条用量键跟着条目走:留着就是查不到主人的孤儿计数
+      await this.dropItemMetrics("golden", [id]);
+    });
     invalidateRetrievalCache();
   }
 
@@ -476,7 +504,10 @@ export class PddDatabase extends Dexie {
   }
 
   async deleteKnowledge(id: string): Promise<void> {
-    await this.knowledge.delete(id);
+    await this.transaction("rw", this.knowledge, this.metrics, async () => {
+      await this.knowledge.delete(id);
+      await this.dropItemMetrics("knowledge", [id]);
+    });
     invalidateRetrievalCache();
   }
 
@@ -489,7 +520,10 @@ export class PddDatabase extends Dexie {
   async deleteKnowledgeByDoc(docId: string): Promise<number> {
     const ids = await this.knowledge.where("docId").equals(docId).primaryKeys();
     if (ids.length === 0) return 0;
-    await this.knowledge.bulkDelete(ids);
+    await this.transaction("rw", this.knowledge, this.metrics, async () => {
+      await this.knowledge.bulkDelete(ids);
+      await this.dropItemMetrics("knowledge", ids);
+    });
     invalidateRetrievalCache();
     return ids.length;
   }
@@ -530,6 +564,90 @@ export class PddDatabase extends Dexie {
     ]);
     const have = new Set(known.map(String));
     return docIds.map(String).filter((id) => !have.has(id));
+  }
+
+  // ─── 使用统计(metrics)/ 待沉淀清单忽略项(v0.16) ───────────────────────────────
+
+  /**
+   * 计数器自增(键不存在则建)。**即发即忘调用** —— 统计不该给检索加延迟。
+   *
+   * 刻意**不调用 invalidateRetrievalCache()**:全库唯一一类不改变"已嵌三源"集合的
+   * 写路径。若跟着失效,每次检索都会清掉 SW 内存里的锚点缓存,下次检索得重读全表 ——
+   * 埋点反过来把检索拖慢,这笔账不划算。
+   *
+   * 读改写包在事务里(IndexedDB 同表事务串行),并发自增不会互相覆盖;
+   * 失败静默:统计丢几个数不致命,但绝不能把调用方(检索/填充)带崩。
+   */
+  async bumpMetrics(keys: readonly string[], delta = 1): Promise<void> {
+    if (keys.length === 0) return;
+    try {
+      const now = Date.now();
+      await this.transaction("rw", this.metrics, async () => {
+        for (const key of keys) {
+          const cur = await this.metrics.get(key);
+          await this.metrics.put({
+            key,
+            count: (cur?.count ?? 0) + delta,
+            updatedAt: now,
+          });
+        }
+      });
+    } catch (err) {
+      console.warn("[PDD CS] bumpMetrics failed:", keys, err);
+    }
+  }
+
+  async bumpMetric(key: string, delta = 1): Promise<void> {
+    await this.bumpMetrics([key], delta);
+  }
+
+  /** 全部计数器(设置页展示 + 逐条用量映射);按主键升序,读侧自行分组 */
+  async listMetrics(): Promise<MetricRecord[]> {
+    return this.metrics.toArray();
+  }
+
+  /** 逐条用量映射:`条目id → 次数`(面板/知识库页展示"被用 N 次") */
+  async listItemUsage(): Promise<Record<string, number>> {
+    const rows = await this.metrics.toArray();
+    const out: Record<string, number> = {};
+    for (const r of rows) {
+      const golden = parseItemMetricKey(r.key, "golden");
+      const kb = parseItemMetricKey(r.key, "knowledge");
+      const id = golden ?? kb;
+      if (id && r.count > 0) out[id] = r.count;
+    }
+    return out;
+  }
+
+  /** 重置全部统计(设置页"清空统计";不动任何业务数据) */
+  async clearMetrics(): Promise<number> {
+    const total = await this.metrics.count();
+    await this.metrics.clear();
+    return total;
+  }
+
+  /** 条目删除时一并清掉它的用量键(避免库里攒孤儿计数器) */
+  private async dropItemMetrics(kind: "golden" | "knowledge", ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.metrics.bulkDelete(ids.map((id) => itemMetricKey(kind, id)));
+  }
+
+  /** 待沉淀清单:标记"这条问题不用沉淀"(按问题哈希,与 qaRecords 同口径) */
+  async ignoreBacklog(questionHash: string, question: string): Promise<void> {
+    await this.backlogIgnores.put({
+      questionHash,
+      question,
+      createdAt: Date.now(),
+    });
+  }
+
+  async unignoreBacklog(questionHash: string): Promise<void> {
+    await this.backlogIgnores.delete(questionHash);
+  }
+
+  /** 全部忽略项(清单聚合时一次读走,不做逐条查) */
+  async listBacklogIgnores(): Promise<BacklogIgnoreRecord[]> {
+    return this.backlogIgnores.toArray();
   }
 
   // ─── 回复文件夹(folders) ──────────────────────────────────────────────────────

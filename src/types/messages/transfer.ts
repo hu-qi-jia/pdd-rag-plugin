@@ -24,6 +24,9 @@ export interface ImportDataResponse {
     skippedFolders?: number
     addedKnowledge?: number
     skippedKnowledge?: number
+    /** 知识库文档原文(v0.16):导入原文后,分块器版本不符时会自动重切 */
+    addedKbDocs?: number
+    skippedKbDocs?: number
     addedQa?: number
     skippedQa?: number
     addedReplies?: number

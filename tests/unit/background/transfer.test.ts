@@ -11,15 +11,17 @@ import {
   planFolderImports,
   planMemoryImports,
   planKnowledgeImports,
+  planKbDocImports,
 } from '../../../src/background/transferPlan'
 import type {
   ExportedGolden,
   ExportedQa,
   ExportedReply,
   ExportedKnowledge,
+  ExportedKbDoc,
 } from '../../../src/types/transfer'
 import { MAX_GOLDENS_PER_QUESTION, SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, DEFAULT_SETTINGS } from '../../../src/shared/constants'
-import type { GoldenRecord, QaRecord, ReplyRecord, FolderRecord, KnowledgeRecord } from '../../../src/types/memory'
+import type { GoldenRecord, QaRecord, ReplyRecord, FolderRecord, KnowledgeRecord, KbDocRecord } from '../../../src/types/memory'
 // ─── 造数 ──────────────────────────────────────────────────────────────────────
 
 const golden = (
@@ -335,5 +337,151 @@ describe('planKnowledgeImports', () => {
     expect(Object.keys(k).sort()).toEqual(
       ['content', 'createdAt', 'enabled', 'hasEmbedding', 'id', 'questionHash', 'title', 'updatedAt'],
     )
+  })
+})
+
+// ─── v0.16:知识库文档原文与块元字段 ────────────────────────────────────────────
+// 修的是真问题:旧版导出不带 kbDocs,换台机器导入后文档块无从重切,知识库页
+// 常年挂着"请重新上传原文"的提示 —— 而原文一直在用户手里,只是没人告诉他要传。
+
+describe('v0.16 导出:文档原文与块元字段', () => {
+  const kbDoc = (docId: string, content = '# 标题\n正文'): KbDocRecord => ({
+    docId,
+    content,
+    splitterVersion: '1.2.0',
+    chunkCount: 3,
+    createdAt: 10,
+    updatedAt: 20,
+  })
+
+  it('信封携带 kbDocs(原文 + 分块器版本)', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      knowledge: [],
+      kbDocs: [kbDoc('常见问答')],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.kbDocs).toEqual([
+      { docId: '常见问答', content: '# 标题\n正文', splitterVersion: '1.2.0', chunkCount: 3, createdAt: 10, updatedAt: 20 },
+    ])
+  })
+
+  it('未传 kbDocs → 空数组(不是 undefined,读侧不必到处判空)', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.kbDocs).toEqual([])
+  })
+
+  it('知识块导出时带上 chunkKind / sectionSeq(否则导入后"这段是怎么切出来的"就丢了)', () => {
+    const k: KnowledgeRecord = {
+      id: 'doc-c0',
+      title: '文档名 · 段0',
+      content: '正文',
+      questionHash: 'h0',
+      hasEmbedding: 1,
+      enabled: 1,
+      source: 'doc',
+      docId: '文档名',
+      chunkKind: 'section',
+      sectionSeq: 2,
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      knowledge: [k],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.knowledge?.[0].chunkKind).toBe('section')
+    expect(env.knowledge?.[0].sectionSeq).toBe(2)
+  })
+
+  it('手工条目没有这两个字段时不被凭空补上(缺省即缺省)', () => {
+    const k: KnowledgeRecord = {
+      id: 'k1',
+      title: '发票',
+      content: '可以开',
+      questionHash: 'h1',
+      hasEmbedding: 1,
+      enabled: 1,
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      knowledge: [k],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.knowledge?.[0]).not.toHaveProperty('chunkKind')
+    expect(env.knowledge?.[0]).not.toHaveProperty('sectionSeq')
+  })
+})
+
+describe('v0.16 导入:文档原文计划', () => {
+  const incoming = (docId: string): ExportedKbDoc => ({
+    docId,
+    content: '原文',
+    splitterVersion: '1.0.0',
+    chunkCount: 1,
+    createdAt: 1,
+    updatedAt: 2,
+  })
+
+  it('按 docId 幂等:已存在同名原文 → 跳过(不覆盖本地可能已重传的新内容)', () => {
+    const r = planKbDocImports([incoming('常见问答')], new Set(['常见问答']))
+    expect(r.toAdd).toHaveLength(0)
+    expect(r.skipped).toBe(1)
+  })
+
+  it('导入包内部同 docId 重复只留第一条', () => {
+    const r = planKbDocImports([incoming('A'), incoming('A')], new Set())
+    expect(r.toAdd).toHaveLength(1)
+    expect(r.skipped).toBe(1)
+  })
+
+  it('splitterVersion 原样带入 —— 与当前版本不符时启动扫描据此自动重切', () => {
+    const r = planKbDocImports([incoming('A')], new Set())
+    expect(r.toAdd[0].splitterVersion).toBe('1.0.0')
+  })
+
+  it('脏数据(docId 缺失)丢弃并计数,不写进库', () => {
+    const bad = { ...incoming(''), docId: '' } as ExportedKbDoc
+    const r = planKbDocImports([bad, incoming('A')], new Set())
+    expect(r.toAdd.map((d) => d.docId)).toEqual(['A'])
+    expect(r.skipped).toBe(1)
+  })
+
+  it('导入的知识块保留 chunkKind / sectionSeq', () => {
+    const k: ExportedKnowledge = {
+      id: 'doc-c0',
+      title: '文档名 · 段0',
+      content: '正文',
+      questionHash: 'h0',
+      hasEmbedding: 0,
+      enabled: 1,
+      source: 'doc',
+      docId: '文档名',
+      chunkKind: 'qa',
+      sectionSeq: 0,
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const r = planKnowledgeImports([k], new Set())
+    expect(r.toAdd[0].chunkKind).toBe('qa')
+    expect(r.toAdd[0].sectionSeq).toBe(0)
   })
 })

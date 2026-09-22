@@ -142,7 +142,8 @@ export async function importKbDocument(
   let replaced = false
 
   // 整篇替换必须原子:删旧块 + 写新块同事务,中途失败整体回滚(旧文档原样保留)
-  await db.transaction('rw', db.knowledge, db.kbDocs, async () => {
+  // (metrics 也要列入:删块会连带清掉旧块的逐条用量键,属同一事务的一部分)
+  await db.transaction('rw', db.knowledge, db.kbDocs, db.metrics, async () => {
     replaced = (await db.deleteKnowledgeByDoc(docId)) > 0
     for (let i = 0; i < chunks.length; i++) {
       const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`

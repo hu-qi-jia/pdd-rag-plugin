@@ -59,6 +59,11 @@ import {
 } from '../pdd/ui-logic'
 import { findBubbleElement } from '../pdd/bubble-anchor'
 import { DEFAULT_HOTKEY, DEFAULT_SETTINGS, MAX_GOLDENS_PER_QUESTION, SETTINGS_STORAGE_KEY } from '../shared/constants'
+import {
+  fillEventOf,
+  type MetricEventKey,
+  type MetricItemKind,
+} from '../shared/metrics'
 import type { PddSettings } from '../types/memory'
 import { formatHotkey, isModifierOnly, matchesHotkey } from '../shared/hotkey'
 
@@ -123,6 +128,43 @@ function ensureOverlay(): HTMLDivElement {
   }
   if (!document.getElementById(STYLE_ID)) applyOverlayTheme(currentTheme)
   return overlay
+}
+
+// ─── 使用统计上报(v0.16)───────────────────────────────────────────────────────
+//
+// 面板打开与候选填充都在本页**当场**发生(fillInput 直接写官方输入框,不经 SW),
+// 后台没有别的途径知道 —— 只能由当事方回报一条。键的口径见 shared/metrics.ts。
+//
+// 三条纪律:
+//  - 即发即忘:统计是旁路,绝不能让"记一笔"挡住填充或弹面板;
+//  - 失败静默:SW 没醒/消息通道断了都不该在客服面前弹错;
+//  - **本页不重复记账**:SW 转发来的 PDD_FILL_INPUT(弹窗里点的填充)由 SW 自己计,
+//    这里再记一次就成了双份。
+
+function trackEvent(
+  event: MetricEventKey,
+  itemKind?: MetricItemKind,
+  itemId?: string,
+): void {
+  void chrome.runtime
+    .sendMessage({
+      type: 'TRACK_EVENT',
+      payload: { event, ...(itemKind ? { itemKind, itemId } : {}) },
+    })
+    .catch(() => {
+      /* 统计丢一笔无所谓,不上报错误 */
+    })
+}
+
+/** 填充记账(仅本页发起的填充):按类别计一笔;金标准/知识库另记一条逐条用量 */
+function trackFill(s: Suggestion): void {
+  const itemId = s.sourceId
+  if (s.kind === 'history') {
+    // 历史候选不带 id:问答记录 90 天就被 TTL 清掉,逐条计数只会攒下孤儿键
+    trackEvent('fill.history')
+    return
+  }
+  trackEvent(fillEventOf(s.kind), s.kind, itemId)
 }
 
 // ─── toast ────────────────────────────────────────────────────────────────────
@@ -342,6 +384,7 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
   if (act.action === 'fill') {
     const s = suggestions[act.fillIndex]
     if (fillInput(s.text)) {
+      trackFill(s)
       toast(
         `已填充:${kindLabel(s.kind)}` +
           `${(s.foldCount ?? 1) > 1 ? ` · 同内容×${s.foldCount}` : ''} · 请手动发送`,
@@ -351,6 +394,7 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
     }
     return
   }
+  trackEvent('panel.open.click')
   openPopup(btn, act.items, query, { aiAvailable: settings.aiAvailable })
 }
 
@@ -533,6 +577,7 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
         // 留着它只会挡住刚填好的输入框。填不进去(页面没有输入框)时**不退场**:
         // 生成结果还在行里,用户要从这儿手动复制,面板是唯一的载体
         if (fillInput(ev.payload.text)) {
+          trackEvent('fill.ai')
           toast('已整合并填充:知识库 · 请手动发送')
           closePopup()
         } else {
@@ -703,6 +748,7 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
 
   row.addEventListener('click', () => {
     if (fillInput(s.text)) {
+      trackFill(s)
       toast(`已填充:${kindLabel(s.kind)} · 请手动发送`)
       closePopup()
     } else {
@@ -922,6 +968,7 @@ async function onHotkey(): Promise<void> {
   if (settings.directFillEnabled) {
     const first = suggestions[0]
     if (fillInput(first.text)) {
+      trackFill(first)
       toast(`已填充:${kindLabel(first.kind)} · 请手动发送`)
     } else {
       toast('未找到输入框,请手动粘贴')
@@ -934,6 +981,7 @@ async function onHotkey(): Promise<void> {
     (rowBtns.get(latest) as HTMLElement | undefined) ??
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
     (latest as HTMLElement)
+  trackEvent('panel.open.hotkey')
   openPopup(anchor, suggestions, query, { keyboard: true, aiAvailable: settings.aiAvailable })
 }
 
@@ -974,6 +1022,7 @@ document.addEventListener(
         return
       }
       if (fillInput(picked.s.text)) {
+        trackFill(picked.s)
         toast(`已填充:${kindLabel(picked.s.kind)} · 请手动发送`)
         closePopup()
       } else {
@@ -1009,6 +1058,8 @@ chrome.runtime.onMessage.addListener(
       return false
     }
     if (fillInput(text)) {
+      // 此处**不上报统计**:这条消息是 SW 转发来的(弹窗里点的填充),SW 那边
+      // 已经记过账;在这里再记一次就是双份(见文件头"使用统计上报"三条纪律)
       toast('已填充:标准回答 · 请手动发送')
       sendResponse({ type: 'PDD_FILL_INPUT_RESPONSE', payload: { success: true } })
     } else {

@@ -15,6 +15,7 @@ import {
 } from "./retrieval";
 import { loadSettings } from "./settings";
 import { aiRowAvailable } from "./aiIntegrate";
+import { recordSearchOutcome } from "./metrics";
 import { normalizeText } from "../shared/text";
 import type { GoldenRecord, KnowledgeRecord } from '../types/memory';
 import type { UiSettings } from "../types/messages";
@@ -105,6 +106,9 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     goldenPriority: settings.goldenPriorityEnabled,
     now,
   });
+  // 命中率口径:v0.16 起记"发起多少次、其中多少次一条候选都捞不着"。
+  // 即发即忘 —— 埋点不在这条链路上加一次 DB 写入的等待(见 metrics.ts)。
+  recordSearchOutcome(suggestions.length);
   return { suggestions, settings: uiSettings(settings, suggestions) };
 }
 

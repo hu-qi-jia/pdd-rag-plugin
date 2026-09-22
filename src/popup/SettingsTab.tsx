@@ -9,6 +9,7 @@ import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
   ClearMemoryDataResponse,
+  ClearMetricsResponse,
   ExportDataResponse,
   GetStatsResponse,
   ImportDataResponse,
@@ -38,6 +39,7 @@ import {
 } from '../pdd/llm-form'
 import { LLM_TIMEOUT_MAX_MS, LLM_TIMEOUT_MIN_MS } from '../shared/constants'
 import type { TestLlmResponse } from '../types/messages'
+import { usageIsEmpty, usageRows } from './logic'
 
 /**
  * 设置页所有卡片的统一行距(配置项之间,第四十一轮用户"各配置项之间间距增大,并做统一")——
@@ -58,6 +60,8 @@ export function SettingsTab({
   const [stats, setStats] = useState<GetStatsResponse['payload'] | null>(null)
   const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  // 重置使用统计的内联二次确认(v0.16,与 confirmClear 同一套做法)
+  const [confirmResetUsage, setConfirmResetUsage] = useState(false)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [busy, setBusy] = useState(false)
   const [includeMemory, setIncludeMemory] = useState(false)
@@ -252,6 +256,29 @@ export function SettingsTab({
     await refreshStorageInfo()
   }
 
+  /**
+   * 重置使用统计(v0.16):只清计数器,任何业务数据都不动。
+   * 这里给的是**内联二次确认**而不是弹窗 —— 与「清空问答数据」同一套做法
+   * (弹窗式确认在本项目一律不做,见用户约定)。
+   */
+  const resetUsage = async () => {
+    setBusy(true)
+    try {
+      const resp = await sendMessage<ClearMetricsResponse>({ type: 'CLEAR_METRICS' })
+      if (resp.payload.success) {
+        setMsg({ ok: true, text: `已重置 ${resp.payload.cleared} 项使用统计` })
+      } else {
+        setMsg({ ok: false, text: `重置失败:${resp.payload.error ?? '未知错误'}` })
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `重置失败:${String(err)}` })
+    } finally {
+      setBusy(false)
+      setConfirmResetUsage(false)
+    }
+    await refreshStorageInfo()
+  }
+
   const exportJson = async () => {
     setBusy(true)
     try {
@@ -299,7 +326,7 @@ export function SettingsTab({
         ok: true,
         text: `导入完成:标准回答 +${p.addedGoldens ?? 0}(跳过 ${p.skippedGoldens ?? 0}${
           (p.limitedGoldens ?? 0) > 0 ? `,超每问题上限 ${p.limitedGoldens}` : ''
-        }) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
+        }) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 文档原文 +${p.addedKbDocs ?? 0} · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
       })
       await onDataChanged()
     } catch {
@@ -609,6 +636,88 @@ export function SettingsTab({
               清空问答数据
             </Btn>
           )}
+        </div>
+      </Card>
+
+      {/*
+        使用统计(v0.16):回答"这工具到底帮没帮上忙"。全部本地计数,不联网、不随导出外发。
+        只在有数时展开 —— 新装的库给一排 0 既没信息量,又让人怀疑是不是坏了。
+      */}
+      <Card tk={tk} title="使用统计" style={SETTINGS_CARD_STYLE}>
+        {usageIsEmpty(stats?.metrics) ? (
+          <div
+            style={{
+              fontSize: formType.desc.size,
+              fontWeight: formType.desc.weight,
+              color: tk.textMuted,
+              lineHeight: 1.6,
+            }}
+          >
+            还没有使用记录。在聊天页点「AI回复」或按快捷键检索,这里就会开始计数。
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
+            {usageRows(stats?.metrics).map((r) => (
+              <div
+                key={r.key}
+                style={{ display: 'flex', justifyContent: 'space-between', gap: spacing.md }}
+              >
+                {/* 标签走 label 档、数值走 desc 档:一列数字要能竖着扫得下去 */}
+                <span
+                  style={{
+                    fontSize: formType.label.size,
+                    fontWeight: formType.label.weight,
+                  }}
+                >
+                  {r.label}
+                </span>
+                <span
+                  style={{
+                    fontSize: formType.desc.size,
+                    fontWeight: formType.desc.weight,
+                    color: tk.textMuted,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {r.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
+          {confirmResetUsage ? (
+            <>
+              <span
+                style={{
+                  fontSize: formType.desc.size,
+                  fontWeight: formType.desc.weight,
+                  color: tk.textMuted,
+                }}
+              >
+                重置为 0?问答/标准回答/知识库都不受影响。
+              </span>
+              <Btn tk={tk} variant="ghost" disabled={busy} onClick={() => void resetUsage()}>
+                确认重置
+              </Btn>
+              <Btn tk={tk} variant="ghost" onClick={() => setConfirmResetUsage(false)}>
+                取消
+              </Btn>
+            </>
+          ) : (
+            <Btn tk={tk} variant="ghost" onClick={() => setConfirmResetUsage(true)}>
+              重置统计
+            </Btn>
+          )}
+          <span
+            style={{
+              fontSize: formType.desc.size,
+              fontWeight: formType.desc.weight,
+              color: tk.textMuted,
+            }}
+          >
+            只记在本机,不联网、不随导出外发。
+          </span>
         </div>
       </Card>
 

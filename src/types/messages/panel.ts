@@ -99,6 +99,12 @@ export interface GetPanelDataResponse {
     knowledge: PanelKnowledge[]
     /** 升级前上传、无原文可重切的文档名(知识库页提示重新上传;缺省=无) */
     legacyDocs?: string[]
+    /**
+     * 逐条用量(v0.16):条目 id → 被填充次数。**只含 >0 的条目** ——
+     * 新装的库是空对象,行上不会平白多出一排「被用 0 次」。
+     * 金标准与知识库共用一张表,key 不会撞(uuid 互不重叠)。
+     */
+    itemUsage?: Record<string, number>
     error?: string
   }
 }

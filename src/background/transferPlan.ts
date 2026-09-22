@@ -7,12 +7,21 @@
  * 导入端全量重新嵌入 —— 终态与"含向量搬库"一致,免去跨模型版本校验。
  */
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../shared/constants'
-import type { FolderRecord, GoldenRecord, KnowledgeRecord, PddSettings, QaRecord, ReplyRecord } from '../types/memory'
+import type {
+  FolderRecord,
+  GoldenRecord,
+  KbDocRecord,
+  KnowledgeRecord,
+  PddSettings,
+  QaRecord,
+  ReplyRecord,
+} from '../types/memory'
 // 导出线上形状(信封/剥离向量后的记录)是纯类型,2026-09-16 工程审查③移入 types/transfer,
 // types 层不再反向依赖 background
 import type {
   ExportEnvelope,
   ExportedGolden,
+  ExportedKbDoc,
   ExportedKnowledge,
   ExportedQa,
   ExportedReply,
@@ -66,15 +75,28 @@ const stripKnowledge = (k: KnowledgeRecord): ExportedKnowledge => ({
   enabled: k.enabled,
   ...(k.source !== undefined ? { source: k.source } : {}),
   ...(k.docId !== undefined ? { docId: k.docId } : {}),
+  // v0.16:块类型与节序号必须跟着走,否则导入的文档块会丢掉"这段是怎么切出来的"
+  ...(k.chunkKind !== undefined ? { chunkKind: k.chunkKind } : {}),
+  ...(k.sectionSeq !== undefined ? { sectionSeq: k.sectionSeq } : {}),
   createdAt: k.createdAt,
   updatedAt: k.updatedAt,
 })
 
-/** 构建导出信封;includeMemory=false 时不携带问答/回复字段;知识库始终携带 */
+const stripKbDoc = (d: KbDocRecord): ExportedKbDoc => ({
+  docId: d.docId,
+  content: d.content,
+  splitterVersion: d.splitterVersion,
+  chunkCount: d.chunkCount,
+  createdAt: d.createdAt,
+  updatedAt: d.updatedAt,
+})
+
+/** 构建导出信封;includeMemory=false 时不携带问答/回复字段;知识库(含文档原文)始终携带 */
 export function buildExportEnvelope(input: {
   goldens: GoldenRecord[]
   folders: FolderRecord[]
   knowledge?: KnowledgeRecord[]
+  kbDocs?: KbDocRecord[]
   settings: PddSettings
   qaRecords?: QaRecord[]
   replies?: ReplyRecord[]
@@ -88,6 +110,7 @@ export function buildExportEnvelope(input: {
     folders: input.folders,
     goldens: input.goldens.map(stripGolden),
     knowledge: (input.knowledge ?? []).map(stripKnowledge),
+    kbDocs: (input.kbDocs ?? []).map(stripKbDoc),
   }
   if (input.includeMemory) {
     env.qaRecords = (input.qaRecords ?? []).map(stripQa)
@@ -302,9 +325,56 @@ export function planKnowledgeImports(
       enabled: k.enabled,
       ...(k.source !== undefined ? { source: k.source } : {}),
       ...(k.docId !== undefined ? { docId: k.docId } : {}),
+      // v0.16:块类型/节序号随条目一起带过来(旧导出文件没有这两个字段 → 保持缺省)
+      ...(k.chunkKind !== undefined ? { chunkKind: k.chunkKind } : {}),
+      ...(k.sectionSeq !== undefined ? { sectionSeq: k.sectionSeq } : {}),
       createdAt: k.createdAt,
       updatedAt: k.updatedAt,
     })
   }
   return { toAdd, skipped }
+}
+
+export interface KbDocImportPlan {
+  toAdd: KbDocRecord[]
+  skipped: number
+}
+
+/**
+ * 知识库文档原文导入计划(v0.16):按 docId 幂等。
+ *
+ * 已存在同名原文时**跳过而非覆盖** —— docId 是文档名,同名意味着"同一篇文档",
+ * 而本地那份可能已经被用户用新内容重传过;导入包里的可能是更旧的版本。
+ * 覆盖等于用旧内容回退本地,与全库"导入不覆盖本地编辑"的口径一致。
+ *
+ * splitterVersion 原样带入:与当前分块器版本不符时,SW 启动的 resplitStaleKbDocs
+ * 会据此自动重切,文档块也就跟着更新 —— 这正是本字段存在的意义。
+ */
+export function planKbDocImports(
+  incoming: ExportedKbDoc[],
+  existingDocIds: Set<string>,
+): KbDocImportPlan {
+  const toAdd: KbDocRecord[] = []
+  const seen = new Set<string>()
+  let skipped = 0
+  for (const d of incoming) {
+    if (!d || typeof d.docId !== "string" || !d.docId) {
+      skipped += 1
+      continue;
+    }
+    if (existingDocIds.has(d.docId) || seen.has(d.docId)) {
+      skipped += 1
+      continue;
+    }
+    seen.add(d.docId)
+    toAdd.push({
+      docId: d.docId,
+      content: String(d.content ?? ""),
+      splitterVersion: String(d.splitterVersion ?? ""),
+      chunkCount: Number(d.chunkCount) || 0,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    });
+  }
+  return { toAdd, skipped };
 }

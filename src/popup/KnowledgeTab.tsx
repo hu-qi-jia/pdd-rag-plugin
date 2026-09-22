@@ -44,6 +44,8 @@ export function KnowledgeTab({
   const [items, setItems] = useState<PanelKnowledge[]>([])
   /** 升级前上传、无原文可重切的文档名(非空则提示重新上传) */
   const [legacyDocs, setLegacyDocs] = useState<string[]>([])
+  /** 逐条用量(v0.16):条目 id → 被填充次数(文档块也能看出哪段真被用过) */
+  const [itemUsage, setItemUsage] = useState<Record<string, number>>({})
   const [keyword, setKeyword] = useState('')
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
@@ -67,6 +69,7 @@ export function KnowledgeTab({
       } else {
         setItems(resp.payload.knowledge ?? [])
         setLegacyDocs(resp.payload.legacyDocs ?? [])
+        setItemUsage(resp.payload.itemUsage ?? {})
       }
     } catch (err) {
       setMsg({ ok: false, text: `读取失败:${String(err)}` })
@@ -183,7 +186,8 @@ export function KnowledgeTab({
     try {
       const resp = await sendMessage<FillInputResponse>({
         type: 'FILL_INPUT',
-        payload: { text: k.content },
+        // 带上来源标注:SW 填成功后据此记一笔使用统计(填充成功才计,见 fillToChatPage)
+        payload: { text: k.content, itemKind: 'knowledge', itemId: k.id },
       })
       if (resp.payload.success) setMsg({ ok: true, text: '已填充至输入框,发送由人工完成' })
       else setMsg({ ok: false, text: resp.payload.error ?? '填充失败' })
@@ -366,6 +370,15 @@ export function KnowledgeTab({
                   )}
                   {!disabled && k.hasEmbedding === -1 && (
                     <span style={{ fontSize: fontSize.caption, color: tk.errorText }}>嵌入失败,后台将自动重试</span>
+                  )}
+                  {/* 被用次数(v0.16):文档块也能看出哪一段真被填过;0 次不显示(免得满屏灰标) */}
+                  {(itemUsage[k.id] ?? 0) > 0 && (
+                    <span
+                      title={`这条知识已填入输入框 ${itemUsage[k.id]} 次(仅本机计数)`}
+                      style={{ fontSize: fontSize.caption, color: tk.textTertiary, whiteSpace: 'nowrap' }}
+                    >
+                      被用 {itemUsage[k.id]} 次
+                    </span>
                   )}
                   <span style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: tk.textTertiary, fontVariantNumeric: 'tabular-nums' }}>
                     {formatTs(k.updatedAt)}

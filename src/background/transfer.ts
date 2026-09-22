@@ -12,6 +12,7 @@ import {
   goldenImportContext,
   planFolderImports,
   planGoldenImports,
+  planKbDocImports,
   planKnowledgeImports,
   planMemoryImports,
 } from "./transferPlan";
@@ -24,11 +25,14 @@ export async function exportData(
 ): Promise<{ envelope?: ExportEnvelope; error?: string }> {
   try {
     const includeMemory = !!message.payload?.includeMemory;
-    const [goldens, folders, knowledge, settings, qaRecords, replies] =
+    const [goldens, folders, knowledge, kbDocs, settings, qaRecords, replies] =
       await Promise.all([
         db.goldens.toArray(),
         db.listFolders(),
         db.knowledge.toArray(),
+        // v0.16:文档原文一并导出 —— 换台机器导入后仍能按新规则重切,
+        // 不必让用户重新找原文上传(见 types/transfer.ts#ExportedKbDoc)
+        db.kbDocs.toArray(),
         loadSettings(),
         includeMemory ? db.qaRecords.toArray() : Promise.resolve([]),
         includeMemory ? db.replies.toArray() : Promise.resolve([]),
@@ -38,6 +42,7 @@ export async function exportData(
         goldens,
         folders,
         knowledge,
+        kbDocs,
         settings,
         qaRecords,
         replies,
@@ -59,6 +64,9 @@ export interface ImportOutcome {
   skippedFolders?: number;
   addedKnowledge?: number;
   skippedKnowledge?: number;
+  /** 知识库文档原文(v0.16;导入后由启动时的重切扫描按新规则切块) */
+  addedKbDocs?: number;
+  skippedKbDocs?: number;
   addedQa?: number;
   skippedQa?: number;
   addedReplies?: number;
@@ -106,6 +114,12 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     );
     const kbPlan = planKnowledgeImports(asArray(env.knowledge), existingKbHashes);
 
+    // 2.6) 文档原文(v0.16;旧导出文件没有 kbDocs 字段 → 空数组,行为与从前一致)
+    const kbDocPlan = planKbDocImports(
+      asArray(env.kbDocs),
+      new Set(await db.kbDocs.toCollection().primaryKeys()),
+    );
+
     // 3) 记忆搬库(可选部分;问答重嵌排队)
     let addedQa = 0;
     let skippedQa = 0;
@@ -129,11 +143,12 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     // 半成品库;现整体包进一个 Dexie 事务,任一步失败全部回滚)──────────────────
     await db.transaction(
       "rw",
-      [db.folders, db.goldens, db.knowledge, db.qaRecords, db.replies],
+      [db.folders, db.goldens, db.knowledge, db.kbDocs, db.qaRecords, db.replies],
       async () => {
         if (folderPlan.toAdd.length > 0) await db.folders.bulkAdd(folderPlan.toAdd);
         if (goldenPlan.toAdd.length > 0) await db.goldens.bulkAdd(goldenPlan.toAdd);
         if (kbPlan.toAdd.length > 0) await db.knowledge.bulkAdd(kbPlan.toAdd);
+        if (kbDocPlan.toAdd.length > 0) await db.kbDocs.bulkAdd(kbDocPlan.toAdd);
         if (memPlan) {
           if (memPlan.toAddQa.length > 0) await db.qaRecords.bulkAdd(memPlan.toAddQa);
           if (memPlan.toAddReplies.length > 0) {
@@ -171,6 +186,8 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
       skippedQa,
       addedReplies,
       skippedReplies,
+      addedKbDocs: kbDocPlan.toAdd.length,
+      skippedKbDocs: kbDocPlan.skipped,
     };
   } catch (err) {
     return { error: String(err) };

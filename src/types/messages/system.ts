@@ -36,6 +36,12 @@ export interface GetStatsResponse {
     knowledgeCount: number
     settings: PddSettings
     embeddingModel: string
+    /**
+     * 使用统计快照(v0.16):键 → 次数,键的口径见 shared/metrics.ts。
+     * 搭 GET_STATS 顺路回(弹窗打开本就取一次统计),不另开消息、不多跑一趟;
+     * 缺省 = 老版本/读取失败,展示端按空对象处理(图表全 0,不是报错)。
+     */
+    metrics?: Record<string, number>
     /** 读取失败兜底时的错误说明(成功路径无) */
     error?: string
   }

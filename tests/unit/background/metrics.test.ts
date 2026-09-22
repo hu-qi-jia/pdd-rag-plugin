@@ -140,14 +140,3 @@ describe('埋点不拖累检索', () => {
     expect(await getRetrievalEntries()).toBe(first)
   })
 })
-
-describe('待沉淀忽略项', () => {
-  it('按下问题哈希幂等写入与删除', async () => {
-    await testDb.ignoreBacklog('h1', '怎么退货')
-    await testDb.ignoreBacklog('h1', '怎么退货') // 重复忽略:仍是同一条
-    expect(await testDb.listBacklogIgnores()).toHaveLength(1)
-
-    await testDb.unignoreBacklog('h1')
-    expect(await testDb.listBacklogIgnores()).toHaveLength(0)
-  })
-})

@@ -11,7 +11,6 @@
  *   knowledge — 知识库条目(人工维护"标题+正文"话术卡,豁免保留期)
  *   kbDocs    — 知识库文档原文(分块器版本变更时重新分块的事实源,豁免保留期)
  *   metrics   — 使用统计计数器(本地埋点,不参与检索)
- *   backlogIgnores — 待沉淀清单的"不再提示"标记
  *   errors    — 错误日志
  *
  * hasEmbedding 三态:0=待嵌(启动扫描重试) 1=已嵌 -1=嵌入失败(记录 errors,下次启动扫描重试)
@@ -20,7 +19,6 @@ import Dexie, { type Table } from "dexie";
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants';
 import { itemMetricKey, parseItemMetricKey } from '../shared/metrics';
 import type {
-  BacklogIgnoreRecord,
   ErrorLog,
   FolderRecord,
   GoldenRecord,
@@ -43,7 +41,6 @@ export class PddDatabase extends Dexie {
   knowledge!: Table<KnowledgeRecord, string>;
   kbDocs!: Table<KbDocRecord, string>;
   metrics!: Table<MetricRecord, string>;
-  backlogIgnores!: Table<BacklogIgnoreRecord, string>;
   errors!: Table<ErrorLog, number>;
 
   constructor() {
@@ -82,13 +79,17 @@ export class PddDatabase extends Dexie {
       kbDocs: "docId, splitterVersion",
     });
 
-    // v0.16 使用统计与待沉淀清单:
-    //   metrics        — 本地计数器(检索/未命中、面板打开、按类别填充、逐条用量)
-    //   backlogIgnores — 待沉淀清单的"不再提示"标记
-    // 两者都不参与检索,故本文件里唯一一类**不**失效检索缓存的写路径(见 bumpMetrics)。
+    // v0.16 使用统计:本地计数器(检索/未命中、面板打开、按类别填充、逐条用量)。
+    // 它不参与检索,故是本文件里唯一一类**不**失效检索缓存的写路径(见 bumpMetrics)。
     this.version(6).stores({
       metrics: "key",
-      backlogIgnores: "questionHash",
+    });
+
+    // 待沉淀清单页在 v0.16 开发期做过又撤掉了(判据用的字面哈希、与检索的语义口径对不上,
+    // 满屏"其实答得出来"的问题)。这里显式删表:已经跑过 v6 的库里表还在,
+    // 留着就是一张谁都读不到的孤儿表。Dexie 删表就是把值置 null。
+    this.version(7).stores({
+      backlogIgnores: null,
     });
   }
 
@@ -566,7 +567,7 @@ export class PddDatabase extends Dexie {
     return docIds.map(String).filter((id) => !have.has(id));
   }
 
-  // ─── 使用统计(metrics)/ 待沉淀清单忽略项(v0.16) ───────────────────────────────
+  // ─── 使用统计(metrics,v0.16) ──────────────────────────────────────────────────
 
   /**
    * 计数器自增(键不存在则建)。**即发即忘调用** —— 统计不该给检索加延迟。
@@ -630,24 +631,6 @@ export class PddDatabase extends Dexie {
   private async dropItemMetrics(kind: "golden" | "knowledge", ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.metrics.bulkDelete(ids.map((id) => itemMetricKey(kind, id)));
-  }
-
-  /** 待沉淀清单:标记"这条问题不用沉淀"(按问题哈希,与 qaRecords 同口径) */
-  async ignoreBacklog(questionHash: string, question: string): Promise<void> {
-    await this.backlogIgnores.put({
-      questionHash,
-      question,
-      createdAt: Date.now(),
-    });
-  }
-
-  async unignoreBacklog(questionHash: string): Promise<void> {
-    await this.backlogIgnores.delete(questionHash);
-  }
-
-  /** 全部忽略项(清单聚合时一次读走,不做逐条查) */
-  async listBacklogIgnores(): Promise<BacklogIgnoreRecord[]> {
-    return this.backlogIgnores.toArray();
   }
 
   // ─── 回复文件夹(folders) ──────────────────────────────────────────────────────

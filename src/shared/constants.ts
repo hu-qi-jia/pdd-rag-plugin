@@ -57,9 +57,3 @@ export const LLM_DRAFT_STORAGE_KEY = 'pddcs:llmDraft'
 /** 同一问题可保留的标准回答条数上限(用户指定:合计最多 3 条)。
  *  后台写入口径与聊天页 UI 提示共用同一个数字。 */
 export const MAX_GOLDENS_PER_QUESTION = 3
-
-/** 待沉淀清单一页最多列出的问题数(v0.16)。超出的不静默丢弃 —— 页脚写明"共 N 条" */
-export const BACKLOG_LIMIT = 50
-
-/** 待沉淀清单每条问题最多带出的历史回复候选数(展开"换个说法"时挑答案用) */
-export const BACKLOG_REPLIES_PER_ITEM = 5

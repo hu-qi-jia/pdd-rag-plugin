@@ -2,7 +2,7 @@
  * Popup — Figma 编辑器工具风面板(对齐 pddddd 控制台设计语言)
  *
  * 布局:左侧 52px 图标导航栏 + 右侧内容区。
- * 五页签(设计文档 §7):记忆列表 / 待沉淀 / 回复文件夹 / 知识库 / 设置。
+ * 四页签(设计文档 §7):记忆列表 / 回复文件夹 / 知识库 / 设置。
  * 视觉:工具风设计令牌 —— 白面板细边框、小圆角(6px 控件)、黑白主色。
  */
 
@@ -13,7 +13,6 @@ import { getThemeTokens, lightTheme, type ThemeTokens } from '../ui/theme'
 import { controlH, fontFamily, fontSize, formGap, fontWeight, motion, radius, size, spacing } from '../ui/design'
 import { thinScrollbarCss } from '../ui/scrollbar'
 import {
-  ArrowUpWideNarrowIcon,
   BookOpenIcon,
   FolderIcon,
   GearIcon,
@@ -26,7 +25,6 @@ import type { GetStatsResponse } from '../types/messages'
 import { MemoryListTab } from './MemoryListTab'
 import { FoldersTab } from './FoldersTab'
 import { KnowledgeTab } from './KnowledgeTab'
-import { BacklogTab } from './BacklogTab'
 import { SettingsTab } from './SettingsTab'
 
 const RAIL_W = size.railWidth
@@ -125,7 +123,7 @@ ${thinScrollbarCss('.pddcs-scroll', 'var(--pddcs-scroll-thumb)')}
 .pddcs-slider::-moz-range-track { height: 4px; border-radius: 9999px; background: transparent; }
 `
 
-type TabId = 'memory' | 'backlog' | 'folders' | 'knowledge' | 'settings'
+type TabId = 'memory' | 'folders' | 'knowledge' | 'settings'
 
 type StatsPayload = GetStatsResponse['payload']
 
@@ -133,15 +131,8 @@ type StatsPayload = GetStatsResponse['payload']
  * 顶部概览按页签**分散展示**(2026-09-15 用户要求):
  * 原来四个计数全堆在头部,与当前页面无关;现在只显示本页相关的,
  * 设置页不展示(设置本身就是"配置项",不需要计数)。
- *
- * backlog 的计数不来自 stats:它要全表聚合(问答 + 回复分组),而 GET_STATS
- * 连聊天页 content(读快捷键配置)都在调 —— 为了顶部一行字让每次页面加载都
- * 扫一遍全库,不划算。改由该页签自己加载后回传(见 BacklogTab#onCountChange)。
  */
-function tabSummary(id: TabId, stats: StatsPayload | null, backlogCount: number | null): string {
-  if (id === 'backlog') {
-    return backlogCount === null ? '问得多、还没沉淀的问题' : `待沉淀 ${backlogCount} 条 · 按出现次数倒序`
-  }
+function tabSummary(id: TabId, stats: StatsPayload | null): string {
   if (!stats) return '读取中…'
   switch (id) {
     case 'memory':
@@ -157,7 +148,6 @@ function tabSummary(id: TabId, stats: StatsPayload | null, backlogCount: number 
 
 const TABS: { id: TabId; label: string; Icon: typeof MessageSquareIcon }[] = [
   { id: 'memory', label: '记忆', Icon: MessageSquareIcon },
-  { id: 'backlog', label: '沉淀', Icon: ArrowUpWideNarrowIcon },
   { id: 'folders', label: '文件夹', Icon: FolderIcon },
   { id: 'knowledge', label: '知识库', Icon: BookOpenIcon },
   { id: 'settings', label: '设置', Icon: GearIcon },
@@ -168,8 +158,6 @@ function App() {
   const tk = getThemeTokens(theme)
   const [tab, setTab] = useState<TabId>('memory')
   const [stats, setStats] = useState<GetStatsResponse['payload'] | null>(null)
-  // 待沉淀条数由该页签加载后回传(null = 还没打开过,概览行给一句说明而不是假计数)
-  const [backlogCount, setBacklogCount] = useState<number | null>(null)
 
   const refreshStats = useCallback(async () => {
     try {
@@ -311,7 +299,7 @@ function App() {
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {tabSummary(tab, stats, backlogCount)}
+            {tabSummary(tab, stats)}
           </div>
         </header>
 
@@ -319,9 +307,6 @@ function App() {
         <div className="pddcs-scroll" style={{ overflowY: 'auto', padding: `2px ${spacing.xxl}px ${spacing.xxl}px`, flex: 1 }}>
           {tab === 'memory' && (
             <MemoryListTab tk={tk} retentionDays={stats?.settings.retentionDays ?? 90} onDataChanged={refreshStats} />
-          )}
-          {tab === 'backlog' && (
-            <BacklogTab tk={tk} onCountChange={setBacklogCount} onDataChanged={refreshStats} />
           )}
           {tab === 'folders' && <FoldersTab tk={tk} onDataChanged={refreshStats} />}
           {tab === 'knowledge' && <KnowledgeTab tk={tk} onDataChanged={refreshStats} />}

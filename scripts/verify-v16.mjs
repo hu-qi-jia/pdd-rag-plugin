@@ -3,10 +3,9 @@
  *
  *   A 度量埋点 —— 白名单拒收未知键 / 检索次数与未命中如实计数 / 逐条用量锚到条目 /
  *                重置只清统计不动业务数据 / 写计数不破坏检索缓存
- *   B 待沉淀清单 —— 高频未沉淀的上榜、已有标准回答·无回复·已忽略·自检的不上榜、
- *                 一键提升后自动下榜
- *   C 导出补 kbDocs —— 原文与块元字段随导出外发、导入按 docId 幂等、
+ *   B 导出补 kbDocs —— 原文与块元字段随导出外发、导入按 docId 幂等、
  *                     删块后孤儿原文清理、splitterVersion 带出后 SW 启动自动重切
+ *   C 弹窗接线 —— 设置页「使用统计」卡真的把这些数字渲染出来了
  *
  * 用法:node scripts/verify-v16.mjs
  */
@@ -20,7 +19,6 @@ import {
 
 const PROFILE = freshProfile()
 const DOC = 'v16售后手册'
-const SESS = 'v16-e2e-sess'
 
 // 结构感知分块的输入:两个小节 + 问答体小节(才能覆盖 section 与 qa 两种块类型)
 const MD = [
@@ -151,158 +149,7 @@ check(
   `cleared=${cleared.cleared} 金标准 ${goldenBefore}→${goldenAfter}`,
 )
 
-// ══ B 待沉淀清单 ═════════════════════════════════════════════════════════════════
-
-// 清单按 qaRecords.questionHash 分组,而"提升为标准回答"用的是 ADD_GOLDEN ——
-// 两边必须是同一套归一化哈希,提升后才会自动下榜。所以样本哈希不能自己编一个:
-// 借一次"建了再删"的标准回答把真哈希取出来,验的才是真链路。
-const exported0 = await send('EXPORT_DATA', { includeMemory: false })
-const seededGoldenHash = (exported0.envelope?.goldens ?? []).find((g) => g.question === '能开发票吗')?.questionHash
-
-const learnHash = async (question) => {
-  const added = await send('ADD_GOLDEN', { question, answer: '（取样占位,随即删除）' })
-  const env = await send('EXPORT_DATA', { includeMemory: false })
-  const hash = (env.envelope?.goldens ?? []).find((g) => g.id === added.id)?.questionHash
-  await send('DELETE_GOLDEN', { id: added.id })
-  return hash
-}
-const HX = await learnHash('发票怎么开') // 被问 2 次、无标准回答、有回复 → 该上榜
-const HZ = await learnHash('支持换货吗') // 会被「不再提示」忽略 → 该下榜
-const HY = 'v16-backlog-hy' // 有问答记录但一条回复都没有 → 不该上榜
-check(
-  '取到真实问题哈希(清单分组与提升走同一套归一化口径)',
-  Boolean(HX) && Boolean(HZ) && Boolean(seededGoldenHash),
-  `HX=${HX} HZ=${HZ} 已有标准回答的=${seededGoldenHash}`,
-)
-// 取样用的占位金标准必须已删,否则 HX/HZ 会被"已有标准回答"这一条排除,样本就废了
-const leftover = (await send('GET_PANEL_DATA')).goldens.map((g) => g.question)
-check(
-  '取样占位标准回答已删除(不污染样本)',
-  !leftover.includes('发票怎么开') && !leftover.includes('支持换货吗') && leftover.length === 1,
-  JSON.stringify(leftover),
-)
-
-const now = Date.now()
-const qaRow = (id, questionHash, question, questionTs) => ({
-  id,
-  sessionKey: SESS,
-  question,
-  questionHash,
-  questionTs,
-  hasEmbedding: 0,
-  replyCount: 1,
-  createdAt: questionTs,
-  updatedAt: questionTs,
-})
-const seed = {
-  version: '2.0',
-  exportedAt: now,
-  settings: exported0.envelope?.settings,
-  folders: [],
-  goldens: [],
-  knowledge: [],
-  kbDocs: [],
-  qaRecords: [
-    // 同一问法的两次出现:哈希相同(首尾空白被归一化折叠)但原始文本不同,
-    // 代表问题原文应取更近那一条 —— 顺带把"归一化到什么程度"钉在真库上
-    qaRow('qa-a', HX, '发票怎么开', now - 30_000),
-    qaRow('qa-b', HX, ' 发票怎么开 ', now - 10_000),
-    qaRow('qa-c', seededGoldenHash, '能开发票吗', now - 20_000), // 已有标准回答 → 不该上榜
-    qaRow('qa-d', HY, '什么时候补货', now - 5_000), // 无回复 → 不该上榜
-    qaRow('qa-e', HZ, '支持换货吗', now - 40_000),
-  ],
-  replies: [
-    // 同一条话术被回了两遍:contentHash 相同(它就是内容的哈希)→ 只该留一条
-    { id: 'rp-a1', qaId: 'qa-a', text: '在订单备注写抬头与税号即可', contentHash: 'ch-same', ts: now - 29_000, hasEmbedding: 0 },
-    { id: 'rp-a2', qaId: 'qa-b', text: '在订单备注写抬头与税号即可', contentHash: 'ch-same', ts: now - 9_000, hasEmbedding: 0 },
-    { id: 'rp-a3', qaId: 'qa-b', text: '支持开具电子发票,发货后七个工作日内开出', contentHash: 'ch-a3', ts: now - 8_000, hasEmbedding: 0 },
-    { id: 'rp-c1', qaId: 'qa-c', text: '支持开具电子发票', contentHash: 'ch-c1', ts: now - 19_000, hasEmbedding: 0 },
-    { id: 'rp-e1', qaId: 'qa-e', text: '支持七天无理由换货', contentHash: 'ch-e1', ts: now - 39_000, hasEmbedding: 0 },
-  ],
-}
-const seeded = await send('IMPORT_DATA', { envelope: seed })
-check(
-  '播撒历史问答(2 条回复 / 无回复 / 已有标准回答 / 待忽略 各一组)',
-  (seeded.addedQa ?? 0) === 5 && (seeded.addedReplies ?? 0) === 5,
-  JSON.stringify(seeded).slice(0, 160),
-)
-
-const bl1 = await send('GET_BACKLOG')
-const item = bl1.items.find((i) => i.questionHash === HX)
-const hashes1 = bl1.items.map((i) => i.questionHash)
-check(
-  '上榜口径:高频无标准回答的进,已有标准回答/无回复的不进',
-  bl1.total === 2 &&
-    hashes1.includes(HX) &&
-    hashes1.includes(HZ) &&
-    !hashes1.includes(seededGoldenHash) &&
-    !hashes1.includes(HY),
-  `total=${bl1.total} hashes=${JSON.stringify(hashes1)}`,
-)
-check(
-  '同问法的多次出现合成一条,代表问题原文取最近一次',
-  item?.count === 2 && item?.question === ' 发票怎么开 ' && item?.lastTs === now - 10_000,
-  `count=${item?.count} question=${JSON.stringify(item?.question)} lastTs=${item?.lastTs - (now - 10_000)}`,
-)
-check(
-  '回复候选:按内容去重(同话术只留一条)且最近优先',
-  item?.replies.length === 2 &&
-    item.replies[0].text === '支持开具电子发票,发货后七个工作日内开出' &&
-    item.replies[1].text === '在订单备注写抬头与税号即可',
-  JSON.stringify(item?.replies?.map((r) => r.text)),
-)
-check(
-  '排序:出现次数倒序(同次数并列时按最近出现时间)',
-  bl1.items[0].questionHash === HX && bl1.items[0].count === 2,
-  bl1.items.map((i) => `${i.questionHash}:${i.count}`).join(','),
-)
-check(
-  '回复候选带回所属问答记录 id(提升时可溯源)',
-  item?.replies.every((r) => r.qaId === 'qa-a' || r.qaId === 'qa-b') === true,
-  JSON.stringify(item?.replies?.map((r) => r.qaId)),
-)
-
-// 「不再提示」
-await send('IGNORE_BACKLOG', { questionHash: HZ, question: '支持换货吗' })
-const bl2 = await send('GET_BACKLOG')
-check(
-  '「不再提示」后该问题下榜,其余不受影响',
-  bl2.total === 1 && !bl2.items.some((i) => i.questionHash === HZ) && bl2.items[0].questionHash === HX,
-  `total=${bl2.total}`,
-)
-// 忽略是持久化的,不是内存里的一次性过滤
-const ignoredInDb = await swEval(async () => (await globalThis.pddDb.listBacklogIgnores()).length)
-check('忽略项落库(下次开面板仍然不提示)', ignoredInDb === 1, `rows=${ignoredInDb}`)
-
-// 一键提升:用清单里的回复直接建标准回答(带溯源),建完该问题应自动下榜
-const replyText = item.replies[0].text
-const promoted = await send('ADD_GOLDEN', {
-  question: item.question,
-  answer: replyText,
-  sourceRecordId: item.replies[0].qaId,
-  sourceReplyId: item.replies[0].id,
-})
-const bl3 = await send('GET_BACKLOG')
-check(
-  '一键提升为标准回答 → 该问题随即下榜(不再重复打扰)',
-  Boolean(promoted.id) && bl3.total === 0 && bl3.items.length === 0,
-  `id=${promoted.id} total=${bl3.total}`,
-)
-// 提升后仍可从记忆页看到溯源
-const exported1 = await send('EXPORT_DATA', { includeMemory: false })
-const promotedGolden = (exported1.envelope?.goldens ?? []).find((g) => g.id === promoted.id)
-check(
-  '提升落到同一个问题组(哈希一致)—— 这正是它随即下榜的原因,不是两套口径各算各的',
-  promotedGolden?.questionHash === HX,
-  `goldenHash=${promotedGolden?.questionHash} 清单Hash=${HX}`,
-)
-check(
-  '提升出来的标准回答带来源溯源(sourceReplyId / sourceRecordId)',
-  promotedGolden?.sourceReplyId === item.replies[0].id && promotedGolden?.sourceRecordId === item.replies[0].qaId,
-  `sourceReplyId=${promotedGolden?.sourceReplyId ?? '(缺)'} sourceRecordId=${promotedGolden?.sourceRecordId ?? '(缺)'}`,
-)
-
-// ══ C 导出补 kbDocs / 块元字段 ═══════════════════════════════════════════════════
+// ══ B 导出补 kbDocs / 块元字段 ═══════════════════════════════════════════════════
 
 const up = await send('UPLOAD_KB_DOC', { name: `${DOC}.md`, content: MD })
 check('上传 md 文档(结构感知分块)', (up.chunkCount ?? 0) > 2, `chunkCount=${up.chunkCount}`)
@@ -437,43 +284,13 @@ check(
   `version=${resplitDoc?.splitterVersion} chunks=${resplitChunks.length}/${up.chunkCount}`,
 )
 
-// ══ D 弹窗接线 ═══════════════════════════════════════════════════════════════════
-// 数据层全对、页签没接上,用户那端看到的仍是一张空页 —— 所以把"点开能看到什么"
+// ══ C 弹窗接线 ═══════════════════════════════════════════════════════════════════
+// 数据层全对、页面没接上,用户那端看到的仍是一张空页 —— 所以把"点开能看到什么"
 // 也验一遍(读渲染出来的文字,不截图)。
 
-const nowD = Date.now()
-await send2('IMPORT_DATA', {
-  envelope: {
-    version: '2.0',
-    exportedAt: nowD,
-    settings: exported0.envelope?.settings,
-    folders: [],
-    goldens: [],
-    knowledge: [],
-    kbDocs: [],
-    qaRecords: [qaRow('qa-ui', 'v16-ui-hx', '能退货吗', nowD - 1000)],
-    replies: [
-      { id: 'rp-ui', qaId: 'qa-ui', text: '七天无理由退货,吊牌完整即可', contentHash: 'ch-ui', ts: nowD, hasEmbedding: 0 },
-    ],
-  },
-})
 // 攒一点可读的统计数,好让设置页那张卡有东西可显示
 for (let i = 0; i < 3; i++) await send2('TRACK_EVENT', { event: 'search.total' })
 await send2('TRACK_EVENT', { event: 'search.miss' })
-
-await pop2.locator('button[title="沉淀"]').click()
-await sleep(1200)
-const backlogText = await pop2.evaluate(() => document.body.textContent ?? '')
-check(
-  '「沉淀」页签能打开并渲染条目(问过 N 次 / 设为标准 / 换一条)',
-  backlogText.includes('问过 1 次') && backlogText.includes('设为标准') && backlogText.includes('共 1 条待沉淀'),
-  backlogText.slice(0, 120),
-)
-check(
-  '待沉淀条数回传到顶部概览行(onCountChange 接线)',
-  backlogText.includes('待沉淀 1 条 · 按出现次数倒序'),
-  backlogText.match(/待沉淀[^·]{0,12}/)?.[0] ?? '(未出现)',
-)
 
 await pop2.locator('button[title="设置"]').click()
 await sleep(1200)

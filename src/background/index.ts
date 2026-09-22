@@ -22,7 +22,6 @@ import { isLlmConfigured, testLlmConnection } from "./llm";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { clearMetrics, metricsSnapshot, trackEvent } from "./metrics";
-import { getBacklog, ignoreBacklog } from "./backlog";
 import { hashText } from "../shared/text";
 import { fillEventOf } from "../shared/metrics";
 import { DEFAULT_SETTINGS, SELF_TEST_SESSION_KEY } from '../shared/constants';
@@ -414,17 +413,6 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   CLEAR_METRICS: route("CLEAR_METRICS", () => clearMetrics(), (err) => ({
     success: false,
     cleared: 0,
-    error: String(err),
-  })),
-
-  GET_BACKLOG: route("GET_BACKLOG", (message) => getBacklog(message), (err) => ({
-    items: [],
-    total: 0,
-    error: String(err),
-  })),
-
-  IGNORE_BACKLOG: route("IGNORE_BACKLOG", (message) => ignoreBacklog(message), (err) => ({
-    success: false,
     error: String(err),
   })),
 };

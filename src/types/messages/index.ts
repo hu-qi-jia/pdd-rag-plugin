@@ -13,7 +13,6 @@ export * from './settings'
 export * from './transfer'
 export * from './fill'
 export * from './metrics'
-export * from './backlog'
 // ai 走 Port 长连接(流式),不进 ExtensionMessage 并集 —— 单独出口
 export * from './ai'
 
@@ -43,7 +42,6 @@ import type { UpdateSettingsRequest, TestLlmRequest } from './settings'
 import type { ExportDataRequest, ImportDataRequest } from './transfer'
 import type { FillInputRequest } from './fill'
 import type { TrackEventRequest, ClearMetricsRequest } from './metrics'
-import type { GetBacklogRequest, IgnoreBacklogRequest } from './backlog'
 
 export type ExtensionMessage =
   | PingEmbedRequest
@@ -73,8 +71,6 @@ export type ExtensionMessage =
   | FillInputRequest
   | TrackEventRequest
   | ClearMetricsRequest
-  | GetBacklogRequest
-  | IgnoreBacklogRequest
 
 import type {
   PingEmbedResponse,
@@ -105,7 +101,6 @@ import type { UpdateSettingsResponse, TestLlmResponse } from './settings'
 import type { ExportDataResponse, ImportDataResponse } from './transfer'
 import type { FillInputResponse } from './fill'
 import type { TrackEventResponse, ClearMetricsResponse } from './metrics'
-import type { GetBacklogResponse, IgnoreBacklogResponse } from './backlog'
 
 export type ExtensionMessageResponse =
   | PingEmbedResponse
@@ -135,5 +130,3 @@ export type ExtensionMessageResponse =
   | FillInputResponse
   | TrackEventResponse
   | ClearMetricsResponse
-  | GetBacklogResponse
-  | IgnoreBacklogResponse

@@ -557,6 +557,28 @@ describe('rankCandidates 的类型过滤', () => {
     expect(ranked.map((r) => r.source.id)).toEqual(['h-null'])
   })
 
+  it('★ categoryId 缺省(字段根本不存在)的候选,在 allowed 非空时仍留在池里(spec §7.6)', () => {
+    // 硬要求(spec §7.6 末):必须测"缺省"这条真实路径 —— 迁移后的 qaRecords、
+    // 旧数据可能整个 categoryId key 都不存在(不是显式的 null)。只测 null 会漏掉它,
+    // 而 `undefined !== null` 一旦被写成 `!== null` 判据,这些记录会被静默排除出池。
+    // 夹具的目的就是模拟这条路径,用类型断言强行造一个没有 categoryId 的 source。
+    const absent = mkSource('h-absent', 'history', '怎么开发票')
+    delete (absent as { categoryId?: string }).categoryId
+    const entries = [
+      { source: absent, vec: near },
+      withCat('h-a', 'history', '怎么开发票', 'cat-a'), // 对照:有类型但不在集合里
+    ]
+    const ranked = rankCandidates(
+      entries,
+      '怎么开发票',
+      qvec,
+      thresholds,
+      now,
+      new Set([UNCATEGORIZED_CATEGORY_ID]),
+    )
+    expect(ranked.map((r) => r.source.id)).toEqual(['h-absent'])
+  })
+
   it('过滤后池子为空 → 返回空数组(由调用方决定要不要放宽)', () => {
     const entries = [
       withCat('g-b', 'golden', '怎么开发票', 'cat-b'),

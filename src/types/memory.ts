@@ -252,4 +252,22 @@ export interface PddSettings {
   llmModel: string
   /** 单次整合超时(毫秒),默认 8000,夹取 2000~30000 */
   llmTimeoutMs: number
+  /**
+   * 「自动分类」总开关,默认关。关闭或未配置 jev 时扩展保持完全本地:
+   * 不发起任何网络请求,分类全部落未分类,检索行为与未引入该功能时等价。
+   */
+  classifyEnabled: boolean
+  /** jev(System One)端点 base url,默认 'https://api.typesafe.ai' */
+  jevBaseUrl: string
+  /** jev API key,默认 ''。仅存 chrome.storage.local,永不同步到云端 */
+  jevApiKey: string
+  /** jev 模型名,默认 'jev-latest' */
+  jevModel: string
+  /** 单次分类超时(毫秒),默认 3000,夹取 1000~30000 */
+  jevTimeoutMs: number
+  /**
+   * 概率阈值:概率 ≥ 此值的类型进类型集合,默认 0.2。
+   * 查询时用于多意图并集(全低于阈值则不筛);打标时用于"判不准就落未分类"。
+   */
+  classifyProbThreshold: number
 }

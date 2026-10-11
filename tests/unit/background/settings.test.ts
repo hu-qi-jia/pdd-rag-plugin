@@ -2,6 +2,9 @@
 // 重点在 AI 整合字段 —— 它们决定扩展是否会发起网络请求,夹取错了就是数据边界问题。
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../../src/shared/constants'
+// 问题分类设置用例直接调 loadSettings/saveSettings(与上面各 describe 的 fresh() 动态导入等价,
+// 这里用静态导入即可 —— 它们读写的都是同一个 chrome.storage.local 桩)
+import { loadSettings, saveSettings } from '../../../src/background/settings'
 
 /** chrome.storage.local 内存桩(callback 风格,与 chrome-storage.ts 的调用方式一致) */
 const store: Record<string, unknown> = {}
@@ -122,5 +125,65 @@ describe('既有设置项不受影响(回归)', () => {
     expect(s.simThreshold).toBe(1)
     expect(s.retentionDays).toBe(30)
     expect(s.autoReplyHotkey).toEqual({ ctrl: false, alt: false, shift: false, key: 'k' })
+  })
+})
+
+// ─── 问题分类设置(第五十六轮) ──────────────────────────────────────────────────
+//
+// 这一组字段的失败模式是静默失效:clampSettings 是逐字段手写的,
+// 漏一个字段不会报错,只会让设置页填的值永远读不回来。所以每个字段都要有断言。
+
+describe('问题分类设置', () => {
+  // 静态导入的是同一个模块;这里显式装一次 storage 桩,保证每个用例都从空配置起步
+  beforeEach(stubLocalStorage)
+
+  it('默认全关、Key 为空 —— 未配置时扩展必须保持完全本地', async () => {
+    const s = await loadSettings()
+    expect(s.classifyEnabled).toBe(false)
+    // 地址有默认值(官方端点),用户要填的只有 key;下面那几条共同保证"未配置 ⇒ 零请求"
+    expect(s.jevBaseUrl).toBe('https://api.typesafe.ai')
+    expect(s.jevApiKey).toBe('')
+    expect(s.jevModel).toBe('jev-latest')
+    expect(s.jevTimeoutMs).toBe(3000)
+    expect(s.classifyProbThreshold).toBe(0.2)
+  })
+
+  it('六个字段都能存能读(漏 clamp 会在这里露馅)', async () => {
+    await saveSettings({
+      classifyEnabled: true,
+      jevBaseUrl: 'https://api.example.com',
+      jevApiKey: 'sk-test',
+      jevModel: 'jev-1.13.0',
+      jevTimeoutMs: 5000,
+      classifyProbThreshold: 0.35,
+    })
+    const s = await loadSettings()
+    expect(s.classifyEnabled).toBe(true)
+    expect(s.jevBaseUrl).toBe('https://api.example.com')
+    expect(s.jevApiKey).toBe('sk-test')
+    expect(s.jevModel).toBe('jev-1.13.0')
+    expect(s.jevTimeoutMs).toBe(5000)
+    expect(s.classifyProbThreshold).toBe(0.35)
+  })
+
+  it('地址只认 http(s),尾斜杠剔掉,非法值归一为空串', async () => {
+    await saveSettings({ jevBaseUrl: 'https://api.example.com/v1/' })
+    expect((await loadSettings()).jevBaseUrl).toBe('https://api.example.com/v1')
+    await saveSettings({ jevBaseUrl: 'javascript:alert(1)' })
+    expect((await loadSettings()).jevBaseUrl).toBe('')
+  })
+
+  it('超时夹在 1000~30000 之间', async () => {
+    await saveSettings({ jevTimeoutMs: 1 })
+    expect((await loadSettings()).jevTimeoutMs).toBe(1000)
+    await saveSettings({ jevTimeoutMs: 999999 })
+    expect((await loadSettings()).jevTimeoutMs).toBe(30000)
+  })
+
+  it('概率阈值夹在 0~1 之间', async () => {
+    await saveSettings({ classifyProbThreshold: -1 })
+    expect((await loadSettings()).classifyProbThreshold).toBe(0)
+    await saveSettings({ classifyProbThreshold: 5 })
+    expect((await loadSettings()).classifyProbThreshold).toBe(1)
   })
 })

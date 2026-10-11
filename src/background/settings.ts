@@ -5,6 +5,8 @@ import {
   DEFAULT_HOTKEY,
   DEFAULT_PANEL_NAV_HOTKEY,
   DEFAULT_SETTINGS,
+  JEV_TIMEOUT_MAX_MS,
+  JEV_TIMEOUT_MIN_MS,
   LLM_TIMEOUT_MAX_MS,
   LLM_TIMEOUT_MIN_MS,
   SETTINGS_STORAGE_KEY,
@@ -60,6 +62,18 @@ function clampSettings(raw: Partial<PddSettings>): PddSettings {
     llmTimeoutMs: Math.min(
       LLM_TIMEOUT_MAX_MS,
       Math.max(LLM_TIMEOUT_MIN_MS, Math.round(Number(base.llmTimeoutMs) || DEFAULT_SETTINGS.llmTimeoutMs)),
+    ),
+    classifyEnabled: !!base.classifyEnabled,
+    jevBaseUrl: clampUrl(base.jevBaseUrl),
+    jevApiKey: clampText(base.jevApiKey, 512),
+    jevModel: clampText(base.jevModel, 128),
+    jevTimeoutMs: Math.min(
+      JEV_TIMEOUT_MAX_MS,
+      Math.max(JEV_TIMEOUT_MIN_MS, Math.round(Number(base.jevTimeoutMs) || DEFAULT_SETTINGS.jevTimeoutMs)),
+    ),
+    classifyProbThreshold: Math.min(
+      1,
+      Math.max(0, Number(base.classifyProbThreshold) || 0),
     ),
   };
 }

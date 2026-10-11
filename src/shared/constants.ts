@@ -42,11 +42,22 @@ export const DEFAULT_SETTINGS: PddSettings = {
   llmApiKey: '',
   llmModel: '',
   llmTimeoutMs: 8000,
+  // 问题自动分类默认关:不配置、不开启时扩展保持完全本地(ADR-0007)
+  classifyEnabled: false,
+  jevBaseUrl: 'https://api.typesafe.ai',
+  jevApiKey: '',
+  jevModel: 'jev-latest',
+  jevTimeoutMs: 3000,
+  classifyProbThreshold: 0.2,
 }
 
 /** 单次整合超时的可配置区间(毫秒):下限防误填 0 变成秒断,上限防变成事实上的无限等待 */
 export const LLM_TIMEOUT_MIN_MS = 2000
 export const LLM_TIMEOUT_MAX_MS = 30000
+
+/** 单次分类超时的可配置区间(毫秒)：分类是检索链路的一环，等太久不如不筛 */
+export const JEV_TIMEOUT_MIN_MS = 1000
+export const JEV_TIMEOUT_MAX_MS = 30000
 
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
 

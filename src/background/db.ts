@@ -8,6 +8,7 @@
  *   replies   — 客服回复(候选本体,contentHash 折叠)
  *   goldens   — 金标准(长期,豁免保留期,独立可编辑问答文档)
  *   folders   — 回复文件夹(两层,parentId=null 即根层)
+ *   categories — 问题类型(自动分类的分类轴,取代 folders 的分类职责)
  *   knowledge — 知识库条目(人工维护"标题+正文"话术卡,豁免保留期)
  *   kbDocs    — 知识库文档原文(分块器版本变更时重新分块的事实源,豁免保留期)
  *   metrics   — 使用统计计数器(本地埋点,不参与检索)
@@ -16,9 +17,18 @@
  * hasEmbedding 三态:0=待嵌(启动扫描重试) 1=已嵌 -1=嵌入失败(记录 errors,下次启动扫描重试)
  */
 import Dexie, { type Table } from "dexie";
-import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants';
+import {
+  PRESET_CATEGORIES,
+  SELF_TEST_SESSION_KEY,
+  UNCATEGORIZED_CATEGORY_ID,
+  UNCATEGORIZED_CATEGORY_NAME,
+  UNCATEGORIZED_CATEGORY_POSITION,
+  UNCATEGORIZED_FOLDER_ID,
+  UNCATEGORIZED_FOLDER_NAME,
+} from '../shared/constants';
 import { itemMetricKey, parseItemMetricKey } from '../shared/metrics';
 import type {
+  CategoryRecord,
   ErrorLog,
   FolderRecord,
   GoldenRecord,
@@ -38,6 +48,7 @@ export class PddDatabase extends Dexie {
   replies!: Table<ReplyRecord, string>;
   goldens!: Table<GoldenRecord, string>;
   folders!: Table<FolderRecord, string>;
+  categories!: Table<CategoryRecord, string>;
   knowledge!: Table<KnowledgeRecord, string>;
   kbDocs!: Table<KbDocRecord, string>;
   metrics!: Table<MetricRecord, string>;
@@ -91,6 +102,13 @@ export class PddDatabase extends Dexie {
     this.version(7).stores({
       backlogIgnores: null,
     });
+
+    // 第五十六轮 问题自动分类:categories 表。
+    // 它是跨 qaRecords / goldens 两个实体的单一分类轴,取代 folders 的分类职责;
+    // folders 表保留不删(回滚用),迁移后不再被读写。
+    this.version(8).stores({
+      categories: "id, kind, position",
+    });
   }
 
   // ─── 初始化/预置 ──────────────────────────────────────────────────────────────
@@ -116,6 +134,52 @@ export class PddDatabase extends Dexie {
     if (existing.name !== UNCATEGORIZED_FOLDER_NAME) {
       await this.folders.update(UNCATEGORIZED_FOLDER_ID, { name: UNCATEGORIZED_FOLDER_NAME });
     }
+  }
+
+  /**
+   * 确保 6 个预置类型 + 未分类存在(固定 id,幂等)。
+   *
+   * 已存在的一律不覆盖 —— 用户可能已经调过 position。预置的**内容**
+   * (name/criteria/route)按设计 D3 不可改,所以不存在"用户改过要保留"的情形;
+   * 这里只保证不把用户调过的顺序冲掉。
+   */
+  async ensurePresetCategories(): Promise<void> {
+    const now = Date.now();
+    const seeds: CategoryRecord[] = [
+      ...PRESET_CATEGORIES.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        criteria: p.criteria,
+        kind: "preset" as const,
+        route: p.route,
+        filterable: true,
+        position: i,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      {
+        id: UNCATEGORIZED_CATEGORY_ID,
+        name: UNCATEGORIZED_CATEGORY_NAME,
+        criteria: "",
+        kind: "uncategorized" as const,
+        route: "retrieve" as const,
+        filterable: false,
+        position: UNCATEGORIZED_CATEGORY_POSITION,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const existing = await this.categories.bulkGet(seeds.map((s) => s.id));
+    const missing = seeds.filter((_, i) => !existing[i]);
+    if (missing.length > 0) await this.categories.bulkAdd(missing);
+  }
+
+  // ─── 问题类型(categories) ────────────────────────────────────────────────────
+
+  /** 全部类型,按 position 升序(未分类恒最后,它的 position 为 9999) */
+  async listCategories(): Promise<CategoryRecord[]> {
+    const all = await this.categories.toArray();
+    return all.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   }
 
   /** 启动时尝试清除旧项目遗留的空库(可选清理,失败静默) */

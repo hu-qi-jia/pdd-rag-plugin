@@ -5,7 +5,9 @@
  *
  * 历史:本页原为两层文件夹树(工具栏新建 / 重命名 / 删除 / 遗留子夹拍平)。
  * folders 表与 goldens.folderId 保留不删(回滚用),但**本页不再读写它们** ——
- * 分区改由 categories 承担,类型 CRUD 由后续任务接上。
+ * 分区改由 categories 承担;类型的新建 / 改名 / 删除(第五十七轮 Task 7)也在这里:
+ * 页头「新建类型」内联表单 + 自定义分区头的改名/删除图标钮(预置与未分类无钮;
+ * 重名与空判定说明由后台 handler 硬拦截,删除时其中的标答落回未分类)。
  *
  * 行操作(保持 v2.6.29 左移 / v2.6.31 常驻):四个图标钮(移到类型/复制/编辑/删除)
  * 占原填充位、默认可见,且**图标左缘与上方正文左缘对齐**(负 margin 抵消钮盒内留白);
@@ -19,22 +21,28 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
+  CreateCategoryResponse,
+  DeleteCategoryResponse,
   DeleteGoldenResponse,
   GetPanelDataResponse,
   PanelCategory,
   PanelGolden,
+  RenameCategoryResponse,
   UpdateGoldenCategoryResponse,
   UpdateGoldenResponse,
 } from '../types/messages'
-import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
+import { MAX_GOLDENS_PER_QUESTION, PRESET_CATEGORIES } from '../shared/constants'
 import { categoryOrder, countGoldensByQuestion, groupByCategory, orderGoldensByRecency } from './logic'
 import { hashText } from '../shared/text'
 import {
   Badge,
+  Btn,
   Card,
   ConfirmRow,
+  CreateBtn,
   EmptyState,
   Notice,
+  controlStyle,
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
@@ -94,6 +102,14 @@ export function FoldersTab({
   const [movingId, setMovingId] = useState<string | null>(null)
   const [confirmGoldenDelete, setConfirmGoldenDelete] = useState<string | null>(null)
 
+  // 类型 CRUD(第五十七轮 Task 7):新建表单 / 分区头改名 / 删除二次确认(同一时刻至多一个)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newCriteria, setNewCriteria] = useState('')
+  const [renamingCat, setRenamingCat] = useState<string | null>(null)
+  const [renameName, setRenameName] = useState('')
+  const [confirmCatDelete, setConfirmCatDelete] = useState<string | null>(null)
+
   /** 同问题标准回答条数(questionHash → n):多答案问题的行上标注 n / 已满 */
   const questionCounts = useMemo(() => countGoldensByQuestion(goldens), [goldens])
 
@@ -124,6 +140,33 @@ export function FoldersTab({
         </option>
       )),
     [categories],
+  )
+
+  /**
+   * 渲染分区 = 非空分组 + **空的自定义类型**。
+   * 空组不产出是 groupByCategory 的既定契约(记忆页只读,无可厚非),但本页要能改名/删除 ——
+   * 一个刚建好、还没摆任何标答的类型若无分区,就永远够不到它的操作钮。
+   * 未分类由 groupByCategory 兜底产出(含"类型表里没有的 id"),这里不再重复。
+   */
+  const sections = useMemo(() => {
+    const seen = new Set(groups.map((g) => g.category.id))
+    const merged = [
+      ...groups,
+      ...categoryOrder(categories)
+        .filter((c) => c.kind === 'custom' && !seen.has(c.id))
+        .map((c) => ({ category: c, items: [] as PanelGolden[] })),
+    ]
+    const order = new Map(categoryOrder(categories).map((c, i) => [c.id, i]))
+    return merged.sort(
+      (a, b) => (order.get(a.category.id) ?? Number.MAX_SAFE_INTEGER) -
+        (order.get(b.category.id) ?? Number.MAX_SAFE_INTEGER),
+    )
+  }, [groups, categories])
+
+  /** 判定说明与预置描述的字符重合度警示(spec §五.3):不做计算式拦截,只把说明行标红 */
+  const overlapWarn = useMemo(
+    () => (newCriteria.trim() ? criteriaOverlapsPresets(newCriteria.trim()) : false),
+    [newCriteria],
   )
 
   const load = useCallback(async () => {
@@ -227,6 +270,75 @@ export function FoldersTab({
       setMsg({ ok: false, text: `删除失败:${String(err)}` })
     }
     setConfirmGoldenDelete(null)
+  }
+
+  // ─── 类型操作(第五十七轮 Task 7)────────────────────────────────────────────────
+
+  const closeCreate = () => {
+    setCreating(false)
+    setNewName('')
+    setNewCriteria('')
+  }
+
+  /** 新建类型:name 与 criteria 的合法性由后台 handler 判定,这里只回显拒绝理由 */
+  const submitCreate = async () => {
+    try {
+      const resp = await sendMessage<CreateCategoryResponse>({
+        type: 'CREATE_CATEGORY',
+        payload: { name: newName, criteria: newCriteria },
+      })
+      if (resp.payload.error) {
+        setMsg({ ok: false, text: `新建失败:${resp.payload.error}` })
+        return
+      }
+      setMsg({ ok: true, text: `类型「${newName.trim()}」已新建` })
+      closeCreate()
+      await refresh()
+    } catch (err) {
+      setMsg({ ok: false, text: `新建失败:${String(err)}` })
+    }
+  }
+
+  /** 改名(仅自定义类型;判定说明不在此列,不必重填) */
+  const submitRename = async (id: string) => {
+    try {
+      const resp = await sendMessage<RenameCategoryResponse>({
+        type: 'RENAME_CATEGORY',
+        payload: { id, name: renameName },
+      })
+      if (!resp.payload.success) {
+        setMsg({ ok: false, text: `改名失败:${resp.payload.error ?? '未知错误'}` })
+        return
+      }
+      setMsg({ ok: true, text: '类型已改名' })
+      setRenamingCat(null)
+      await refresh()
+    } catch (err) {
+      setMsg({ ok: false, text: `改名失败:${String(err)}` })
+    }
+  }
+
+  /** 删除自定义类型:其中的标答由后台在事务里落回未分类(不丢数据) */
+  const deleteCategory = async (id: string) => {
+    try {
+      const resp = await sendMessage<DeleteCategoryResponse>({
+        type: 'DELETE_CATEGORY',
+        payload: { id },
+      })
+      if (!resp.payload.success) {
+        setMsg({ ok: false, text: `删除失败:${resp.payload.error ?? '未知错误'}` })
+      } else {
+        const moved = resp.payload.movedGoldens ?? 0
+        setMsg({
+          ok: true,
+          text: moved > 0 ? `类型已删除,其中 ${moved} 条标准回答已移到未分类` : '类型已删除',
+        })
+        await refresh()
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `删除失败:${String(err)}` })
+    }
+    setConfirmCatDelete(null)
   }
 
   // ─── 视觉原语 ──────────────────────────────────────────────────────────────────
@@ -510,7 +622,51 @@ export function FoldersTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
       <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
-      {groups.length === 0 && (
+      {creating ? (
+        <Card tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: spacing.md }}>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="类型名(如:发票咨询)"
+            autoFocus
+            className="pddcs-input"
+            style={inputStyle(tk)}
+          />
+          <textarea
+            value={newCriteria}
+            onChange={(e) => setNewCriteria(e.target.value)}
+            rows={3}
+            placeholder="判定说明(必填):这个类型涵盖哪些问题 —— 原样发给分类模型当作选项描述"
+            className="pddcs-input"
+            style={inputStyle(tk, { resize: 'vertical' })}
+          />
+          {/* spec §五.3:与预置含义重叠不做计算式拦截,只在描述字符高度重合时把这行标红 */}
+          <div
+            style={{
+              fontSize: fontSize.secondary,
+              lineHeight: 1.6,
+              color: overlapWarn ? tk.errorText : tk.textTertiary,
+            }}
+          >
+            判定说明若与某个预置类型含义相近(例如又建一个「尺码咨询」),分类模型会在两者之间摇摆,
+            <b>全部类型</b>的判断质量一起下降。
+          </div>
+          <div style={{ display: 'flex', gap: spacing.sm }}>
+            <Btn tk={tk} variant="primary" onClick={() => void submitCreate()}>
+              创建
+            </Btn>
+            <Btn tk={tk} variant="ghost" onClick={closeCreate}>
+              取消
+            </Btn>
+          </div>
+        </Card>
+      ) : (
+        <div style={{ display: 'flex', gap: spacing.sm }}>
+          <CreateBtn tk={tk} label="新建类型" onClick={() => setCreating(true)} />
+        </div>
+      )}
+
+      {sections.length === 0 && (
         <EmptyState tk={tk}>
           暂无标准回答
           <br />
@@ -518,16 +674,94 @@ export function FoldersTab({
         </EmptyState>
       )}
 
-      {groups.map((group) => (
-        <Card
-          key={group.category.id}
-          tk={tk}
-          title={`${group.category.name} · ${group.items.length}`}
-          style={{ padding: `${spacing.lg}px ${spacing.lg}px`, gap: spacing.md }}
-        >
-          {group.items.map((g) => goldenRow(g))}
-        </Card>
-      ))}
+      {sections.map((group) => {
+        const c = group.category
+        const isCustom = c.kind === 'custom'
+        const renaming = renamingCat === c.id
+        // 种类徽标:预置与未分类不可改名/删,得让用户一眼看出为什么没有操作钮
+        const kindLabel = c.kind === 'preset' ? '预置' : c.kind === 'custom' ? '自定义' : null
+        const title = (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: spacing.sm, minWidth: 0 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {`${c.name} · ${group.items.length}`}
+            </span>
+            {kindLabel && (
+              <Badge tk={tk} tone="neutral">
+                {kindLabel}
+              </Badge>
+            )}
+          </span>
+        )
+        return (
+          // data-category-id 是**稳定的分区锚点**:验收脚本按类型 id 找"这一块",
+          // 而不是靠标题 div 的文字/DOM 形状 —— 后者随渲染改一次就会静默失配
+          // (Task 6 移除 data-folder-id 后 verify-golden-multi 静默失配的教训)。
+          <div key={c.id} data-category-id={c.id}>
+          <Card
+            tk={tk}
+            title={title}
+            titleExtra={
+              isCustom
+                ? opsWrap(
+                    <>
+                      {iconBtn('重命名类型', <PencilIcon size={ICON_SIZE} strokeWidth={2} />, () => {
+                        setRenamingCat(c.id)
+                        setRenameName(c.name)
+                        setConfirmCatDelete(null)
+                      })}
+                      {iconBtn(
+                        '删除类型',
+                        <TrashIcon size={ICON_SIZE} strokeWidth={2} />,
+                        () => {
+                          setConfirmCatDelete(c.id)
+                          setRenamingCat(null)
+                        },
+                        true,
+                      )}
+                    </>,
+                    'right',
+                  )
+                : undefined
+            }
+            style={{ padding: `${spacing.lg}px ${spacing.lg}px`, gap: spacing.md }}
+          >
+            {renaming && (
+              <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center' }}>
+                <input
+                  value={renameName}
+                  onChange={(e) => setRenameName(e.target.value)}
+                  autoFocus
+                  className="pddcs-input"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void submitRename(c.id)
+                    if (e.key === 'Escape') setRenamingCat(null)
+                  }}
+                  style={controlStyle(tk, controlH.form, { flex: 1, minWidth: 0 })}
+                />
+                <BtnMini tk={tk} primary onClick={() => void submitRename(c.id)}>
+                  保存
+                </BtnMini>
+                <BtnMini tk={tk} onClick={() => setRenamingCat(null)}>
+                  取消
+                </BtnMini>
+              </div>
+            )}
+            {confirmCatDelete === c.id &&
+              confirmRow(
+                `删除「${c.name}」?其中的标准回答会移到未分类,不会消失`,
+                () => void deleteCategory(c.id),
+                () => setConfirmCatDelete(null),
+              )}
+            {group.items.length === 0 && isCustom && !renaming && confirmCatDelete !== c.id && (
+              <div style={{ fontSize: fontSize.secondary, color: tk.textTertiary, lineHeight: 1.6 }}>
+                这个类型下还没有标准回答 —— 可在记忆页或本页「移到其他类型」把标答摆进来。
+              </div>
+            )}
+            {group.items.map((g) => goldenRow(g))}
+          </Card>
+          </div>
+        )
+      })}
 
       <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
         在聊天页候选弹窗或记忆列表中可将优质回复沉淀为标准回答;同一问题最多 3 条,检索命中时置顶并放宽阈值。
@@ -576,4 +810,34 @@ function BtnMini({
       {children}
     </button>
   )
+}
+
+// ─── 判定说明与预置的"含义相近"提示(spec §五.3,纯提示不做拦截)──────────────────
+
+/** 重合度阈值:达到即把新建表单的说明行标成警示色 */
+const CRITERIA_OVERLAP_THRESHOLD = 0.5
+
+/** 相邻两字(bigram)集合 —— 中文无天然分词,bigram 是轻量的"含义相近"代理 */
+function bigrams(s: string): Set<string> {
+  const clean = s.replace(/\s+/g, '')
+  const out = new Set<string>()
+  for (let i = 0; i + 1 < clean.length; i++) out.add(clean.slice(i, i + 2))
+  return out
+}
+
+/**
+ * 判定说明是否与某个预置类型的描述高度重合。
+ * 用 Sørensen–Dice 系数衡量(2·交集 / 两边大小和),≥ 阈值即提示。
+ * 刻意不做计算式拦截 —— 为一个保存时的提示引入嵌入或大模型不值得,名称唯一性才是硬拦截。
+ */
+export function criteriaOverlapsPresets(criteria: string): boolean {
+  const a = bigrams(criteria)
+  if (a.size === 0) return false
+  return PRESET_CATEGORIES.some((p) => {
+    const b = bigrams(p.criteria)
+    if (b.size === 0) return false
+    let inter = 0
+    for (const g of a) if (b.has(g)) inter++
+    return (2 * inter) / (a.size + b.size) >= CRITERIA_OVERLAP_THRESHOLD
+  })
 }

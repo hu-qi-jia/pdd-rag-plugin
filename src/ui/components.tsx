@@ -211,17 +211,28 @@ export function Notice({
 export function Card({
   tk,
   title,
+  titleExtra,
   children,
   style,
   className,
 }: {
   tk: ThemeTokens
-  title?: string
+  /** 标题:字符串或节点(第五十七轮 Task 7:类型分区标题要并一枚种类徽标) */
+  title?: React.ReactNode
+  /** 标题行右端附加物(如分区标题旁的改名/删除图标钮);提供时标题行变 flex 一行 */
+  titleExtra?: React.ReactNode
   children: React.ReactNode
   style?: React.CSSProperties
   /** 附加 CSS 类(容器透传;原 pddcs-row 悬浮显隐钩子已随 v2.6.31 退役) */
   className?: string
 }) {
+  // 分组标题(第四十一轮起走 formType 规范):13.5 semibold + 主文本色 ——
+  // 旧版是 11.5 + textMuted,比卡内 12.5 的字段标签还小还灰(层级倒挂)
+  const titleStyle: React.CSSProperties = {
+    fontSize: formType.groupTitle.size,
+    fontWeight: formType.groupTitle.weight,
+    color: tk.text,
+  }
   return (
     <div
       className={className}
@@ -236,19 +247,15 @@ export function Card({
         ...style,
       }}
     >
-      {title && (
-        // 分组标题(第四十一轮起走 formType 规范):13.5 semibold + 主文本色 ——
-        // 旧版是 11.5 + textMuted,比卡内 12.5 的字段标签还小还灰(层级倒挂)
-        <div
-          style={{
-            fontSize: formType.groupTitle.size,
-            fontWeight: formType.groupTitle.weight,
-            color: tk.text,
-          }}
-        >
-          {title}
-        </div>
-      )}
+      {title &&
+        (titleExtra ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <div style={{ ...titleStyle, flex: 1, minWidth: 0 }}>{title}</div>
+            {titleExtra}
+          </div>
+        ) : (
+          <div style={titleStyle}>{title}</div>
+        ))}
       {children}
     </div>
   )

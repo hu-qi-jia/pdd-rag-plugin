@@ -212,3 +212,40 @@ export interface FlattenFoldersResponse {
   type: 'FLATTEN_FOLDERS_RESPONSE'
   payload: { success: boolean; flattened: number; error?: string }
 }
+
+// ─── 问题类型的 CRUD(第五十七轮 Task 7)───────────────────────────────────────
+//
+// 预置类型与未分类不可改名/删(设计 D3);新建恒 filterable=true、恒要求 criteria 非空。
+
+/** 新建自定义问题类型。criteria 是发给 jev 的选项描述,必填且非空白 */
+export interface CreateCategoryRequest {
+  type: 'CREATE_CATEGORY'
+  payload: { name: string; criteria: string }
+}
+
+export interface CreateCategoryResponse {
+  type: 'CREATE_CATEGORY_RESPONSE'
+  payload: { id?: string; error?: string }
+}
+
+/** 改名(仅自定义类型;判定说明不在此列,改名不要求重填 criteria) */
+export interface RenameCategoryRequest {
+  type: 'RENAME_CATEGORY'
+  payload: { id: string; name: string }
+}
+
+export interface RenameCategoryResponse {
+  type: 'RENAME_CATEGORY_RESPONSE'
+  payload: { success: boolean; error?: string }
+}
+
+/** 删除自定义类型;其中的标答落回未分类(不跟着消失),movedGoldens 为落回条数 */
+export interface DeleteCategoryRequest {
+  type: 'DELETE_CATEGORY'
+  payload: { id: string }
+}
+
+export interface DeleteCategoryResponse {
+  type: 'DELETE_CATEGORY_RESPONSE'
+  payload: { success: boolean; movedGoldens?: number; error?: string }
+}

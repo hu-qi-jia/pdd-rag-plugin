@@ -59,6 +59,7 @@ import {
   renameFolder,
   updateGoldenCategory,
 } from "./panel";
+import { createCategory, deleteCategory, renameCategory } from "./categories";
 import { exportData, importData } from "./transfer";
 import {
   createKnowledge,
@@ -393,6 +394,25 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   DELETE_FOLDER: route(
     "DELETE_FOLDER",
     (message) => deleteFolder(message),
+    (err) => ({ success: false, error: String(err) }),
+  ),
+
+  // 问题类型 CRUD(第五十七轮 Task 7):预置/未分类的改名与删除在 handler 内拦截
+  CREATE_CATEGORY: route(
+    "CREATE_CATEGORY",
+    (message) => createCategory(message),
+    (err) => ({ error: String(err) }),
+  ),
+
+  RENAME_CATEGORY: route(
+    "RENAME_CATEGORY",
+    (message) => renameCategory(message),
+    (err) => ({ success: false, error: String(err) }),
+  ),
+
+  DELETE_CATEGORY: route(
+    "DELETE_CATEGORY",
+    (message) => deleteCategory(message),
     (err) => ({ success: false, error: String(err) }),
   ),
 

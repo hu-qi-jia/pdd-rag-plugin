@@ -118,24 +118,23 @@ await pop.reload({ waitUntil: 'domcontentloaded' })
 await sleep(1500)
 await pop.locator('button[title="标准回答"]').click()
 await sleep(1200)
-const rel = await pop.evaluate((catName) => {
-  // 分区容器的标题 div 文案为「类型名 · 条数」(见 FoldersTab 的 Card title);
-  // 取标题所在 Card 的 innerText 看条目是否真落在这一块里
-  const titles = [...document.querySelectorAll('div')].filter(
-    (d) => d.children.length === 0 && (d.textContent || '').startsWith(`${catName} ·`),
+const rel = await pop.evaluate(({ catId, catName }) => {
+  // 分区容器带稳定锚点 data-category-id(见 FoldersTab 分的分区包裹 div)。
+  // 不再靠标题 div 的文字/DOM 形状定位 —— 那随渲染改一次就会静默失配。
+  const cards = [...document.querySelectorAll('[data-category-id]')].filter(
+    (el) => el.getAttribute('data-category-id') === catId,
   )
-  const title = titles[0]
-  const card = title && title.parentElement
-  const t = card?.innerText ?? ''
+  const t = cards[0]?.innerText ?? ''
   return {
-    headerText: title ? title.textContent : '',
+    headerText: t.split('\n')[0] ?? '',
     answerIdx: t.indexOf('类型验收答复'),
     // 失败时最想知道的是"页面上到底有没有这个分区":没分区 / 分区在但内容没进来
     // 修法完全不同,只报 -1 等于没说
-    cards: titles.length,
+    cards: cards.length,
+    catName,
     box: t.replace(/\s+/g, ' ').slice(0, 200),
   }
-}, CAT_NAME)
+}, { catId: CAT_ID, catName: CAT_NAME })
 check(
   '标答落在「订单物流」类型分区内,分区标题带条数',
   rel.cards === 1 && /·\s*\d+/.test(rel.headerText) && rel.answerIdx >= 0,

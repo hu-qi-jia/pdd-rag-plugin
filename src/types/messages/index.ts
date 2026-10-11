@@ -39,6 +39,9 @@ import type {
   RenameFolderRequest,
   DeleteFolderRequest,
   FlattenFoldersRequest,
+  CreateCategoryRequest,
+  RenameCategoryRequest,
+  DeleteCategoryRequest,
 } from './panel'
 import type { CreateKbRequest, UpdateKbRequest, DeleteKbRequest, UploadKbDocRequest } from './kb'
 import type { UpdateSettingsRequest, TestLlmRequest, TestJevRequest } from './settings'
@@ -69,6 +72,9 @@ export type ExtensionMessage =
   | RenameFolderRequest
   | DeleteFolderRequest
   | FlattenFoldersRequest
+  | CreateCategoryRequest
+  | RenameCategoryRequest
+  | DeleteCategoryRequest
   | CreateKbRequest
   | UpdateKbRequest
   | DeleteKbRequest
@@ -104,6 +110,9 @@ import type {
   RenameFolderResponse,
   DeleteFolderResponse,
   FlattenFoldersResponse,
+  CreateCategoryResponse,
+  RenameCategoryResponse,
+  DeleteCategoryResponse,
 } from './panel'
 import type {
   CreateKbResponse,
@@ -139,6 +148,9 @@ export type ExtensionMessageResponse =
   | RenameFolderResponse
   | DeleteFolderResponse
   | FlattenFoldersResponse
+  | CreateCategoryResponse
+  | RenameCategoryResponse
+  | DeleteCategoryResponse
   | CreateKbResponse
   | UpdateKbResponse
   | DeleteKbResponse

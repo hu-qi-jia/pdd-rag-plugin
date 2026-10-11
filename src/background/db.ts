@@ -103,12 +103,48 @@ export class PddDatabase extends Dexie {
       backlogIgnores: null,
     });
 
-    // 第五十六轮 问题自动分类:categories 表。
-    // 它是跨 qaRecords / goldens 两个实体的单一分类轴,取代 folders 的分类职责;
+    // 第五十六轮 问题自动分类:categories 表 + 旧文件夹迁移。
     // folders 表保留不删(回滚用),迁移后不再被读写。
-    this.version(8).stores({
-      categories: "id, kind, position",
-    });
+    this.version(8)
+      .stores({
+        categories: "id, kind, position",
+      })
+      .upgrade(async (tx) => {
+        const now = Date.now();
+
+        // ① 旧文件夹 → 自定义类型。filterable=false 是关键:它们不参与 jev 分类,
+        //    因此不能靠"类型匹配"被选中,必须永远进检索池 —— 否则夹里的条目
+        //    会在任何查询下都搜不到(纯粹的召回倒退,见 spec §7.2)。
+        //    position 从 100 起,让 6 个预置类型排在前面。
+        const folders = (await tx.table("folders").toArray()) as FolderRecord[];
+        const legacyCats: CategoryRecord[] = folders.map((f, i) => ({
+          id: `legacy:${f.id}`,
+          name: f.name,
+          criteria: "",
+          kind: "custom" as const,
+          route: "retrieve" as const,
+          filterable: false,
+          position: 100 + i,
+          createdAt: f.createdAt,
+          updatedAt: now,
+        }));
+        if (legacyCats.length > 0) await tx.table("categories").bulkAdd(legacyCats);
+
+        // ② 金标准的归属跟着搬。有夹的标 manual —— 用户手工摆过的东西,
+        //    补分类时一律跳过(见 spec §11.2)。没入夹的留 null(= 未分类),
+        //    它们会由补分类正常处理。
+        const goldens = (await tx.table("goldens").toArray()) as GoldenRecord[];
+        for (const g of goldens) {
+          const patch: Partial<GoldenRecord> = {
+            categoryId: g.folderId ? `legacy:${g.folderId}` : null,
+          };
+          if (g.folderId) {
+            patch.categorySource = "manual";
+            patch.categoryAt = now;
+          }
+          await tx.table("goldens").update(g.id, patch);
+        }
+      });
   }
 
   // ─── 初始化/预置 ──────────────────────────────────────────────────────────────

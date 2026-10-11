@@ -104,3 +104,123 @@ describe('库升级到 v7', () => {
     db.close()
   })
 })
+
+// ─── v7 → v8:旧文件夹转自定义类型 ─────────────────────────────────────────────
+//
+// 这一步的失败模式是"用户以为数据丢了":如果迁移把原本挂在「双十一」夹里的标准回答
+// 落进未分类,用户打开面板会认为手工整理白做了。所以三条断言必须同时成立 ——
+// 文件夹名还在、归属还对、且被标成人工的(机器不许再动)。
+
+/** v7 的完整 schema(v1~v7 原样搭一遍,刻意不共用运行时定义) */
+const LEGACY_V7: Array<Record<string, string | null>> = [
+  {
+    qaRecords: 'id, sessionKey, questionHash, questionTs, hasEmbedding, [sessionKey+questionTs]',
+    replies: 'id, qaId, contentHash, ts',
+    goldens: 'id, folderId, questionHash, hasEmbedding',
+    folders: 'id, parentId',
+    errors: '++id, timestamp',
+  },
+  { knowledge: 'id, questionHash, hasEmbedding, enabled' },
+  { knowledge: 'id, questionHash, hasEmbedding, enabled, docId' },
+  {
+    qaRecords:
+      'id, sessionKey, questionHash, questionTs, hasEmbedding, [sessionKey+questionTs], msgId',
+    replies: 'id, qaId, contentHash, ts, msgId',
+  },
+  { kbDocs: 'docId, splitterVersion' },
+  { metrics: 'key', backlogIgnores: 'questionHash' },
+  { backlogIgnores: null },
+]
+
+/** 造一个"跑过 v7"的库:两个文件夹、两条标答(一条在夹里、一条没入夹) */
+async function seedLegacyV7(): Promise<void> {
+  const legacy = new Dexie('PddCSDB')
+  LEGACY_V7.forEach((stores, i) => {
+    legacy.version(i + 1).stores(stores)
+  })
+  await legacy.open()
+  await legacy.table('folders').bulkAdd([
+    { id: 'uncategorized', parentId: null, name: '默认文件夹', position: 0, createdAt: 1000 },
+    { id: 'f-hot', parentId: null, name: '双十一', position: 1, createdAt: 2000 },
+  ])
+  await legacy.table('goldens').bulkAdd([
+    {
+      id: 'gd-in-folder',
+      folderId: 'f-hot',
+      question: '能便宜点吗',
+      answer: '亲,已经是最低价啦',
+      questionHash: 'h1',
+      hasEmbedding: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      id: 'gd-no-folder',
+      folderId: null,
+      question: '多久发货',
+      answer: '48 小时内发出',
+      questionHash: 'h2',
+      hasEmbedding: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ])
+  legacy.close()
+}
+
+describe('v7 → v8 旧文件夹迁移', () => {
+  beforeEach(async () => {
+    await Dexie.delete('PddCSDB')
+  })
+
+  it('每个旧文件夹转成一条 filterable=false 的自定义类型', async () => {
+    await seedLegacyV7()
+    const upgraded = new PddDatabase()
+    await upgraded.open()
+
+    const hot = await upgraded.categories.get('legacy:f-hot')
+    expect(hot).toBeDefined()
+    expect(hot!.name).toBe('双十一')
+    expect(hot!.kind).toBe('custom')
+    expect(hot!.filterable).toBe(false)
+    expect(hot!.criteria).toBe('')
+
+    const presetDefault = await upgraded.categories.get('legacy:uncategorized')
+    expect(presetDefault!.name).toBe('默认文件夹')
+    upgraded.close()
+  })
+
+  it('标准回答的归属跟着搬,且标成人工的(机器永不许覆盖)', async () => {
+    await seedLegacyV7()
+    const upgraded = new PddDatabase()
+    await upgraded.open()
+
+    const inFolder = (await upgraded.goldens.get('gd-in-folder'))!
+    expect(inFolder.categoryId).toBe('legacy:f-hot')
+    expect(inFolder.categorySource).toBe('manual')
+
+    const noFolder = (await upgraded.goldens.get('gd-no-folder'))!
+    expect(noFolder.categoryId).toBeNull()
+    expect(noFolder.categorySource).toBeUndefined()
+    upgraded.close()
+  })
+
+  it('业务数据分毫未动:问题与答案原文还在', async () => {
+    await seedLegacyV7()
+    const upgraded = new PddDatabase()
+    await upgraded.open()
+    const g = (await upgraded.goldens.get('gd-in-folder'))!
+    expect(g.question).toBe('能便宜点吗')
+    expect(g.answer).toBe('亲,已经是最低价啦')
+    expect(g.folderId).toBe('f-hot')
+    upgraded.close()
+  })
+
+  it('新装(没有旧库)直接建 v8,不跑迁移也不报错', async () => {
+    const fresh = new PddDatabase()
+    await fresh.open()
+    await fresh.ensurePresetCategories()
+    expect(await fresh.categories.count()).toBe(7)
+    fresh.close()
+  })
+})

@@ -20,6 +20,11 @@ import { resplitStaleKbDocs } from "./kbResplit";
 import { registerAiPort } from "./aiIntegrate";
 import { isLlmConfigured, testLlmConnection } from "./llm";
 import { isJevConfigured, testJevConnection } from "./jev";
+import {
+  getBackfillStatus,
+  requestBackfillStop,
+  startBackfill,
+} from "./backfillState";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { clearMetrics, metricsSnapshot, trackEvent } from "./metrics";
@@ -441,6 +446,33 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
     cleared: 0,
     error: String(err),
   })),
+
+  // 补分类(第五十七轮 Task 4):面板用轮询读状态,不用长连接。
+  // 状态留在 backfillState 的单例里,关/开弹窗都能如实反映。
+  GET_BACKFILL_STATE: route(
+    "GET_BACKFILL_STATE",
+    async () => {
+      const counts = await db.countBackfillCandidates();
+      return { status: getBackfillStatus(), pending: counts };
+    },
+    (err) => ({ status: { ...getBackfillStatus(), error: String(err) }, pending: { history: 0, golden: 0 } }),
+  ),
+
+  // 门禁由 startBackfill 唯一判定:不过就返回 started:false,一次 fetch 都不发
+  START_BACKFILL: route("START_BACKFILL", () => startBackfill(), (err) => ({
+    started: false,
+    error: String(err),
+  })),
+
+  // 中断:已跑完的条目结果保留,worker 在下一轮循环顶部退出
+  STOP_BACKFILL: route(
+    "STOP_BACKFILL",
+    async () => {
+      requestBackfillStop();
+      return { stopping: true };
+    },
+    () => ({ stopping: false }),
+  ),
 };
 
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {

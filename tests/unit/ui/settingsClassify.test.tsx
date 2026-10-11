@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { GetStatsResponse, UpdateSettingsRequest } from '../../../src/types/messages'
+import type { BackfillPending, BackfillStatus } from '../../../src/types/messages/classify'
 import type { PddSettings } from '../../../src/types/memory'
 import { DEFAULT_SETTINGS, JEV_DRAFT_STORAGE_KEY } from '../../../src/shared/constants'
 import { JEV_DRAFT_DEBOUNCE_MS } from '../../../src/popup/jevDraft'
@@ -33,6 +34,9 @@ let store: Record<string, unknown>
 let sent: { type: string; payload?: unknown }[]
 /** TEST_JEV 的回报(每条用例自定) */
 let testJevResult: { ok: boolean; error?: string }
+/** 后台补分类状态(每条用例自定) */
+let backfillStatus: BackfillStatus
+let backfillPending: BackfillPending
 
 const JEV_URL_TYPED = 'https://api.typesafe.ai/'
 const JEV_URL_SAVED = 'https://api.typesafe.ai' // 后台夹取去尾斜杠后的样子
@@ -141,6 +145,24 @@ async function renderSettings(settings: PddSettings) {
     if (msg.type === 'TEST_JEV') {
       return { type: 'TEST_JEV_RESPONSE', payload: testJevResult }
     }
+    if (msg.type === 'GET_BACKFILL_STATE') {
+      return { type: 'GET_BACKFILL_STATE_RESPONSE', payload: { status: backfillStatus, pending: backfillPending } }
+    }
+    if (msg.type === 'START_BACKFILL') {
+      // 迷你后台:点开始即转 running(与真实 startBackfill 同步写状态一致)
+      backfillStatus = {
+        phase: 'running',
+        total: backfillPending.history + backfillPending.golden,
+        done: 0,
+        ok: 0,
+        failed: 0,
+        skipped: 0,
+      }
+      return { type: 'START_BACKFILL_RESPONSE', payload: { started: true } }
+    }
+    if (msg.type === 'STOP_BACKFILL') {
+      return { type: 'STOP_BACKFILL_RESPONSE', payload: { stopping: true } }
+    }
     return { type: 'UPDATE_SETTINGS_RESPONSE', payload: { settings: current } }
   })
   await act(async () => {
@@ -157,6 +179,8 @@ beforeEach(() => {
   store = {}
   sent = []
   testJevResult = { ok: true }
+  backfillStatus = { phase: 'idle', total: 0, done: 0, ok: 0, failed: 0, skipped: 0 }
+  backfillPending = { history: 0, golden: 0 }
 
   // 内存版 chrome.storage.local:草稿的存/读/清要真的能往返
   const local = chrome.storage.local as unknown as {
@@ -188,7 +212,12 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  act(() => root.unmount())
+  // 轮询用例里会**主动**卸载以验证 interval 停掉;这里再卸一次要容错
+  try {
+    act(() => root.unmount())
+  } catch {
+    /* 已卸载 */
+  }
   container.remove()
 })
 
@@ -316,5 +345,107 @@ describe('设置页 · 问题分类区', () => {
       apiKey: 'sk-new',
       model: DEFAULT_SETTINGS.jevModel,
     })
+  })
+})
+
+// ─── 补存量(第五十七轮 Task 4):按钮 + 进度轮询 ────────────────────────────────
+
+describe('设置页 · 问题分类区 · 补存量', () => {
+  const configured: Partial<PddSettings> = {
+    classifyEnabled: true,
+    jevBaseUrl: 'https://api.typesafe.ai',
+    jevApiKey: 'sk-jev',
+    jevModel: 'jev-latest',
+  }
+
+  it('已配置 → 按钮可点,文案给出两条待办数与目标主机', async () => {
+    backfillPending = { history: 1247, golden: 38 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    const btn = textBtnIn(classifyCard(), '开始分类全部历史')
+    expect(btn.disabled).toBe(false)
+    // 待办数来自后台的 pending(过千要带千位分隔),不是库里的总数
+    expect(classifyCard().textContent).toContain('1,247 条历史问题 + 38 条标准回答')
+    expect(classifyCard().textContent).toContain('api.typesafe.ai')
+  })
+
+  it('未配置 → 按钮禁用并给出理由', async () => {
+    await renderSettings({ ...DEFAULT_SETTINGS, classifyEnabled: false })
+    expect(textBtnIn(classifyCard(), '开始分类全部历史').disabled).toBe(true)
+    expect(classifyCard().textContent).toContain('先开启自动分类并填全配置')
+  })
+
+  it('点「开始分类全部历史」→ 发 START_BACKFILL', async () => {
+    backfillPending = { history: 3, golden: 0 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    await act(async () => {
+      textBtnIn(classifyCard(), '开始分类全部历史').dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+    await flush()
+    expect(sent.some((m) => m.type === 'START_BACKFILL')).toBe(true)
+  })
+
+  it('运行中 → 显示 done / total,「开始」换成「中断」;点中断发 STOP_BACKFILL', async () => {
+    backfillStatus = { phase: 'running', total: 1285, done: 382, ok: 380, failed: 2, skipped: 0 }
+    backfillPending = { history: 1247, golden: 38 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    expect(classifyCard().textContent).toContain('382 / 1285')
+    expect(() => textBtnIn(classifyCard(), '开始分类全部历史')).toThrow()
+
+    const stop = textBtnIn(classifyCard(), '中断')
+    await act(async () => {
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flush()
+    expect(sent.some((m) => m.type === 'STOP_BACKFILL')).toBe(true)
+  })
+
+  it('完成 → 显示「成功 · 失败 · 跳过」报告', async () => {
+    backfillStatus = { phase: 'done', total: 1285, done: 1285, ok: 1270, failed: 3, skipped: 12 }
+    backfillPending = { history: 1247, golden: 38 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    expect(classifyCard().textContent).toContain('成功 1270')
+    expect(classifyCard().textContent).toContain('失败 3')
+    expect(classifyCard().textContent).toContain('跳过 12')
+  })
+
+  it('被中断结束 → 报告里标明', async () => {
+    backfillStatus = { phase: 'done', total: 1285, done: 400, ok: 398, failed: 2, skipped: 0, stopped: true }
+    backfillPending = { history: 1247, golden: 38 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    expect(classifyCard().textContent).toContain('已中断')
+  })
+
+  it('挂载时若在跑 → 每 500ms 轮询;卸载后不再请求', async () => {
+    backfillStatus = { phase: 'running', total: 10, done: 1, ok: 1, failed: 0, skipped: 0 }
+    backfillPending = { history: 10, golden: 0 }
+    // 只假造 setInterval/clearInterval:本地 flush 用的 setTimeout 仍是真表
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+      const polls = () => sent.filter((m) => m.type === 'GET_BACKFILL_STATE').length
+      expect(polls()).toBe(1)
+
+      await act(async () => {
+        vi.advanceTimersByTime(500)
+      })
+      await flush()
+      expect(polls()).toBe(2)
+
+      act(() => root.unmount())
+      await act(async () => {
+        vi.advanceTimersByTime(2000)
+      })
+      await flush()
+      expect(polls()).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

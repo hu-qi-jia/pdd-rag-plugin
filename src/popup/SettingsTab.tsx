@@ -8,11 +8,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
+  BackfillPending,
+  BackfillStatus,
   ClearMemoryDataResponse,
   ClearMetricsResponse,
   ExportDataResponse,
+  GetBackfillStateResponse,
   GetStatsResponse,
   ImportDataResponse,
+  StartBackfillResponse,
+  StopBackfillResponse,
   UpdateSettingsResponse,
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
@@ -63,6 +68,26 @@ import { usageIsEmpty, usageRows } from './logic'
  * 四个卡片共用同一个常量对象,禁止逐卡微调,否则"统一"立刻失效。
  */
 const SETTINGS_CARD_STYLE: React.CSSProperties = { gap: formGap.row }
+
+/**
+ * 补分类进度轮询间隔(ms)。补分类跑在 SW 里,弹窗关掉连接就没了 —— 面板靠轮询读
+ * 后台单例状态,关/开弹窗都能如实反映,也不必管端口生命周期。
+ */
+const BACKFILL_POLL_MS = 500
+
+/** 千位分隔(按钮文案的待办数要一眼读得出量级) */
+function fmtCount(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+/** 目标主机:从设置里的 baseUrl 取 host(取不到就原样回退) */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host
+  } catch {
+    return baseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  }
+}
 
 export function SettingsTab({
   tk,
@@ -157,6 +182,81 @@ export function SettingsTab({
   useEffect(() => () => window.clearTimeout(jevDraftTimer.current), [])
 
   const jevDirty = !!draft && !!jev && !sameJevFields(jev, jevFormFromSettings(draft))
+
+  // ── 补存量(第五十七轮 Task 4)────────────────────────────────────────────
+  // 任务跑在 SW 里、状态留在后台单例:这里只**读**。挂载时读一次;若在跑,每 500ms
+  // 轮询到 done 为止(卸载/跑完都清掉 interval)。用轮询不用 Port 的理由见文件顶注释。
+  const [backfill, setBackfill] = useState<{
+    status: BackfillStatus
+    pending: BackfillPending
+  } | null>(null)
+  const pollTimer = useRef<number>(0)
+  const polling = useRef(false)
+
+  const readBackfill = useCallback(async () => {
+    try {
+      const resp = await sendMessage<GetBackfillStateResponse>({ type: 'GET_BACKFILL_STATE' })
+      setBackfill(resp.payload)
+      return resp.payload
+    } catch {
+      return null
+    }
+  }, [])
+
+  const ensurePolling = useCallback(() => {
+    if (polling.current) return
+    polling.current = true
+    const stop = () => {
+      window.clearInterval(pollTimer.current)
+      pollTimer.current = 0
+      polling.current = false
+    }
+    pollTimer.current = window.setInterval(() => {
+      void readBackfill().then((p) => {
+        // 只在**明确读到**非 running 时收兵;读失败不误停(留待下一轮)
+        if (p?.status && p.status.phase !== 'running') stop()
+      })
+    }, BACKFILL_POLL_MS)
+  }, [readBackfill])
+
+  useEffect(() => {
+    let cancelled = false
+    void readBackfill().then((p) => {
+      if (!cancelled && p?.status?.phase === 'running') ensurePolling()
+    })
+    // 卸载必须掐掉 interval:否则定时器在弹窗关闭后继续打后台
+    return () => {
+      cancelled = true
+      window.clearInterval(pollTimer.current)
+      pollTimer.current = 0
+      polling.current = false
+    }
+  }, [readBackfill, ensurePolling])
+
+  const startBackfillNow = async () => {
+    try {
+      const resp = await sendMessage<StartBackfillResponse>({ type: 'START_BACKFILL' })
+      await readBackfill() // 立刻回读一次,列表/按钮同步切到 running
+      // started 为真就一定在跑:即便这次回读失败也起轮询,否则界面会误以为没启动
+      if (resp.payload.started) ensurePolling()
+      else if (resp.payload.error) setMsg({ ok: false, text: `补分类未能启动:${resp.payload.error}` })
+    } catch (err) {
+      setMsg({ ok: false, text: `补分类未能启动:${String(err)}` })
+    }
+  }
+
+  const stopBackfillNow = async () => {
+    try {
+      await sendMessage<StopBackfillResponse>({ type: 'STOP_BACKFILL' })
+    } catch {
+      /* 中断失败不改本地状态:下一次轮询会读到真实进度 */
+    }
+  }
+
+  const backfillStatus = backfill?.status ?? null
+  const backfillRunning = backfillStatus?.phase === 'running'
+  // 门禁与后台 startBackfill 同款(第三道"有类型可问"面板看不到,由后台兜底拒绝)
+  const backfillReady = !!draft && draft.classifyEnabled && jevFormReady(jevFormFromSettings(draft))
 
   const refreshStorageInfo = useCallback(async () => {
     try {
@@ -809,6 +909,68 @@ export function SettingsTab({
             有未保存的修改。
           </div>
         )}
+
+        {/* 补存量(第五十七轮 Task 4):跑在 SW 里、关弹窗也继续 —— 状态从后台轮询读回。
+            待办数来自 GET_BACKFILL_STATE 的 pending(与快照同口径,manual 不计入)。 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelControl }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+            {backfillRunning ? (
+              <Btn
+                tk={tk}
+                variant="danger"
+                onClick={() => void stopBackfillNow()}
+                title="中断本轮,已跑完的结果保留"
+              >
+                中断
+              </Btn>
+            ) : (
+              <Btn
+                tk={tk}
+                variant="primary"
+                disabled={busy || !backfillReady}
+                title={backfillReady ? '把存量历史与标准回答的问题送去做一次分类' : '先开启自动分类并填全配置'}
+                onClick={() => void startBackfillNow()}
+              >
+                开始分类全部历史
+              </Btn>
+            )}
+            {backfillRunning && backfillStatus && (
+              <span
+                style={{
+                  fontSize: formType.desc.size,
+                  fontWeight: formType.desc.weight,
+                  color: tk.textMuted,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {backfillStatus.done} / {backfillStatus.total}
+              </span>
+            )}
+          </div>
+          <span
+            style={{
+              fontSize: formType.desc.size,
+              fontWeight: formType.desc.weight,
+              color:
+                !backfillReady && !backfillRunning && backfillStatus?.phase !== 'done'
+                  ? tk.errorText
+                  : tk.textMuted,
+              lineHeight: 1.6,
+            }}
+          >
+            {backfillRunning
+              ? '正在补分类,可随时中断;已跑完的条目会保留。'
+              : backfillStatus?.phase === 'done'
+                ? `成功 ${backfillStatus.ok} · 失败 ${backfillStatus.failed} · 跳过 ${backfillStatus.skipped}${
+                    backfillStatus.stopped ? '(已中断,未跑完)' : ''
+                  }`
+                : backfillReady
+                  ? `将把 ${fmtCount(backfill?.pending.history ?? 0)} 条历史问题 + ${fmtCount(
+                      backfill?.pending.golden ?? 0,
+                    )} 条标准回答的问题发送到 ${hostOf(draft.jevBaseUrl)}(不含任何回复内容)`
+                  : '先开启自动分类并填全配置'}
+          </span>
+        </div>
       </Card>
 
       <Card tk={tk} title="导入与导出" style={SETTINGS_CARD_STYLE}>

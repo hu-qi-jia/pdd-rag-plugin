@@ -47,8 +47,15 @@ export function requestBackfillStop(): void {
   stopRequested = true
 }
 
-/** 门禁未过:状态回 idle 并带上原因,不发任何请求 */
+/**
+ * 门禁未过(或门禁查询抛错):状态回 idle 并带上原因,不发任何请求。
+ *
+ * **必须清 `busy`**:拒绝路径不会走 `runToCompletion` 的 `finally`,漏清就会把重入锁
+ * 永久留在锁死状态 —— 此后每次 `startBackfill()` 都在入口短路返回 `{started:false}`
+ * 且不带 error,面板按钮按下去毫无反应(静默死锁)。
+ */
 function refuse(error: string): { started: false; error: string } {
+  busy = false
   status = { ...IDLE, error }
   return { started: false, error }
 }

@@ -70,6 +70,13 @@ import { TTL_ALARM_NAME, purgeIfRetentionChanged, runTtlPurge, scheduleDailyAlar
 
 const LEGACY_DB_NAME = "AIMemoryDB";
 
+/**
+ * 补分类的待办计数缓存。`countBackfillCandidates()` 要把 qaRecords / goldens / categories
+ * 三张表 `.toArray()` 后在 JS 里过滤(**整条记录、含向量**),而 running/done 的面板文案
+ * 只读 `status`、根本不看 `pending` —— 所以只在 `idle` 时刷新它,运行期的 500ms 轮询不再全表扫。
+ */
+let backfillPending = { history: 0, golden: 0 };
+
 // ─── 处理器(只返回 payload;响应包装与错误兜底统一交给 route)──────────────────
 
 /** 嵌入链路自检:经 offscreen 嵌入样本文本,返回模型名与向量维度 */
@@ -452,8 +459,13 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   GET_BACKFILL_STATE: route(
     "GET_BACKFILL_STATE",
     async () => {
-      const counts = await db.countBackfillCandidates();
-      return { status: getBackfillStatus(), pending: counts };
+      const status = getBackfillStatus();
+      // 待办计数 = 两张全表各物化一遍(含向量);只在 idle 时刷新,免得运行期每秒白扫两次。
+      // running/done 的文案只读 status,用上一次的缓存值即可。
+      if (status.phase === "idle") {
+        backfillPending = await db.countBackfillCandidates();
+      }
+      return { status, pending: backfillPending };
     },
     (err) => ({ status: { ...getBackfillStatus(), error: String(err) }, pending: { history: 0, golden: 0 } }),
   ),

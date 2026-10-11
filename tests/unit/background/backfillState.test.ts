@@ -111,33 +111,50 @@ describe('补分类后台状态', () => {
   })
 
   it('★ 未配置时 startBackfill 不发请求,状态置 idle 且带 error(三条门禁各来一遍)', async () => {
+    // 每条断言**该门禁独有的 error 文案**,并统计 loadSettings 调用次数 —— 若某条门禁被删,
+    // 或第一次拒绝后 `busy` 没释放(第二次在入口短路),这里立刻红,而不是被第一次的状态掩盖。
+
     // ① 开关关
     settingsMock.mockResolvedValue({ ...CONFIGURED, classifyEnabled: false })
     let r = await mod.startBackfill()
-    expect(r.started).toBe(false)
-    expect(r.error).toBeTruthy()
-    expect(mod.getBackfillStatus().phase).toBe('idle')
-    expect(mod.getBackfillStatus().error).toBeTruthy()
+    expect(r).toEqual({ started: false, error: '自动分类未开启' })
+    expect(mod.getBackfillStatus()).toMatchObject({ phase: 'idle', error: '自动分类未开启' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(dbMock.countBackfillCandidates).not.toHaveBeenCalled()
 
     // ② 开关开但 key 没填(未配置)
     settingsMock.mockResolvedValue({ ...CONFIGURED, jevApiKey: '' })
     r = await mod.startBackfill()
-    expect(r.started).toBe(false)
-    expect(mod.getBackfillStatus()).toMatchObject({ phase: 'idle' })
-    expect(mod.getBackfillStatus().error).toBeTruthy()
+    expect(r).toEqual({ started: false, error: '分类接口未配置' })
+    expect(mod.getBackfillStatus()).toMatchObject({ phase: 'idle', error: '分类接口未配置' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(dbMock.countBackfillCandidates).not.toHaveBeenCalled()
 
-    // ③ 配置全但没有任何可问类型
+    // ③ 配置全但没有任何可问类型(先恢复成配置齐全,否则会再次落在门禁②)
+    settingsMock.mockResolvedValue(CONFIGURED)
     dbMock.listCategories.mockResolvedValue([])
     r = await mod.startBackfill()
-    expect(r.started).toBe(false)
-    expect(mod.getBackfillStatus()).toMatchObject({ phase: 'idle' })
-    expect(mod.getBackfillStatus().error).toBeTruthy()
+    expect(r).toEqual({ started: false, error: '没有可用于分类的问题类型' })
+    expect(mod.getBackfillStatus()).toMatchObject({ phase: 'idle', error: '没有可用于分类的问题类型' })
     expect(fetchMock).not.toHaveBeenCalled()
     expect(dbMock.countBackfillCandidates).not.toHaveBeenCalled()
+
+    // 三次拒绝都必须真的走到门禁判断(而不是在重入锁上短路)
+    expect(settingsMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('★ 一次拒绝不会把重入锁锁死:拒绝之后仍能正常启动', async () => {
+    // 门禁③可达(面板看不到"有没有类型可问",按钮照样可点):拒绝路径必须释放 busy,
+    // 否则后续 startBackfill 会在入口静默返回 {started:false}(且无 error),按钮按下去没反应。
+    dbMock.listCategories.mockResolvedValueOnce([])
+    const refused = await mod.startBackfill()
+    expect(refused.started).toBe(false)
+
+    // 修好门禁条件后应能真正启动并跑完
+    dbMock.listCategories.mockResolvedValue(CATS)
+    const started = await mod.startBackfill(depsFor(emptySnapshot))
+    expect(started.started).toBe(true)
+    await vi.waitFor(() => expect(mod.getBackfillStatus().phase).toBe('done'))
   })
 
   it('跑起来时 phase 为 running,总数与待办计数同源', async () => {

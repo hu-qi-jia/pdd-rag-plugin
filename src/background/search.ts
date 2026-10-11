@@ -63,9 +63,27 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
   const categories = await db.listCategories();
   const route = decideRoute(categories, probabilities, settings.classifyProbThreshold);
 
-  if (route.kind === "size-only") {
-    // 纯尺码:答案取决于买家个体参数,历史回复不可复用 —— 不检索,池为空,
-    // 面板据 settings.sizeRoute / sizeAvailable 渲染「按尺码表生成」行。
+  // spec §8.1 前提(裁决 R33):尺码路线要**四个前提全亮**才算数 ——
+  //   aiIntegrateEnabled ∧ ¬directFillEnabled ∧ isLlmConfigured ∧ hasSizeTableDoc
+  // (四条的判定集中在 aiIntegrate.sizeRowAvailable,此处不另起一套口径。)
+  //
+  // 为什么 directFillEnabled 也算前提:"自动回复"开着时,尺码那条路径既不弹面板、
+  // 也不调 LLM —— 尺码路线**没有任何交付渠道**,取它等于什么都没发生。没有渠道 =
+  // 前提不满足,与"没材料"同义。
+  //
+  // 前提不满足 ⇒ 退化成不过滤(全池检索,与"根本没分类"逐字节一致),而不是返回空池。
+  // aiIntegrateEnabled 默认 false,若不回退,模态配置(分类开、AI 整合从没开)下每个
+  // 纯尺码问题都只换来一个空面板。
+  //
+  // 注意这里的"全池"并非包含一切:retrievalCache 无条件剔除被标记尺码表文档的块
+  // (见 retrievalCache.ts 对 sizeTableDocIds 的过滤),回退池同样不含它们 —— 这是
+  // 有意的,尺码表只走整表原文喂 prompt,不做向量检索。
+  let sizeReadyPromise: Promise<boolean> | null = null;
+  const sizeReady = (): Promise<boolean> => (sizeReadyPromise ??= sizeRowReady(settings));
+
+  if (route.kind === "size-only" && (await sizeReady())) {
+    // 前提齐备,才走尺码路线:答案取决于买家个体参数,历史回复不可复用 ——
+    // 不检索,池为空,面板据 settings.sizeRoute / sizeAvailable 渲染「按尺码表生成」行。
     // 埋点照样记(R29):漏掉它会让尺码类问题系统性地从"检索次数"里消失,
     // 把未命中率的口径拉偏。代价是它们也计一次 miss —— 这是裁决接受的偏差。
     recordSearchOutcome(0);
@@ -73,10 +91,12 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
       suggestions: [],
       settings: uiSettings(settings, [], {
         sizeRoute: true,
-        sizeAvailable: await sizeRowReady(settings),
+        sizeAvailable: true,
       }),
     };
   }
+  // 前提不满足的 size-only 在此**掉下去**:route.kind 仍是 'size-only',但后续只认
+  // 'filter' 分支(allowed 与混合意图判据都如此),等价于 no-filter → 全池一遍。
 
   // 混合意图(spec §7.1【D】,裁决 R31):类型集合含尺码推荐时,池照常算,
   // **额外**挂一条尺码生成行。池是否含尺码看 picked —— 它就是这个信号的载体。
@@ -149,7 +169,7 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     suggestions,
     settings: uiSettings(settings, suggestions, {
       sizeRoute: mixedSize,
-      sizeAvailable: mixedSize && (await sizeRowReady(settings)),
+      sizeAvailable: mixedSize && (await sizeReady()),
     }),
   };
 }

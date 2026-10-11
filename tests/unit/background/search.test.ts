@@ -332,6 +332,8 @@ describe('searchSuggestions 的类型路由', () => {
     expect(out.suggestions.some((s) => s.text.includes('订单已发出'))).toBe(true)
     // 池收窄:价格类的历史被挡在外面(两遍 pass 的余弦相同 ⇒ 余量判据保留切片)
     expect(out.suggestions.some((s) => s.text.includes('价格已经是最低'))).toBe(false)
+    // R31 负控制:类型集合里没有尺码型 ⇒ 不挂尺码生成行
+    expect(out.settings.sizeRoute).toBeUndefined()
   })
 
   it('★ 切片没有显著更优 → 放宽到全池,正确答案仍能回来', async () => {
@@ -361,24 +363,64 @@ describe('searchSuggestions 的类型路由', () => {
     expect(out.suggestions.some((s) => s.text.includes('订单已发出'))).toBe(true)
   })
 
-  it('★ 纯尺码 → 不检索,面板拿到的候选为空且 settings.sizeRoute 为真', async () => {
+  // 新行为(spec §8.1 + 裁决 R33)下的两个分支 —— 旧用例「纯尺码一律空池」钉的是
+  // 无回退的旧行为,已被拆成 (a) 前提不满足 → 全池、(b) 前提齐备 → 空池 两条。
+  it('★ 纯尺码 + §8.1 前提不满足(默认 aiIntegrate 关)→ 退化成不过滤,全池候选回来', async () => {
     const { searchSuggestions, db } = await freshSearch()
     await db.ensurePresetCategories()
-    // 库里有一条高度相似的历史,但纯尺码路径不该碰它(答案取决于买家个体参数)
+    // 库里有一条高度相似的历史。前提不满足时按"无分类"跑全池 ⇒ 它必须回来;
+    // 这正是 §8.1「前提不满足 → 退化成不筛」的落点。
     await seedQa(db, 'qa-any', {
       question: '我 165 穿多大?',
       embedding: [1, 0],
       categoryId: 'preset:attr',
-      replyText: '这条历史绝不该出现在纯尺码的结果里。',
+      replyText: '前提不满足时这条历史应当出现在全池结果里。',
     })
     vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 尺码推荐: 0.9 })))
+    // jev 配好了、分类开着,但 aiIntegrateEnabled 缺省 false ⇒ 四个前提里第一个就不亮
     await saveSettings({ classifyEnabled: true, jevApiKey: 'sk-test' })
 
     const out = await searchSuggestions('能开发票吗?')
-    expect(out.suggestions).toHaveLength(0)
-    expect(out.settings.sizeRoute).toBe(true)
+    expect(out.suggestions.some((s) => s.text.includes('前提不满足时这条历史'))).toBe(true)
+    // 退化成不过滤 ⇒ 与"根本没分类"一致:两个尺码键都不该出现
+    expect(out.settings.sizeRoute).toBeUndefined()
+    expect(out.settings.sizeAvailable).toBeUndefined()
 
-    // ★ R29:早返回也必须记埋点,否则尺码类问题会系统性地把未命中率口径拉偏
+    // ★ 埋点记的是**真实候选数**:R29 的那个 0 只留给真正走了尺码路线的那一次,
+    // 回退路径绝不能记 0(否则未命中率凭空多一笔)
+    const { recordSearchOutcome } = await import('../../../src/background/metrics')
+    expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledWith(1)
+  })
+
+  it('★ 纯尺码 + §8.1 前提齐备 → 空池 + sizeAvailable(R33 行 6)', async () => {
+    const { searchSuggestions, db } = await freshSearch()
+    await db.ensurePresetCategories()
+    await db.putKbDoc({
+      docId: '尺码表',
+      content: '165cm/M 170cm/L',
+      splitterVersion: 'test',
+      chunkCount: 1,
+      isSizeTable: true,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 尺码推荐: 0.9 })))
+    await saveSettings({
+      classifyEnabled: true,
+      jevApiKey: 'sk-test',
+      aiIntegrateEnabled: true,
+      llmBaseUrl: 'https://api.example.com/v1',
+      llmApiKey: 'sk-test',
+      llmModel: 'fast-model',
+    })
+
+    const out = await searchSuggestions('165 穿多大?')
+    expect(out.suggestions).toHaveLength(0) // 池为空是设计意图
+    expect(out.settings.sizeRoute).toBe(true)
+    expect(out.settings.sizeAvailable).toBe(true)
+
+    // ★ R29:走真尺码路线时才记 0,否则尺码类问题会系统性地把未命中率口径拉偏
     const { recordSearchOutcome } = await import('../../../src/background/metrics')
     expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledWith(0)
@@ -447,9 +489,92 @@ describe('searchSuggestions 的类型路由', () => {
     expect(out.settings.sizeAvailable).toBeUndefined()
   })
 
-  it('★ 纯尺码 + §8.1 前提齐备(有尺码表 + 已配 LLM)→ 生成行可用', async () => {
+  // R33 触发矩阵:sizeAvailable = aiIntegrateEnabled ∧ ¬directFillEnabled
+  //                                ∧ isLlmConfigured ∧ hasSizeTableDoc
+  // 行 1–5 任一前提不亮 ⇒ 退化成全池(候选回来);只有行 6 四个前提全亮才走尺码路线。
+  // 表里 6 行都构造得出,且行 1/3/5/6 恰是四个不同判定分支。
+  const sizeMatrix: Array<{
+    row: number
+    aiIntegrateEnabled: boolean
+    sizeTable: boolean
+    llmConfigured: boolean
+    directFillEnabled: boolean
+    expectFallback: boolean
+  }> = [
+    { row: 1, aiIntegrateEnabled: false, sizeTable: false, llmConfigured: false, directFillEnabled: false, expectFallback: true },
+    { row: 2, aiIntegrateEnabled: true, sizeTable: false, llmConfigured: false, directFillEnabled: false, expectFallback: true },
+    { row: 3, aiIntegrateEnabled: true, sizeTable: false, llmConfigured: true, directFillEnabled: false, expectFallback: true },
+    { row: 4, aiIntegrateEnabled: true, sizeTable: true, llmConfigured: false, directFillEnabled: false, expectFallback: true },
+    { row: 5, aiIntegrateEnabled: true, sizeTable: true, llmConfigured: true, directFillEnabled: true, expectFallback: true },
+    { row: 6, aiIntegrateEnabled: true, sizeTable: true, llmConfigured: true, directFillEnabled: false, expectFallback: false },
+  ]
+
+  it.each(sizeMatrix)(
+    '触发矩阵行 $row: 前提不满足→全池 / 全亮→尺码路线',
+    async ({ aiIntegrateEnabled, sizeTable, llmConfigured, directFillEnabled, expectFallback }) => {
+      const { searchSuggestions, db } = await freshSearch()
+      await db.ensurePresetCategories()
+      // 高度相似的历史:若回退到全池就必须出现,若走尺码路线就必须为空 —— 一行夹具两个方向都可判
+      await seedQa(db, 'qa-any', {
+        question: '我 165 穿多大?',
+        embedding: [1, 0],
+        categoryId: 'preset:attr',
+        replyText: '矩阵行夹具:回退时这条候选应当出现。',
+      })
+      if (sizeTable) {
+        await db.putKbDoc({
+          docId: '尺码表',
+          content: '165cm/M 170cm/L',
+          splitterVersion: 'test',
+          chunkCount: 1,
+          isSizeTable: true,
+          createdAt: 1,
+          updatedAt: 1,
+        })
+      }
+      // jev 始终配置好、分类始终判成纯尺码 —— 矩阵变的是 §8.1 的四个前提
+      vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 尺码推荐: 0.9 })))
+      const patch: Record<string, unknown> = {
+        classifyEnabled: true,
+        jevApiKey: 'sk-test',
+        aiIntegrateEnabled,
+        directFillEnabled,
+      }
+      if (llmConfigured) {
+        patch.llmBaseUrl = 'https://api.example.com/v1'
+        patch.llmApiKey = 'sk-test'
+        patch.llmModel = 'fast-model'
+      }
+      await saveSettings(patch)
+
+      const out = await searchSuggestions('能开发票吗?')
+      const { recordSearchOutcome } = await import('../../../src/background/metrics')
+      if (expectFallback) {
+        expect(out.suggestions.some((s) => s.text.includes('矩阵行夹具'))).toBe(true)
+        expect(out.settings.sizeRoute).toBeUndefined()
+        expect(out.settings.sizeAvailable).toBeUndefined()
+        // 埋点记真实候选数,不是 0
+        expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledWith(1)
+      } else {
+        expect(out.suggestions).toHaveLength(0)
+        expect(out.settings.sizeRoute).toBe(true)
+        expect(out.settings.sizeAvailable).toBe(true)
+        expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledWith(0)
+      }
+    },
+  )
+
+  it('R31 负控制:filter 路线、类型集合不含尺码 → 不挂尺码生成行', async () => {
     const { searchSuggestions, db } = await freshSearch()
     await db.ensurePresetCategories()
+    await seedQa(db, 'qa-order', {
+      question: '快递到哪了?',
+      embedding: [1, 0],
+      categoryId: 'preset:order',
+      replyText: '订单已发出,今天应该能到。',
+    })
+    // 尺码表与 LLM 全配好、aiIntegrate 也开着 —— 唯一能拦住 sizeRoute 的就是
+    // "picked 里没有尺码型"。把 pickedHasSize 换成常量 true,这条会立刻红。
     await db.putKbDoc({
       docId: '尺码表',
       content: '165cm/M 170cm/L',
@@ -459,7 +584,7 @@ describe('searchSuggestions 的类型路由', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 尺码推荐: 0.9 })))
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.9 })))
     await saveSettings({
       classifyEnabled: true,
       jevApiKey: 'sk-test',
@@ -469,10 +594,10 @@ describe('searchSuggestions 的类型路由', () => {
       llmModel: 'fast-model',
     })
 
-    const out = await searchSuggestions('165 穿多大?')
-    expect(out.suggestions).toHaveLength(0) // 池为空是设计意图
-    expect(out.settings.sizeRoute).toBe(true)
-    expect(out.settings.sizeAvailable).toBe(true)
+    const out = await searchSuggestions('能开发票吗?')
+    expect(out.suggestions.some((s) => s.text.includes('订单已发出'))).toBe(true)
+    expect(out.settings.sizeRoute).toBeUndefined()
+    expect(out.settings.sizeAvailable).toBeUndefined()
   })
 
   it('尺码路由前提不满足(没配 key) → 退化成不过滤', async () => {

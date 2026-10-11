@@ -46,6 +46,11 @@ import { loadFromChrome, saveToChrome } from "../shared/chrome-storage";
 
 function clampSettings(raw: Partial<PddSettings>): PddSettings {
   const base = { ...DEFAULT_SETTINGS, ...raw };
+  // 阈值非有限数才回退默认(0 是合法值:"全部计入",不能与脏值一样退成默认)
+  const probRaw = Number(base.classifyProbThreshold);
+  const probThreshold = Number.isFinite(probRaw)
+    ? probRaw
+    : DEFAULT_SETTINGS.classifyProbThreshold;
   return {
     directFillEnabled: !!base.directFillEnabled,
     simThreshold: Math.min(1, Math.max(0, Number(base.simThreshold) || DEFAULT_SETTINGS.simThreshold)),
@@ -71,10 +76,7 @@ function clampSettings(raw: Partial<PddSettings>): PddSettings {
       JEV_TIMEOUT_MAX_MS,
       Math.max(JEV_TIMEOUT_MIN_MS, Math.round(Number(base.jevTimeoutMs) || DEFAULT_SETTINGS.jevTimeoutMs)),
     ),
-    classifyProbThreshold: Math.min(
-      1,
-      Math.max(0, Number(base.classifyProbThreshold) || 0),
-    ),
+    classifyProbThreshold: Math.min(1, Math.max(0, probThreshold)),
   };
 }
 

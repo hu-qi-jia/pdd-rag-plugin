@@ -186,4 +186,14 @@ describe('问题分类设置', () => {
     await saveSettings({ classifyProbThreshold: 5 })
     expect((await loadSettings()).classifyProbThreshold).toBe(1)
   })
+
+  it('阈值 0 保持 0 —— 「全部计入」是合法选择,不能被当成脏值回退默认', async () => {
+    store['pddcs:settings'] = { ...DEFAULT_SETTINGS, classifyProbThreshold: 0 }
+    expect((await loadSettings()).classifyProbThreshold).toBe(0)
+  })
+
+  it('阈值是非数字脏值 → 回退默认 0.2,而不是最宽松的 0', async () => {
+    store['pddcs:settings'] = { ...DEFAULT_SETTINGS, classifyProbThreshold: 'abc' }
+    expect((await loadSettings()).classifyProbThreshold).toBe(0.2)
+  })
 })

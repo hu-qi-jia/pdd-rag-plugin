@@ -424,14 +424,24 @@ export function updateCachedCategory(id: string, categoryId: string | null): voi
 
 ```
 1. 建 categories 表;种下 6 个预置 + 未分类
-2. folders 每一条 → 转成一个 custom 类型
-     name 照抄、position 照抄
+2. folders 里**用户自建**的每一条 → 转成一个 custom 类型
+     name 照抄、position = 100 + i(i 按过滤后的序号,让 6 个预置排在前面)
      filterable = false、criteria = ''、route = 'retrieve'
-3. goldens.folderId → categoryId(指向刚转出来的那个类型)
-     categorySource = 'manual'      ← 关键:标记成人工的,机器永远不许覆盖
-4. qaRecords 全部 categoryId = null(未分类)
+     ⚠ 预置默认夹(id = 'uncategorized')**不转** —— 它不是用户内容,
+       是 addGolden 给新标答的系统默认落点;它和新内置的「未分类」是同一件事
+3. goldens 的归属:
+     folderId ∈ 用户自建夹  → categoryId = 'legacy:<folderId>'
+                              categorySource = 'manual'   ← 关键:手工摆放过的,机器永不许覆盖
+     其余(默认夹里的、没入夹的) → categoryId = null,且**不写** categorySource
+                              ← 这些要留给补分类去归类
+4. qaRecords 保持 categoryId 缺省 —— 与 null 等价(判据用 falsy 检查),迁移不必显式写
 5. folderId 与 folders 表保留不删(回滚用),但不再被读写
 ```
+
+> **第 3 步是这次迁移最容易搞错的地方。** 直觉是"有 folderId 就算用户整理过",但 `addGolden`
+> 默认就把每一条新标准回答写进默认夹 —— 所以"有 folderId"根本推不出"用户做过选择"。
+> 若把默认夹里的也标成 `manual`,补分类会一条都跳过,**用户现有的标准回答将永远得不到自动归类**,
+> 而这正是本功能存在的理由。这个错误不会报错、不会崩,只会静默地什么都没发生。
 
 第 3 步的 `'manual'` 是硬要求：**补分类时 `manual` 一律跳过**。若遗漏，将来改一次 criteria 就会把用户手工整理的结果全部冲掉。
 
@@ -626,6 +636,7 @@ classifyProbThreshold: number
 | **`clampSettings` 漏字段导致静默失效** | 中 | 沿用现有模式；单测覆盖每个新字段的 clamp |
 | **面板双维度（来源 × 类型）表达混乱** | 中 | 类型做分区容器，来源做行内徽标（现有机制），不新增第三层 |
 | **概率阈值默认值拍脑袋** | 中 | 默认 0.2 是起点，P2 实测后回调 |
+| **迁移是一次性的，但导入路径没跟着改** | 中 | `transfer.ts` 仍只写 `folders.folderId`、不写 `categoryId`。把**旧版导出的包**导进 v8 库，其中的文件夹会变成谁也看不见的 `folders` 行，标答也不进入分类轴（标答本身不丢，仍可检索）。修它要额外决定「导入时怎么把 folder 映射成 category」，本次不做，留待后续 |
 
 ### 明确不做
 

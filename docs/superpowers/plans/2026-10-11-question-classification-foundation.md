@@ -556,7 +556,11 @@ const LEGACY_V7: Array<Record<string, string | null>> = [
   { backlogIgnores: null },
 ]
 
-/** 造一个"跑过 v7"的库:两个文件夹、两条标答(一条在夹里、一条没入夹) */
+/**
+ * 造一个"跑过 v7"的库:两个文件夹、三条标答 ——
+ * ①在用户自建夹里 ②落在预置默认夹里 ③没入夹。
+ * ②是本次迁移最容易搞错的一类:它看着"有归属",其实是 addGolden 的系统默认落点。
+ */
 async function seedLegacyV7(): Promise<void> {
   const legacy = new Dexie('PddCSDB')
   LEGACY_V7.forEach((stores, i) => {
@@ -588,6 +592,17 @@ async function seedLegacyV7(): Promise<void> {
       createdAt: 1,
       updatedAt: 1,
     },
+    {
+      // 落在预置默认夹里 —— addGolden 的默认落点,不是用户的手工摆放
+      id: 'gd-in-default',
+      folderId: 'uncategorized',
+      question: '有色差吗',
+      answer: '亲,实物与图片一致哦',
+      questionHash: 'h3',
+      hasEmbedding: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    },
   ])
   legacy.close()
 }
@@ -597,7 +612,7 @@ describe('v7 → v8 旧文件夹迁移', () => {
     await Dexie.delete('PddCSDB')
   })
 
-  it('每个旧文件夹转成一条 filterable=false 的自定义类型', async () => {
+  it('每个**用户自建**的旧文件夹转成一条 filterable=false 的自定义类型', async () => {
     await seedLegacyV7()
     const upgraded = new PddDatabase()
     await upgraded.open()
@@ -609,8 +624,8 @@ describe('v7 → v8 旧文件夹迁移', () => {
     expect(hot!.filterable).toBe(false)
     expect(hot!.criteria).toBe('')
 
-    const presetDefault = await upgraded.categories.get('legacy:uncategorized')
-    expect(presetDefault!.name).toBe('默认文件夹')
+    // 预置默认夹不转:它和新内置的「未分类」是同一件事,且名字是系统占位名
+    expect(await upgraded.categories.get('legacy:uncategorized')).toBeUndefined()
     upgraded.close()
   })
 
@@ -626,6 +641,23 @@ describe('v7 → v8 旧文件夹迁移', () => {
     const noFolder = (await upgraded.goldens.get('gd-no-folder'))!
     expect(noFolder.categoryId).toBeNull()
     expect(noFolder.categorySource).toBeUndefined()
+    upgraded.close()
+  })
+
+  it('★ 落在默认夹里的标答不算"手工摆放" —— 必须留成补分类候选', async () => {
+    // addGolden 默认就把新标答写进默认夹,所以"有 folderId"根本不能推出"用户整理过"。
+    // 这里若被标成 manual,用户现有的标答会一条都进不了补分类 —— 自动分类等于没做。
+    await seedLegacyV7()
+    const upgraded = new PddDatabase()
+    await upgraded.open()
+
+    const inDefault = (await upgraded.goldens.get('gd-in-default'))!
+    expect(inDefault.categoryId).toBeNull()
+    expect(inDefault.categorySource).toBeUndefined()
+    expect(inDefault.categoryAt).toBeUndefined()
+    // 这些标答的内容本身分毫未动
+    expect(inDefault.question).toBe('有色差吗')
+    expect(inDefault.answer).toBe('亲,实物与图片一致哦')
     upgraded.close()
   })
 
@@ -672,9 +704,14 @@ Expected: FAIL —— `expected undefined to be defined`（`legacy:f-hot` 不存
         // ① 旧文件夹 → 自定义类型。filterable=false 是关键:它们不参与 jev 分类,
         //    因此不能靠"类型匹配"被选中,必须永远进检索池 —— 否则夹里的条目
         //    会在任何查询下都搜不到(纯粹的召回倒退,见 spec §7.2)。
-        //    position 从 100 起,让 6 个预置类型排在前面。
+        //    position 从 100 起(**按过滤后的序号**),让 6 个预置类型排在前面。
+        //
+        //    **预置默认文件夹不转**:它不是用户内容,是 addGolden 给新标答的系统默认
+        //    落点(goldens.ts),且它和新内置的「未分类」是同一件事 —— 转出来是重复概念。
+        //    它丢失无损:名字「默认文件夹」是系统占位名,不是用户起的。
         const folders = (await tx.table("folders").toArray()) as FolderRecord[];
-        const legacyCats: CategoryRecord[] = folders.map((f, i) => ({
+        const realFolders = folders.filter((f) => f.id !== UNCATEGORIZED_FOLDER_ID);
+        const legacyCats: CategoryRecord[] = realFolders.map((f, i) => ({
           id: `legacy:${f.id}`,
           name: f.name,
           criteria: "",
@@ -687,15 +724,21 @@ Expected: FAIL —— `expected undefined to be defined`（`legacy:f-hot` 不存
         }));
         if (legacyCats.length > 0) await tx.table("categories").bulkAdd(legacyCats);
 
-        // ② 金标准的归属跟着搬。有夹的标 manual —— 用户手工摆过的东西,
-        //    补分类时一律跳过(见 spec §11.2)。没入夹的留 null(= 未分类),
-        //    它们会由补分类正常处理。
+        // ② 金标准的归属。
+        //    真夹里的:标 manual —— 用户手工摆过的东西,补分类时一律跳过(见 spec §11.2)。
+        //    默认夹里的、以及没入夹的:categoryId = null 且**不写** categorySource。
+        //
+        //    这一条是本次迁移最容易搞错的地方:**落在默认夹 ≠ 手工摆放**。addGolden 默认
+        //    就把新标答写进默认夹,若把它也标成 manual,用户现有的标答会一条都进不了
+        //    补分类候选 —— 全卡在「默认文件夹」里,自动分类等于没做。
+        const realFolderIds = new Set(realFolders.map((f) => f.id));
         const goldens = (await tx.table("goldens").toArray()) as GoldenRecord[];
         for (const g of goldens) {
+          const inRealFolder = !!g.folderId && realFolderIds.has(g.folderId);
           const patch: Partial<GoldenRecord> = {
-            categoryId: g.folderId ? `legacy:${g.folderId}` : null,
+            categoryId: inRealFolder ? `legacy:${g.folderId}` : null,
           };
-          if (g.folderId) {
+          if (inRealFolder) {
             patch.categorySource = "manual";
             patch.categoryAt = now;
           }

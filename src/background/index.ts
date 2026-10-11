@@ -231,12 +231,28 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   GET_STATS: route(
     "GET_STATS",
     async () => {
-      const [stats, settings, metrics] = await Promise.all([
+      const [stats, settings, metrics, categories] = await Promise.all([
         db.getStats(),
         loadSettings(),
         metricsSnapshot(),
+        // 问题类型表搭统计顺路回(第五十七轮 Task 5):记忆列表分区要用,
+        // 各页签不再各自拉一遍(几份重复请求、刷新时机还各不相同)
+        db.listCategories(),
       ]);
-      return { ...stats, settings, embeddingModel: MODEL_NAME, metrics };
+      return {
+        ...stats,
+        settings,
+        embeddingModel: MODEL_NAME,
+        metrics,
+        // 面板 DTO 不带 criteria(那是喂给 jev 的选项描述)
+        categories: categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          kind: c.kind,
+          filterable: c.filterable,
+          position: c.position,
+        })),
+      };
     },
     (err) => ({
       qaCount: 0,
@@ -247,6 +263,8 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       settings: { ...DEFAULT_SETTINGS },
       embeddingModel: MODEL_NAME,
       metrics: {},
+      // 失败兜底给空数组(不是 undefined):面板的 filter/map 不因此崩
+      categories: [],
       error: String(err),
     }),
   ),

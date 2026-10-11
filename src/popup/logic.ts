@@ -10,10 +10,16 @@ import {
   METRIC_LABELS,
   type MetricEventKey,
 } from '../shared/metrics'
-import { UNCATEGORIZED_FOLDER_ID, UNCATEGORIZED_FOLDER_NAME } from '../shared/constants'
-import type { PanelFolder, PanelGolden } from '../types/messages'
+import {
+  UNCATEGORIZED_CATEGORY_ID,
+  UNCATEGORIZED_CATEGORY_NAME,
+  UNCATEGORIZED_CATEGORY_POSITION,
+  UNCATEGORIZED_FOLDER_ID,
+  UNCATEGORIZED_FOLDER_NAME,
+} from '../shared/constants'
+import type { PanelCategory, PanelFolder, PanelGolden } from '../types/messages'
 
-export type { PanelFolder, PanelGolden }
+export type { PanelCategory, PanelFolder, PanelGolden }
 
 /** 记忆列表关键词筛选:归一化包含匹配;空关键词返回全量 */
 export function filterQaRecords<T extends { question: string }>(items: T[], keyword: string): T[] {
@@ -151,6 +157,72 @@ export function orderGoldensByRecency(goldens: PanelGolden[]): PanelGolden[] {
     for (const m of group) used.add(m)
     out.push(...group.sort((a, b) => b.updatedAt - a.updatedAt))
   }
+  return out
+}
+
+// ─── 记忆列表按问题类型分区(第五十七轮 Task 5,只读)───────────────────────────
+
+/** 分区结果的一节 */
+export interface CategoryBucket<T> {
+  category: PanelCategory
+  items: T[]
+}
+
+/**
+ * 类型展示顺序:按 position 升序,**未分类恒最后** —— 不看它的 position。
+ * 库里给未分类的 position 是 9999,但自定义类型可能被摆到更大的位置;
+ * 「未分类」是兜底容器,视觉上必须收在末尾。
+ */
+export function categoryOrder(categories: PanelCategory[]): PanelCategory[] {
+  const isUnc = (c: PanelCategory): number => (c.id === UNCATEGORIZED_CATEGORY_ID ? 1 : 0)
+  return [...categories].sort((a, b) => isUnc(a) - isUnc(b) || a.position - b.position)
+}
+
+/**
+ * 按问题类型分桶(记忆列表面板)。
+ *
+ * 三条不变量:
+ *  ① **一条都不能丢** —— 类型表里没有的 categoryId 一律并进「未分类」组。
+ *     类型表可能不含某条 id(旧库的自定义类型被删掉了),而条目还在。
+ *  ② 未分类恒排最后,不管它的 position 是多少(见 categoryOrder)。
+ *  ③ 组内保持传入顺序 —— 调用方已按时间排好,这里不再排一次。
+ *
+ * 空组不产出(面板上不显示空的分区容器)。
+ */
+export function groupByCategory<T extends { categoryId: string }>(
+  items: T[],
+  categories: PanelCategory[],
+): Array<CategoryBucket<T>> {
+  const buckets = new Map<string, CategoryBucket<T>>()
+  for (const c of categoryOrder(categories)) {
+    if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
+    buckets.set(c.id, { category: c, items: [] })
+  }
+
+  // 未分类兜底桶:显式 'uncategorized' 与"类型表里没有的 id"都并进这里
+  const uncCategory: PanelCategory = categories.find(
+    (c) => c.id === UNCATEGORIZED_CATEGORY_ID,
+  ) ?? {
+    id: UNCATEGORIZED_CATEGORY_ID,
+    name: UNCATEGORIZED_CATEGORY_NAME,
+    kind: 'uncategorized',
+    filterable: false,
+    position: UNCATEGORIZED_CATEGORY_POSITION,
+  }
+  const uncategorized: T[] = []
+  for (const it of items) {
+    const bucket = buckets.get(it.categoryId)
+    if (bucket) bucket.items.push(it)
+    else uncategorized.push(it)
+  }
+
+  const out: Array<CategoryBucket<T>> = []
+  for (const c of categoryOrder(categories)) {
+    if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
+    const bucket = buckets.get(c.id)!
+    if (bucket.items.length > 0) out.push(bucket)
+  }
+  if (uncategorized.length > 0) out.push({ category: uncCategory, items: uncategorized })
   return out
 }
 

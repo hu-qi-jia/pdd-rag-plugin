@@ -11,9 +11,10 @@ import type {
   GetMemoryListResponse,
   MemoryListItem,
   MemoryReplyItem,
+  PanelCategory,
 } from '../types/messages'
-import { filterQaRecords, remainingDays } from './logic'
-import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
+import { filterQaRecords, groupByCategory, remainingDays } from './logic'
+import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
 import {
   Btn,
   Card,
@@ -24,16 +25,19 @@ import {
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, fontWeight, motion, radius, semantic, spacing } from '../ui/design'
+import { controlH, fontSize, formType, fontWeight, motion, radius, semantic, spacing } from '../ui/design'
 import { ChevronDownIcon, StarIcon, TrashIcon } from '../ui/icons'
 
 export function MemoryListTab({
   tk,
   retentionDays,
+  categories,
   onDataChanged,
 }: {
   tk: ThemeTokens
   retentionDays: number
+  /** 问题类型表(来源:GET_STATS);列表据此分区。不应由本页签自行拉取 */
+  categories: PanelCategory[]
   onDataChanged: () => Promise<void> | void
 }) {
   const [items, setItems] = useState<MemoryListItem[]>([])
@@ -49,6 +53,10 @@ export function MemoryListTab({
   const [loading, setLoading] = useState(true)
   // 「设置标准回答」的行内即时反馈:请求中
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
+  // 分区折叠态(第五十七轮 Task 5):未分类组默认折叠,其余组默认展开(不在集合里)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set([UNCATEGORIZED_CATEGORY_ID]),
+  )
 
   const applyPage = useCallback(
     (p: GetMemoryListResponse['payload'], append: boolean) => {
@@ -100,6 +108,24 @@ export function MemoryListTab({
 
   const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
   const now = Date.now()
+
+  // 分区(第五十七轮 Task 5):按问题类型分桶,未分类恒最后;类型表来自 GET_STATS,本页签不自拉
+  const groups = useMemo(() => groupByCategory(shown, categories), [shown, categories])
+  // 只读说明行取**已加载全量**口径(不随关键词筛选变动):它描述的是库内状态,不是当前筛选
+  const uncategorizedCount = useMemo(
+    () =>
+      groupByCategory(items, categories).find(
+        (g) => g.category.id === UNCATEGORIZED_CATEGORY_ID,
+      )?.items.length ?? 0,
+    [items, categories],
+  )
+  const toggleGroup = (id: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   // 持久金标徽标(2026-09-15 PM1):从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId
   // 回带 goldenId),不再是会话级 state —— 重开 popup、于文件夹页取消后都如实反映库内状态
@@ -265,7 +291,59 @@ export function MemoryListTab({
         </EmptyState>
       )}
 
-      {shown.map((item) => {
+      {/* 只读说明行(第五十七轮 Task 5 / spec D8):历史问答 90 天过期,纠错价值低于成本 ——
+          这里只说明状态并指向设置页,不带任何操作按钮 */}
+      {!loading && uncategorizedCount > 0 && (
+        <div style={{ fontSize: fontSize.caption, color: tk.textMuted, lineHeight: 1.5 }}>
+          未分类 {uncategorizedCount} 条 · 在设置页点「开始分类全部历史」
+        </div>
+      )}
+
+      {groups.map((group) => {
+        const collapsed = collapsedGroups.has(group.category.id)
+        return (
+          <Card
+            key={group.category.id}
+            tk={tk}
+            style={{ padding: `${spacing.lg}px ${spacing.lg}px`, gap: spacing.md }}
+          >
+            {/* 分区标题:可折叠(未分类默认折叠)。承载「名称 · 条数」 */}
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              onClick={() => toggleGroup(group.category.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+                width: '100%',
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                color: tk.text,
+                fontSize: formType.groupTitle.size,
+                fontWeight: formType.groupTitle.weight,
+                fontFamily: 'inherit',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <span>{`${group.category.name} · ${group.items.length}`}</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  color: tk.textTertiary,
+                  transform: collapsed ? 'rotate(-90deg)' : 'none',
+                  transition: `transform ${motion.fast}`,
+                }}
+              >
+                <ChevronDownIcon size={13} strokeWidth={2.2} />
+              </span>
+            </button>
+
+            {!collapsed &&
+              group.items.map((item) => {
         const days = remainingDays(item.questionTs, now, retentionDays)
         const expanded = !collapsedIds.has(item.id)
         const toggle = () =>
@@ -435,6 +513,9 @@ export function MemoryListTab({
                 ))}
               </div>
             )}
+          </Card>
+                )
+              })}
           </Card>
         )
       })}

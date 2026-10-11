@@ -306,7 +306,12 @@ function App() {
         {/* 页签内容(各自滚动) */}
         <div className="pddcs-scroll" style={{ overflowY: 'auto', padding: `2px ${spacing.xxl}px ${spacing.xxl}px`, flex: 1 }}>
           {tab === 'memory' && (
-            <MemoryListTab tk={tk} retentionDays={stats?.settings.retentionDays ?? 90} onDataChanged={refreshStats} />
+            <MemoryListTab
+              tk={tk}
+              retentionDays={stats?.settings.retentionDays ?? 90}
+              categories={stats?.categories ?? []}
+              onDataChanged={refreshStats}
+            />
           )}
           {tab === 'folders' && <FoldersTab tk={tk} onDataChanged={refreshStats} />}
           {tab === 'knowledge' && <KnowledgeTab tk={tk} onDataChanged={refreshStats} />}

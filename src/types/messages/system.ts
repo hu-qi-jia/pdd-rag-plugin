@@ -1,6 +1,7 @@
 // ─── 系统诊断消息(P0 底座):自检 / 统计 ────────────────────────────────────────
 
 import type { PddSettings } from '../memory'
+import type { PanelCategory } from './panel'
 
 // ─── PING_EMBED:嵌入链路自检(popup → SW)───────────────────────────────────────
 // SW 经 offscreen 嵌入一段样本文本,返回模型名与向量维度 —— P0 验收用。
@@ -42,6 +43,12 @@ export interface GetStatsResponse {
      * 缺省 = 老版本/读取失败,展示端按空对象处理(图表全 0,不是报错)。
      */
     metrics?: Record<string, number>
+    /**
+     * 全部问题类型(第五十七轮 Task 5):记忆列表按类型分区要用。
+     * 搭 GET_STATS 顺路回 —— 面板挂载本就取一次统计,各页签不再各自拉一遍。
+     * 读取失败时为**空数组**(不是 undefined):展示端的 filter/map 不因此崩。
+     */
+    categories: PanelCategory[]
     /** 读取失败兜底时的错误说明(成功路径无) */
     error?: string
   }

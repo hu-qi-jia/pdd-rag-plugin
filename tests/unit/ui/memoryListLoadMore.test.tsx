@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { GetMemoryListResponse, MemoryListItem } from '../../../src/types/messages'
+import type { GetMemoryListResponse, MemoryListItem, PanelCategory } from '../../../src/types/messages'
 
 // sendMessage 是 popup → SW 的唯一通道:mock 掉后按序返回分页响应
 vi.mock('../../../src/shared/message-passing', () => ({
@@ -18,6 +18,11 @@ const { lightTheme } = await import('../../../src/ui/theme')
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
+// 第五十七轮 Task 5 起条目按类型分区;用非未分类的类型,分组默认展开,不影响本页分页断言
+const CATEGORIES: PanelCategory[] = [
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
+]
+
 function makeItem(id: string): MemoryListItem {
   return {
     id,
@@ -25,7 +30,7 @@ function makeItem(id: string): MemoryListItem {
     questionTs: 1,
     replyCount: 0,
     replies: [],
-    categoryId: 'uncategorized',
+    categoryId: 'preset:size',
   }
 }
 
@@ -65,7 +70,12 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     mockedSend.mockResolvedValueOnce(page([makeItem('qa-3'), makeItem('qa-2')], 3, true))
     act(() => {
       root.render(
-        <MemoryListTab tk={lightTheme} retentionDays={90} onDataChanged={vi.fn()} />,
+        <MemoryListTab
+          tk={lightTheme}
+          retentionDays={90}
+          categories={CATEGORIES}
+          onDataChanged={vi.fn()}
+        />,
       )
     })
     await act(async () => {})
@@ -91,7 +101,12 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     mockedSend.mockResolvedValueOnce(page([makeItem('qa-1')], 1, false))
     act(() => {
       root.render(
-        <MemoryListTab tk={lightTheme} retentionDays={90} onDataChanged={vi.fn()} />,
+        <MemoryListTab
+          tk={lightTheme}
+          retentionDays={90}
+          categories={CATEGORIES}
+          onDataChanged={vi.fn()}
+        />,
       )
     })
     await act(async () => {})

@@ -6,7 +6,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import type { GetMemoryListResponse, MemoryListItem, MemoryReplyItem } from '../../../src/types/messages'
+import type {
+  GetMemoryListResponse,
+  MemoryListItem,
+  MemoryReplyItem,
+  PanelCategory,
+} from '../../../src/types/messages'
 
 vi.mock('../../../src/shared/message-passing', () => ({
   sendMessage: vi.fn(),
@@ -25,6 +30,11 @@ const reply = (id: string, goldenId?: string): MemoryReplyItem => ({
   ts: 1,
   ...(goldenId ? { goldenId } : {}),
 })
+
+// 第五十七轮 Task 5 起条目按类型分区;用非未分类的类型,分组默认展开,不影响本页断言
+const CATEGORIES: PanelCategory[] = [
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
+]
 
 function page(items: MemoryListItem[]): GetMemoryListResponse {
   return { type: 'GET_MEMORY_LIST_RESPONSE', payload: { items, total: items.length, hasMore: false } }
@@ -53,7 +63,14 @@ afterEach(() => {
 async function renderWith(items: MemoryListItem[]) {
   mockedSend.mockResolvedValueOnce(page(items))
   await act(async () => {
-    root.render(<MemoryListTab tk={lightTheme} retentionDays={90} onDataChanged={vi.fn()} />)
+    root.render(
+      <MemoryListTab
+        tk={lightTheme}
+        retentionDays={90}
+        categories={CATEGORIES}
+        onDataChanged={vi.fn()}
+      />,
+    )
   })
   await act(async () => {})
 }
@@ -67,7 +84,7 @@ const click = async (el: HTMLElement) => {
 describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条回答后方)', () => {
   it('单回复卡片:按钮在该回复行内(与回复文本同容器)', async () => {
     await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'uncategorized', replies: [reply('r1')] },
+      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
     ])
     const goldenBtns = btns('设为标准')
     expect(goldenBtns).toHaveLength(1)
@@ -82,7 +99,7 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
         question: '问题二',
         questionTs: 1,
         replyCount: 2,
-        categoryId: 'uncategorized',
+        categoryId: 'preset:size',
         replies: [reply('r1'), reply('r2')],
       },
     ])
@@ -99,7 +116,7 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
         question: '问题三',
         questionTs: 1,
         replyCount: 1,
-        categoryId: 'uncategorized',
+        categoryId: 'preset:size',
         replies: [reply('r1', 'gd-1')],
       },
     ])
@@ -109,7 +126,7 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
 
   it('金标控件为 mini 尺寸(24px 高、caption 字号),减少对内容区的挤压(第十九轮)', async () => {
     await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'uncategorized', replies: [reply('r1')] },
+      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
     ])
     const b = btns('设为标准')[0]
     expect(b.style.height).toBe('24px')
@@ -120,12 +137,13 @@ describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条
 describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () => {
   it('删除是问题行内的图标钮(title 标识),位于折叠钮左侧,不再有「删除」文字按钮', async () => {
     await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'uncategorized', replies: [reply('r1')] },
+      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
     ])
     // 旧底部文字按钮已不存在(图标钮无文字)
     expect(btns('删除')).toHaveLength(0)
     const del = container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement
-    const chevron = container.querySelector('button[aria-expanded]') as HTMLButtonElement
+    // 第五十七轮 Task 5 起分区标题也是 aria-expanded 的 disclosure 按钮,故这里按 title 精确定位条目折叠钮
+    const chevron = container.querySelector('button[title="折叠该问题"]') as HTMLButtonElement
     expect(del).toBeTruthy()
     expect(chevron).toBeTruthy()
     // 同一问题行,删除在折叠钮左侧(DOM 顺序在前 = 视觉左侧)
@@ -140,7 +158,7 @@ describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () =>
   it('点删除图标 → 问题行下方出确认条;取消可退出;确认调 DELETE_QA', async () => {
     mockedSend
       .mockResolvedValueOnce(
-        page([{ id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'uncategorized', replies: [reply('r1')] }]),
+        page([{ id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] }]),
       )
       .mockResolvedValueOnce({
         type: 'DELETE_QA_RESPONSE',
@@ -148,7 +166,7 @@ describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () =>
       } as never)
       .mockResolvedValueOnce(page([]))
     await renderWith([
-      { id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'uncategorized', replies: [reply('r1')] },
+      { id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
     ])
     await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement)
     expect(container.textContent).toContain('删除该问答及其全部回复?')

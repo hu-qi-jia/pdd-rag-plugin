@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import { PddDatabase } from '../../../src/background/db'
 import { hashText } from '../../../src/shared/text'
-import type { GoldenRecord } from '../../../src/types/memory'
+import type { GoldenRecord, QaRecord } from '../../../src/types/memory'
 import {
   PRESET_CATEGORIES,
   UNCATEGORIZED_CATEGORY_ID,
@@ -79,7 +79,22 @@ describe('categories 种子', () => {
 //   ① 重名 → jev 的 idByName 互相覆盖,静默错分且无报错(硬拦截);
 //   ② 判定说明空白 → 空描述成为分类噪声选项,拉低**全部**类型的判断质量;
 //   ③ 预置与未分类不可改名/删(D3;删预置会让已按它分类的条目再也搜不到);
-//   ④ 删自定义类型时其中的标答落回未分类且**不跟着消失**,categorySource 保持原值。
+//   ④ 删自定义类型时其中的标答与历史问答落回未分类且**不跟着消失**,categorySource 保持原值。
+
+function makeQa(over: Partial<QaRecord> & { id: string }): QaRecord {
+  const now = Date.now()
+  return {
+    sessionKey: 'sess-1',
+    question: '快递到哪了?',
+    questionHash: `h-${over.id}`,
+    questionTs: now,
+    hasEmbedding: 0,
+    replyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    ...over,
+  }
+}
 
 function makeGolden(over: Partial<GoldenRecord> & { id: string }): GoldenRecord {
   const now = Date.now()
@@ -219,6 +234,33 @@ describe('类型 CRUD', () => {
     const jev = (await db.goldens.get('g-jev'))!
     expect(jev.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
     expect(jev.categorySource).toBe('jev')
+  })
+
+  it('★ 删除自定义类型:历史问答也落回未分类,不留指向已删类型的悬空 id', async () => {
+    const { createCategory, deleteCategory, db } = await freshCrud()
+    const created = await createCategory({
+      type: 'CREATE_CATEGORY',
+      payload: { name: '发票', criteria: '买家询问开发票相关事宜。' },
+    })
+    await db.qaRecords.add(
+      makeQa({ id: 'qa-manual', categoryId: created.id!, categorySource: 'manual', categoryAt: 1 }),
+    )
+    await db.qaRecords.add(
+      makeQa({ id: 'qa-jev', categoryId: created.id!, categorySource: 'jev', categoryAt: 1 }),
+    )
+    await db.qaRecords.add(makeQa({ id: 'qa-other', categoryId: UNCATEGORIZED_CATEGORY_ID }))
+
+    const out = await deleteCategory({ type: 'DELETE_CATEGORY', payload: { id: created.id! } })
+    expect(out.success).toBe(true)
+
+    const manual = (await db.qaRecords.get('qa-manual'))!
+    expect(manual.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(manual.categorySource).toBe('manual') // 来源原值保留,不许被重置
+    const jev = (await db.qaRecords.get('qa-jev'))!
+    expect(jev.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(jev.categorySource).toBe('jev')
+    // 不相干的行不受影响
+    expect((await db.qaRecords.get('qa-other'))?.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
   })
 
   it('改名未分类 → 拒绝;删除未分类 → 拒绝', async () => {

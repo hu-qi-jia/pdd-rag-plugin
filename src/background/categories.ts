@@ -11,8 +11,10 @@
  *    分类时的噪声选项,把**全部**类型的判断质量一起拉低(spec §6.1:filterable ⇒ criteria 非空)。
  *  ③ 预置与未分类不可改名、不可删(spec D3)。删掉预置类型会让已按它分类的条目再也搜不到
  *    —— 它不在检索池里了。改名同理(条目会挂着一个不存在的名字)。
- *  ④ 删除自定义类型时,其中的标答在一个事务里落回未分类,**categorySource 保持原值**
- *    (手动摆过的仍标 manual;机器永不许覆盖用户手工摆放的口径不因删除而失守)。
+ *  ④ 删除自定义类型时,其中的标答与**历史问答**在一个事务里落回未分类,
+ *    **categorySource 保持原值**(手动摆过的仍标 manual;机器永不许覆盖用户手工摆放
+ *    的口径不因删除而失守)。历史问答漏搬会留下悬空 categoryId —— 既进不了补分类候选,
+ *    又会在将来按类型过滤的检索里被静默排除。
  */
 import { db } from "./db";
 import { PRESET_CATEGORIES, UNCATEGORIZED_CATEGORY_ID } from "../shared/constants";
@@ -101,10 +103,14 @@ export async function renameCategory(
 }
 
 /**
- * 删除自定义类型:把该类型下的标答落回未分类,再删类型本身 —— **一个事务**。
+ * 删除自定义类型:把该类型下的标答与**历史问答**都落回未分类,再删类型本身 —— **一个事务**。
  *
- * 标答只改 `categoryId`,`categorySource` 原样保留:手动摆过的仍是 'manual',
- * 补分类候选取舍的口径不因这次删除而改变。删类型绝不能把标答一起带走。
+ * 只改 `categoryId`,`categorySource` 原样保留:手动摆过的仍是 'manual',
+ * 补分类候选取舍的口径不因这次删除而改变。删类型绝不能把条目一起带走。
+ *
+ * 历史问答也要搬(修复轮 1/5):qaRecords 同样会被分类进自定义类型(捕获时的 jev 判定
+ * 可以返回任何可分类类型),漏掉它们会留下指向已删类型的**悬空 categoryId** ——
+ * 那些行既进不了补分类候选、又会在将来按类型过滤的检索里两边都不在(静默召回退化)。
  */
 export async function deleteCategory(
   message: DeleteCategoryRequest,
@@ -119,9 +125,13 @@ export async function deleteCategory(
   }
 
   let movedGoldens = 0;
-  await db.transaction("rw", db.goldens, db.categories, async () => {
+  await db.transaction("rw", db.goldens, db.qaRecords, db.categories, async () => {
     movedGoldens = await db.goldens
       .filter((g) => g.categoryId === cat.id)
+      .modify({ categoryId: UNCATEGORIZED_CATEGORY_ID });
+    // 历史问答同搬,同样只动 categoryId(来源保持原值)
+    await db.qaRecords
+      .filter((q) => q.categoryId === cat.id)
       .modify({ categoryId: UNCATEGORIZED_CATEGORY_ID });
     await db.categories.delete(cat.id);
   });

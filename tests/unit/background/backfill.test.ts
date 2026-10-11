@@ -118,6 +118,21 @@ describe('补分类候选口径', () => {
     expect((await testDb.snapshotBackfillCandidates()).golden.map((r) => r.id)).toEqual(['g2'])
   })
 
+  it('★ 悬空 id(类型表里查不到的标签)→ 仍进候选,不永久作废', async () => {
+    // 历史问答同样会被分类进自定义类型;那个类型被删掉后若判 false,这一行
+    // 再也等不到重分类,且将来按类型过滤的检索里两边都不在(静默召回退化)。
+    await testDb.qaRecords.add(
+      makeQa({ id: 'dangling', categoryId: 'cat-gone', categorySource: 'jev', categoryAt: 1 }),
+    )
+    await testDb.goldens.add(
+      makeGolden({ id: 'g-dangling', categoryId: 'cat-gone', categorySource: 'jev', categoryAt: 1 }),
+    )
+
+    const snap = await testDb.snapshotBackfillCandidates()
+    expect(snap.history.map((r) => r.id)).toEqual(['dangling'])
+    expect(snap.golden.map((r) => r.id)).toEqual(['g-dangling'])
+  })
+
   it('快照只带 id 与问题文本,不带向量(几万条时内存才扛得住)', async () => {
     await testDb.qaRecords.add(
       makeQa({ id: 'v1', embedding: Float32Array.from([1, 2, 3]), categoryId: null }),

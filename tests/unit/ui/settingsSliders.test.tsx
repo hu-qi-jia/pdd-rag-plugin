@@ -88,6 +88,8 @@ async function renderSettings(settings: PddSettings = { ...DEFAULT_SETTINGS }) {
       goldenCount: 0,
       folderCount: 0,
       knowledgeCount: 0,
+      // GET_STATS 的 categories 现为必填(Task 5);本用例测设置页,空表即可
+      categories: [],
       settings,
       embeddingModel: 'test',
     },

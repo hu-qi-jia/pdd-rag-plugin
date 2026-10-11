@@ -249,11 +249,17 @@ export class PddDatabase extends Dexie {
    *
    *  - 待分类:categoryId 缺失或是未分类
    *  - 重跑:机器打的标,且类型定义在此之后改过(旧标签可能已失效)
+   *  - 悬空:categoryId 指向**类型表里已不存在的类型** → 同样要重跑(见下)
    *  - 跳过:人工指定的(机器永不许覆盖)
    *  - inherit 两边都不进:标签有效,而且问题文本与来源相同,重跑是白花钱
    *
    * 注意迁移的时间戳:迁移把类型的 updatedAt 与标答的 categoryAt 写成同一个
    * Date.now(),两者相等 → `<` 不成立 → 迁移来的标答不会被误判成"待重跑"。
+   *
+   * 类型表里查不到的 id(Task 7 修复轮 1/5)是**悬空标签**,必须判为候选:
+   * 判 false 会让这些行永久作废(再也等不到重分类),而且等按类型过滤的检索落地后,
+   * 池子 = 选中类型 ∪ filterable=false 的类型 —— 悬空 id 两边都不在,这些记录会在
+   * **任何**按类型过滤的检索里被静默排除。与 T3 的悬空 folderId 是同一类缺陷。
    */
   private isBackfillCandidate(
     rec: { categoryId?: string | null; categorySource?: string; categoryAt?: number },
@@ -263,7 +269,7 @@ export class PddDatabase extends Dexie {
     if (!rec.categoryId || rec.categoryId === UNCATEGORIZED_CATEGORY_ID) return true;
     if (rec.categorySource !== "jev") return false;
     const catUpdated = catUpdatedAt.get(rec.categoryId);
-    if (catUpdated === undefined) return false;
+    if (catUpdated === undefined) return true; // 悬空 id:标签已无意义,重新分类
     return (rec.categoryAt ?? 0) < catUpdated;
   }
 

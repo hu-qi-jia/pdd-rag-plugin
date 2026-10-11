@@ -25,10 +25,26 @@ import type {
   ExportedKnowledge,
   ExportedQa,
   ExportedReply,
+  ExportedSettings,
 } from '../types/transfer'
 import { hashText } from '../shared/text'
 
 export const EXPORT_VERSION = '2.0'
+
+/**
+ * 导出信封构建时的唯一密钥剥除点。
+ *
+ * ADR-0006/0007 硬约束:API Key 只进 chrome.storage.local,不随导出外发。
+ * 用户把导出 JSON 拿去换机器、或贴给别人做支持时,不能连可计费的 Key 一起泄露。
+ *
+ * 用**删字段**而不是置空串:导入端 saveSettings 把信封里的设置合并到本机设置上
+ * (clampSettings 的 spread),置空串会把本机已存的 Key 清掉 —— 删字段才是
+ * 「没带 Key」而不是「Key 是空的」。其余字段原样保留,阈值/开关照常恢复。
+ */
+function stripSettingsSecrets(s: PddSettings): ExportedSettings {
+  const { jevApiKey: _jevApiKey, llmApiKey: _llmApiKey, ...safe } = s
+  return safe
+}
 
 const stripGolden = (g: GoldenRecord): ExportedGolden => ({
   id: g.id,
@@ -106,7 +122,7 @@ export function buildExportEnvelope(input: {
   const env: ExportEnvelope = {
     version: EXPORT_VERSION,
     exportedAt: input.exportedAt,
-    settings: input.settings,
+    settings: stripSettingsSecrets(input.settings),
     folders: input.folders,
     goldens: input.goldens.map(stripGolden),
     knowledge: (input.knowledge ?? []).map(stripKnowledge),

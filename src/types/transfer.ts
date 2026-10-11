@@ -82,10 +82,19 @@ export interface ExportedKbDoc {
   updatedAt: number
 }
 
+/**
+ * 导出信封里的设置:**刻意不含任何 API Key**。
+ *
+ * ADR-0006/0007 的硬约束是「Key 只进 chrome.storage.local,不随导出外发」——
+ * 用类型把这条边界钉死,未来往信封里加字段时也不会手滑把 Key 带出去。
+ * 构建侧的唯一剥除点在 transferPlan.buildExportEnvelope(见 stripSettingsSecrets)。
+ */
+export type ExportedSettings = Omit<PddSettings, 'jevApiKey' | 'llmApiKey'>
+
 export interface ExportEnvelope {
   version: string
   exportedAt: number
-  settings: PddSettings
+  settings: ExportedSettings
   folders: FolderRecord[]
   goldens: ExportedGolden[]
   /** 知识库:人工精选数据,与金标准同级,始终导出(不受 includeMemory 门控) */

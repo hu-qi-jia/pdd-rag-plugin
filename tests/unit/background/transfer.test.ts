@@ -89,7 +89,34 @@ describe('buildExportEnvelope', () => {
     expect(env.version).toBe(EXPORT_VERSION)
     expect(EXPORT_VERSION).toBe('2.0')
     expect(env.exportedAt).toBe(12345)
-    expect(env.settings).toEqual(DEFAULT_SETTINGS)
+    // 两个 AI Key 被剥离(见下条);其余设置原样
+    expect(env.settings).toEqual({ ...DEFAULT_SETTINGS, jevApiKey: undefined, llmApiKey: undefined })
+    expect('jevApiKey' in env.settings).toBe(false)
+    expect('llmApiKey' in env.settings).toBe(false)
+  })
+
+  it('信封剥离 API Key —— 导出文件不外发 jev/llm 的 Key(ADR-0006/0007 硬约束)', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      settings: {
+        ...DEFAULT_SETTINGS,
+        jevApiKey: 'sk-jev-secret',
+        llmApiKey: 'sk-llm-secret',
+        classifyEnabled: true,
+        simThreshold: 0.42,
+      },
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    // 键必须**不存在**,而不是置空串 —— 置空串会在导入端把本机已存的 Key 清掉
+    expect('jevApiKey' in env.settings).toBe(false)
+    expect('llmApiKey' in env.settings).toBe(false)
+    expect(JSON.stringify(env)).not.toContain('sk-jev-secret')
+    expect(JSON.stringify(env)).not.toContain('sk-llm-secret')
+    // 其余设置照常保留,导入端仍能恢复阈值等
+    expect(env.settings.simThreshold).toBe(0.42)
+    expect(env.settings.classifyEnabled).toBe(true)
   })
 
   it('金标准剥离向量字段且 hasEmbedding 归 0(导入端统一重嵌)', () => {

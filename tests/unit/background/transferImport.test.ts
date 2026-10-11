@@ -6,17 +6,44 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { ExportEnvelope } from '../../../src/types/transfer'
+import { buildExportEnvelope } from '../../../src/background/transferPlan'
 import { hashText } from '../../../src/shared/text'
 import { DEFAULT_SETTINGS } from '../../../src/shared/constants'
 
+// chrome.storage.local 内存桩:导入会调 saveSettings,必须让设置真往返
+// (与 settings.test.ts 同源的桩)。
+const store: Record<string, unknown> = {}
+
+function stubLocalStorage(): void {
+  const local = chrome.storage.local as unknown as Record<string, unknown>
+  local.get = (
+    keys: string | string[] | null,
+    cb?: (r: Record<string, unknown>) => void,
+  ): Promise<Record<string, unknown>> => {
+    const wanted = keys === null ? Object.keys(store) : Array.isArray(keys) ? keys : [keys]
+    const out: Record<string, unknown> = {}
+    for (const k of wanted) if (k in store) out[k] = store[k]
+    cb?.(out)
+    return Promise.resolve(out)
+  }
+  local.set = (items: Record<string, unknown>, cb?: () => void): Promise<void> => {
+    Object.assign(store, items)
+    cb?.()
+    return Promise.resolve()
+  }
+}
+
 async function freshImport() {
   vi.resetModules()
+  stubLocalStorage()
   const { importData } = await import('../../../src/background/transfer')
   const { db } = await import('../../../src/background/db')
-  return { importData, db }
+  const { loadSettings, saveSettings } = await import('../../../src/background/settings')
+  return { importData, db, loadSettings, saveSettings }
 }
 
 beforeEach(async () => {
+  for (const k of Object.keys(store)) delete store[k]
   await Dexie.delete('PddCSDB')
 })
 
@@ -91,5 +118,34 @@ describe('importData:事务性(失败整体回滚)', () => {
     expect(out.addedGoldens).toBe(1)
     expect(await db.folders.count()).toBe(1)
     expect(await db.goldens.count()).toBe(1)
+  })
+})
+
+describe('importData:API Key 不随导出外发,导入也不冲掉本机 Key', () => {
+  it('真实导出的信封缺 Key → 导入后本机已存 Key 原样保留', async () => {
+    const { importData, loadSettings, saveSettings } = await freshImport()
+    await saveSettings({
+      jevApiKey: 'sk-jev-local',
+      llmApiKey: 'sk-llm-local',
+      classifyEnabled: true,
+    })
+    // 走真实构建路径:信封里两个 Key 字段缺席
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      settings: await loadSettings(),
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect('jevApiKey' in env.settings).toBe(false)
+    expect('llmApiKey' in env.settings).toBe(false)
+
+    const out = await importData({ type: 'IMPORT_DATA', payload: { envelope: env } })
+    expect(out.error).toBeUndefined()
+
+    const s = await loadSettings()
+    expect(s.jevApiKey).toBe('sk-jev-local')
+    expect(s.llmApiKey).toBe('sk-llm-local')
+    expect(s.classifyEnabled).toBe(true)
   })
 })

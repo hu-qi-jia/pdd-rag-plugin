@@ -27,6 +27,14 @@ export interface RetSource {
   question: string
   /** 问题时间(历史=questionTs,金标准/知识库=updatedAt) */
   questionTs: number
+  /**
+   * 问题类型 id。**已在检索缓存边界归一**:库里缺省或为 null 的,到这里是 `null`。
+   * 知识库不分类,恒为 `null`。
+   *
+   * 归一的意义(裁决 I2 的教训):`undefined !== null`。若让它以 undefined 流下来,
+   * 任何 `!== null` 的判断都会把"没分类"当成"有分类",在类型过滤里被静默排除。
+   */
+  categoryId: string | null
 }
 
 /** 展开候选用的回复条目 */

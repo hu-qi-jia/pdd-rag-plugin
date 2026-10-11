@@ -332,3 +332,160 @@ describe('面板回带分类', () => {
     expect(out.categories).toHaveLength(7)
   })
 })
+
+// ─── 分类写回使检索缓存同步(第五十八轮 Task 1)──────────────────────────────────
+//
+// 分类从本计划起进检索(rankCandidates 读 categoryId),缓存里那份必须跟库同步,
+// 否则用户会看到"我刚改的类型没生效"。三个写路径走**定点更新**(数组引用不变 =
+// 没重建);deleteCategory 批量搬动标答与历史,走**整体失效**。
+
+describe('分类写回使检索缓存同步', () => {
+  it('★ updateQaCategory 之后,缓存里那条的类型跟着变', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    await db.addQaRecord(
+      makeQa({ id: 'qa-1', hasEmbedding: 1, embedding: new Float32Array([1]) }),
+    )
+    const before = await getRetrievalEntries()
+    expect(before[0].source.categoryId).toBeNull()
+
+    await db.updateQaCategory('qa-1', { categoryId: 'preset:order', confidence: 0.9 })
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before) // 定点更新:同一个数组(整体失效会重建出新数组)
+    expect(after[0].source.categoryId).toBe('preset:order')
+  })
+
+  it('判不准(hit=null)时缓存落 uncategorized,与库一致', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    await db.addQaRecord(
+      makeQa({
+        id: 'qa-1',
+        hasEmbedding: 1,
+        embedding: new Float32Array([1]),
+        categoryId: 'preset:price',
+      }),
+    )
+    const before = await getRetrievalEntries()
+    expect(before[0].source.categoryId).toBe('preset:price')
+
+    await db.updateQaCategory('qa-1', null)
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before)
+    expect(after[0].source.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+  })
+
+  it('updateGoldenCategory 之后,缓存里那条的类型跟着变', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    await db.goldens.add(
+      makeGolden({
+        id: 'g-1',
+        hasEmbedding: 1,
+        qEmbedding: new Float32Array([1]),
+        categoryId: UNCATEGORIZED_CATEGORY_ID,
+      }),
+    )
+    const before = await getRetrievalEntries()
+
+    expect(
+      await db.updateGoldenCategory('g-1', { categoryId: 'preset:price', confidence: 0.8 }),
+    ).toBe(1)
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before)
+    expect(after[0].source.categoryId).toBe('preset:price')
+  })
+
+  it('updateGoldenCategory 因 manual 守卫跳过写入(返回 0)时,不动缓存', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    await db.goldens.add(
+      makeGolden({
+        id: 'g-1',
+        hasEmbedding: 1,
+        qEmbedding: new Float32Array([1]),
+        categoryId: 'preset:price',
+        categorySource: 'manual',
+      }),
+    )
+    const before = await getRetrievalEntries()
+
+    // 守卫生效 → 返回 0(库里没变)→ 缓存也不该变
+    expect(
+      await db.updateGoldenCategory('g-1', { categoryId: 'preset:stock', confidence: 0.99 }),
+    ).toBe(0)
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before)
+    expect(after[0].source.categoryId).toBe('preset:price')
+  })
+
+  it('setGoldenCategoryManual 之后,缓存里那条的类型跟着变', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    await db.goldens.add(
+      makeGolden({
+        id: 'g-1',
+        hasEmbedding: 1,
+        qEmbedding: new Float32Array([1]),
+        categoryId: UNCATEGORIZED_CATEGORY_ID,
+      }),
+    )
+    const before = await getRetrievalEntries()
+
+    expect(await db.setGoldenCategoryManual('g-1', 'preset:aftersale')).toBe(1)
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before)
+    expect(after[0].source.categoryId).toBe('preset:aftersale')
+  })
+
+  it('deleteCategory 走整体失效(批量搬动):重建后那些条目是未分类', async () => {
+    const { db } = await freshPanel()
+    const { getRetrievalEntries } = await import('../../../src/background/retrievalCache')
+    const { deleteCategory } = await import('../../../src/background/categories')
+
+    await db.categories.add({
+      id: 'cat-x',
+      name: '自定义类型',
+      criteria: '测试用',
+      kind: 'custom',
+      route: 'retrieve',
+      filterable: true,
+      position: 100,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.addQaRecord(
+      makeQa({
+        id: 'qa-1',
+        hasEmbedding: 1,
+        embedding: new Float32Array([1]),
+        categoryId: 'cat-x',
+      }),
+    )
+    await db.goldens.add(
+      makeGolden({
+        id: 'g-1',
+        hasEmbedding: 1,
+        qEmbedding: new Float32Array([1]),
+        categoryId: 'cat-x',
+      }),
+    )
+    const before = await getRetrievalEntries()
+    expect(before).toHaveLength(2)
+    expect(before.every((e) => e.source.categoryId === 'cat-x')).toBe(true)
+
+    const out = await deleteCategory({ type: 'DELETE_CATEGORY', payload: { id: 'cat-x' } })
+    expect(out.success).toBe(true)
+
+    const after = await getRetrievalEntries()
+    // 批量搬动走整体失效(定点更新在这里反而更绕):引用必变(重建),类型全部落回未分类
+    expect(after).not.toBe(before)
+    expect(after).toHaveLength(2)
+    expect(after.every((e) => e.source.categoryId === UNCATEGORIZED_CATEGORY_ID)).toBe(true)
+  })
+})

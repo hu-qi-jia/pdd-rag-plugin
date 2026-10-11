@@ -8,6 +8,7 @@ import Dexie from 'dexie'
 import type { QaRecord, GoldenRecord, KnowledgeRecord } from '../../../src/types/memory'
 import { hashText } from '../../../src/shared/text'
 import { kbAnchorText } from '../../../src/background/kbAnchor'
+import { UNCATEGORIZED_CATEGORY_ID } from '../../../src/shared/constants'
 
 /** 重置模块注册表 → retrievalCache + db 单例在已删库的 fake-indexeddb 上重建 */
 async function freshCache() {
@@ -253,5 +254,112 @@ describe('db 写路径自动失效', () => {
 
     await db.clearSelfTestRecords()
     expect(await getRetrievalEntries()).toHaveLength(0)
+  })
+})
+
+// ─── 检索源携带问题类型 + 定点更新(第五十八轮 Task 1)─────────────────────────────
+//
+// 分类进检索的前置:三源投影必须把 categoryId 带出,且**在缓存边界归一**
+// (库里缺省 / null → 这里的 null;知识库恒 null)。归一不是洁癖:`undefined !== null`,
+// 若让它以 undefined 流到下游,任何 `!== null` 的类型判断都会把"没分类"当成"有分类"
+// (裁决 I2 的教训)。
+//
+// updateCachedCategory 是分类写回的定点同步口:分类是一条一条写的,整体失效会让
+// "写一条 + 紧接着搜一次"白重建一遍;而这里条目没增没减、只改一个字段,定点更新安全
+// (与文件头部反对的"增删场景增量维护"不矛盾)。
+
+describe('检索源携带类型', () => {
+  it('三源都带 categoryId,缺省归一成 null', async () => {
+    const { getRetrievalEntries, db } = await freshCache()
+    const vec = new Float32Array([1])
+    await db.addQaRecord(makeQa({ id: 'qa-1', hasEmbedding: 1, embedding: vec }))
+    await db.goldens.add(
+      makeGolden({ id: 'g-1', hasEmbedding: 1, qEmbedding: vec, categoryId: 'preset:order' }),
+    )
+    await db.knowledge.add(makeKb({ id: 'kb-1', hasEmbedding: 1, qEmbedding: vec }))
+
+    const entries = await getRetrievalEntries()
+    const byId = (id: string) => entries.find((e) => e.source.id === id)!
+    expect(byId('qa-1').source.categoryId).toBeNull() // 历史缺省 → null,不是 undefined
+    expect(byId('g-1').source.categoryId).toBe('preset:order')
+    expect(byId('kb-1').source.categoryId).toBeNull() // 知识库不分类
+  })
+
+  it('历史与标答的 categoryId 原样带出(含显式 uncategorized)', async () => {
+    const { getRetrievalEntries, db } = await freshCache()
+    const vec = new Float32Array([1])
+    await db.addQaRecord(
+      makeQa({ id: 'qa-typed', hasEmbedding: 1, embedding: vec, categoryId: 'preset:price' }),
+    )
+    await db.addQaRecord(
+      makeQa({
+        id: 'qa-unc',
+        hasEmbedding: 1,
+        embedding: vec,
+        categoryId: UNCATEGORIZED_CATEGORY_ID,
+      }),
+    )
+    await db.goldens.add(
+      makeGolden({ id: 'g-typed', hasEmbedding: 1, qEmbedding: vec, categoryId: 'preset:aftersale' }),
+    )
+
+    const entries = await getRetrievalEntries()
+    const byId = (id: string) => entries.find((e) => e.source.id === id)!
+    expect(byId('qa-typed').source.categoryId).toBe('preset:price')
+    expect(byId('qa-unc').source.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(byId('g-typed').source.categoryId).toBe('preset:aftersale')
+  })
+})
+
+describe('updateCachedCategory 定点更新', () => {
+  it('★ 改一条的类型,不重建整份缓存', async () => {
+    const { getRetrievalEntries, updateCachedCategory, db } = await freshCache()
+    const vec = new Float32Array([1])
+    await db.addQaRecord(makeQa({ id: 'qa-1', hasEmbedding: 1, embedding: vec }))
+    await db.addQaRecord(makeQa({ id: 'qa-2', hasEmbedding: 1, embedding: vec }))
+    const before = await getRetrievalEntries()
+    expect(before).toHaveLength(2)
+
+    updateCachedCategory('qa-1', 'preset:price')
+
+    const after = await getRetrievalEntries()
+    // 引用相同 = 没走重建路径(重建经 Promise.all 生成新数组)。
+    // 若实现退化成 invalidateRetrievalCache + 重建,这里会取到新数组 → 断言失败;
+    // 而且重建会从库读(库未改),categoryId 仍是 null → 下一条断言也会失败。
+    expect(after).toBe(before)
+    expect(after.find((e) => e.source.id === 'qa-1')!.source.categoryId).toBe('preset:price')
+    expect(after.find((e) => e.source.id === 'qa-2')!.source.categoryId).toBeNull()
+  })
+
+  it('改不存在的 id 是空操作,不抛错', async () => {
+    const { getRetrievalEntries, updateCachedCategory, db } = await freshCache()
+    await db.addQaRecord(
+      makeQa({ id: 'qa-1', hasEmbedding: 1, embedding: new Float32Array([1]) }),
+    )
+    const before = await getRetrievalEntries()
+
+    expect(() => updateCachedCategory('nope', 'preset:price')).not.toThrow()
+    expect(await getRetrievalEntries()).toBe(before)
+    expect(before[0].source.categoryId).toBeNull()
+  })
+
+  it('归一到 null 也生效', async () => {
+    const { getRetrievalEntries, updateCachedCategory, db } = await freshCache()
+    await db.addQaRecord(
+      makeQa({
+        id: 'qa-1',
+        hasEmbedding: 1,
+        embedding: new Float32Array([1]),
+        categoryId: 'preset:order',
+      }),
+    )
+    const before = await getRetrievalEntries()
+    expect(before[0].source.categoryId).toBe('preset:order')
+
+    updateCachedCategory('qa-1', null)
+
+    const after = await getRetrievalEntries()
+    expect(after).toBe(before)
+    expect(after[0].source.categoryId).toBeNull()
   })
 })

@@ -41,7 +41,7 @@ import type {
 
 // 检索缓存失效钩子(工程5b):改变"已嵌三源"集合的写路径必须调用。
 // 循环依赖安全:本模块只在方法体内(运行时)使用它,模块求值期不触碰。
-import { invalidateRetrievalCache } from "./retrievalCache";
+import { invalidateRetrievalCache, updateCachedCategory } from "./retrievalCache";
 
 export class PddDatabase extends Dexie {
   qaRecords!: Table<QaRecord, string>;
@@ -371,6 +371,10 @@ export class PddDatabase extends Dexie {
    * `hit === null` 表示判不准 / jev 失败 / 未启用 —— 一律落未分类,而不是保持 null。
    * 两者在检索时等价(都恒进池),但显式的 'uncategorized' 让面板能区分
    * "还没跑过"与"跑过但判不出来",补分类的候选统计也要靠它。
+   *
+   * 分类**已进检索**(第五十八轮):写回后必须定点同步缓存里那份 categoryId,
+   * 否则紧接着的搜索仍按旧类型过滤,用户看到"我刚改的类型没生效"。这里不改集合
+   * (条目没增没减),所以走定点更新而非整体失效。
    */
   async updateQaCategory(
     id: string,
@@ -378,12 +382,15 @@ export class PddDatabase extends Dexie {
   ): Promise<number> {
     // 返回 Dexie 更新条数:0 = 行已不在(被 TTL 清掉),调用方据此计 skipped;
     // Dexie 的 update 对缺失行**不抛错**,只看异常会把"没写成功"误计成成功
-    return await this.qaRecords.update(id, {
+    const n = await this.qaRecords.update(id, {
       categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
       categoryConfidence: hit ? hit.confidence : undefined,
       categorySource: "jev",
       categoryAt: Date.now(),
     });
+    // 缓存里若没有这条,updateCachedCategory 是空操作;库改了缓存就必须跟改
+    updateCachedCategory(id, hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID);
+    return n;
   }
 
   async addQaRecord(record: QaRecord): Promise<string> {
@@ -661,6 +668,9 @@ export class PddDatabase extends Dexie {
    *   ② 补分类运行期间:点了开始补分类之后、跑到某条之前,用户手工移动了那条。
    * 收口在这里挡一次(与 classify 的 refuse() 同一思路:一处改,所有机器路径覆盖)。
    * **人工写入不走这里** —— 见 setGoldenCategoryManual。
+   *
+   * 分类**已进检索**(第五十八轮):写入生效后定点同步缓存。返回值 0(行已不在
+   * 或 manual 守卫跳过)时**不碰缓存** —— 库里没变,缓存就不该变。
    */
   async updateGoldenCategory(
     id: string,
@@ -669,27 +679,33 @@ export class PddDatabase extends Dexie {
     const existing = await this.goldens.get(id);
     if (!existing) return 0;
     if (existing.categorySource === "manual") return 0; // 机器永不许覆盖用户手工摆放
-    return await this.goldens.update(id, {
+    const n = await this.goldens.update(id, {
       categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
       categoryConfidence: hit ? hit.confidence : undefined,
       categorySource: "jev",
       categoryAt: Date.now(),
     });
+    // 只有真的写了(n > 0)才同步缓存:manual 守卫跳过时必须原样保留旧类型
+    if (n > 0) updateCachedCategory(id, hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID);
+    return n;
   }
 
   /**
    * **人工**把标答摆到某个类型(panel#updateGoldenCategory 的落库口)。
    *
    * 无条件写入且把来源钉成 'manual' —— 它是 manual 的产生地,所以机器守卫再严也不挡它;
-   * 重复摆放(已是 manual 再改)同样生效。刻意不碰 categoryConfidence(那是机器置信度),
-   * 也不作废检索缓存(分类尚未进检索)。
+   * 重复摆放(已是 manual 再改)同样生效。刻意不碰 categoryConfidence(那是机器置信度)。
+   *
+   * 分类**已进检索**(第五十八轮):写入生效后定点同步缓存(条目没增没减,只改类型字段)。
    */
   async setGoldenCategoryManual(id: string, categoryId: string): Promise<number> {
-    return await this.goldens.update(id, {
+    const n = await this.goldens.update(id, {
       categoryId,
       categorySource: "manual",
       categoryAt: Date.now(),
     });
+    if (n > 0) updateCachedCategory(id, categoryId);
+    return n;
   }
 
   async getGolden(id: string): Promise<GoldenRecord | undefined> {

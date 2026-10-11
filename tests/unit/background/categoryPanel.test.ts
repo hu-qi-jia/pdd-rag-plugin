@@ -128,7 +128,7 @@ describe('UPDATE_GOLDEN_CATEGORY', () => {
     expect((await db.goldens.get('g1'))?.categoryId).toBe('preset:aftersale')
   })
 
-  it('不触发 invalidateRetrievalCache —— 本计划分类还没进检索', async () => {
+  it('定点同步缓存(不作废、不重建):数组引用不变,但那条的类型跟着变', async () => {
     const { updateGoldenCategory, db, getRetrievalEntries } = await fresh()
     await db.ensurePresetCategories()
     await db.goldens.add(
@@ -145,8 +145,11 @@ describe('UPDATE_GOLDEN_CATEGORY', () => {
 
     await updateGoldenCategory(msg('g1', 'preset:price'))
 
+    const after = await getRetrievalEntries()
     // 缓存未被作废:仍是同一个数组引用(作废会整表重建出新的数组)
-    expect(await getRetrievalEntries()).toBe(before)
+    expect(after).toBe(before)
+    // ……但类型已定点同步(第五十八轮:分类进检索,缓存必须跟库一致)
+    expect(after[0].source.categoryId).toBe('preset:price')
   })
 })
 

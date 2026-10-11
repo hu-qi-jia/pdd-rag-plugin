@@ -23,6 +23,7 @@ const mkSource = (id: string, kind: RetSource['kind'], question: string, questio
   kind,
   question,
   questionTs,
+  categoryId: null,
 })
 
 describe('cosineSim(L2 归一化向量,点积即余弦)', () => {

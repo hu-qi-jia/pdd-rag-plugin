@@ -17,6 +17,7 @@
  *    又会在将来按类型过滤的检索里被静默排除。
  */
 import { db } from "./db";
+import { invalidateRetrievalCache } from "./retrievalCache";
 import { PRESET_CATEGORIES, UNCATEGORIZED_CATEGORY_ID } from "../shared/constants";
 import type {
   CreateCategoryRequest,
@@ -135,5 +136,8 @@ export async function deleteCategory(
       .modify({ categoryId: UNCATEGORIZED_CATEGORY_ID });
     await db.categories.delete(cat.id);
   });
+  // 分类已进检索:这次一次搬动该类型下**全部**标答与历史,走整体失效而非逐条定点更新
+  // (批量场景下逐条定位反而更绕,而重建只发生在删除后的第一次检索)。
+  invalidateRetrievalCache();
   return { success: true, movedGoldens };
 }

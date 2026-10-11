@@ -10,6 +10,7 @@ import {
   jevTestLabel,
   sameJevFields,
 } from '../../../src/pdd/jev-form'
+import { isJevConfigured } from '../../../src/background/jev'
 
 const S = { jevBaseUrl: 'https://api.typesafe.ai', jevApiKey: 'sk-1', jevModel: 'jev-latest' }
 
@@ -44,6 +45,22 @@ describe('jevFormReady', () => {
 
   it('纯空白不算填了', () => {
     expect(jevFormReady({ baseUrl: '   ', apiKey: 'k', model: 'm' })).toBe(false)
+  })
+
+  // UI 层不 import background,判据不得不在两侧各存一份 —— 一致性靠这张对照表守,
+  // 而不是靠"记得同步改"。
+  it('对照表:同一组输入,前台与后台同判(防两份实现漂移)', () => {
+    const cases = [
+      { baseUrl: 'https://a.com/v1', apiKey: 'sk-x', model: 'm' }, // 三项都填
+      { baseUrl: 'https://a.com/v1', apiKey: '', model: 'm' }, // 缺 key
+      { baseUrl: '', apiKey: 'sk-x', model: 'm' }, // 缺地址
+      { baseUrl: 'https://a.com/v1', apiKey: 'sk-x', model: '' }, // 缺模型
+      { baseUrl: 'https://a.com/v1', apiKey: '   ', model: 'm' }, // 纯空白
+      { baseUrl: '', apiKey: '', model: '' }, // 全空
+    ]
+    for (const c of cases) {
+      expect(jevFormReady(c)).toBe(isJevConfigured(c))
+    }
   })
 })
 

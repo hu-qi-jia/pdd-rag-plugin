@@ -146,6 +146,23 @@ export interface UpdateGoldenResponse {
   payload: { id?: string; reembed?: boolean; error?: string }
 }
 
+/**
+ * 手动把一条标准回答移到另一个问题类型。
+ *
+ * 与 UPDATE_GOLDEN 分开是**故意**的:那条走编辑/重嵌管线(会作废检索缓存),
+ * 而移动类型既不碰问题向量也不进检索 —— 合在一起会让一次纯摆放动到重嵌逻辑。
+ * 落库时 categorySource 置 'manual'(用户手工摆放,补分类永不许覆盖)。
+ */
+export interface UpdateGoldenCategoryRequest {
+  type: 'UPDATE_GOLDEN_CATEGORY'
+  payload: { id: string; categoryId: string }
+}
+
+export interface UpdateGoldenCategoryResponse {
+  type: 'UPDATE_GOLDEN_CATEGORY_RESPONSE'
+  payload: { success: boolean; error?: string }
+}
+
 export interface DeleteGoldenRequest {
   type: 'DELETE_GOLDEN'
   payload: { id: string }

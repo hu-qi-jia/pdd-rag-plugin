@@ -2,7 +2,7 @@
  * Popup — Figma 编辑器工具风面板(对齐 pddddd 控制台设计语言)
  *
  * 布局:左侧 52px 图标导航栏 + 右侧内容区。
- * 四页签(设计文档 §7):记忆列表 / 回复文件夹 / 知识库 / 设置。
+ * 四页签(设计文档 §7):记忆列表 / 标准回答 / 知识库 / 设置。
  * 视觉:工具风设计令牌 —— 白面板细边框、小圆角(6px 控件)、黑白主色。
  */
 
@@ -138,7 +138,7 @@ function tabSummary(id: TabId, stats: StatsPayload | null): string {
     case 'memory':
       return `问答 ${stats.qaCount} · 回复 ${stats.replyCount}`
     case 'folders':
-      return `文件夹 ${stats.folderCount} · 标准回答 ${stats.goldenCount}`
+      return `标准回答 ${stats.goldenCount}`
     case 'knowledge':
       return `知识 ${stats.knowledgeCount}`
     case 'settings':
@@ -148,7 +148,7 @@ function tabSummary(id: TabId, stats: StatsPayload | null): string {
 
 const TABS: { id: TabId; label: string; Icon: typeof MessageSquareIcon }[] = [
   { id: 'memory', label: '记忆', Icon: MessageSquareIcon },
-  { id: 'folders', label: '文件夹', Icon: FolderIcon },
+  { id: 'folders', label: '标准回答', Icon: FolderIcon },
   { id: 'knowledge', label: '知识库', Icon: BookOpenIcon },
   { id: 'settings', label: '设置', Icon: GearIcon },
 ]

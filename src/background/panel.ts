@@ -16,6 +16,7 @@ import type {
   MemoryListItem,
   MemoryReplyItem,
   RenameFolderRequest,
+  UpdateGoldenCategoryRequest,
 } from "../types/messages";
 
 /** 记忆列表单页条数(PM2:默认 100,底部"加载更早"显式翻页,不再静默截断) */
@@ -146,6 +147,35 @@ export async function getPanelData(
     legacyDocs,
     itemUsage,
   };
+}
+
+// ─── 标准回答的类型摆放 ─────────────────────────────────────────────────────────
+
+/**
+ * 把一条标准回答移到另一个问题类型。
+ *
+ * 写完把 categorySource 置成 'manual' —— 这是本设计里"机器永不许覆盖用户手工摆放"的落点:
+ * 补分类的候选判据对 manual 一律跳过(见 db#isBackfillCandidate / spec §11.2)。
+ *
+ * 刻意**不走 db.updateGolden()**:那条会作废检索缓存并带 updatedAt 变更语义,
+ * 而分类尚未进检索,一次纯摆放不该惊动检索管线。直接写表,只动分类三字段。
+ *
+ * 目标类型不存在 / 标答不存在都报错且**不改动**。
+ */
+export async function updateGoldenCategory(
+  message: UpdateGoldenCategoryRequest,
+): Promise<{ success: boolean; error?: string }> {
+  const { id, categoryId } = message.payload;
+  const cat = await db.categories.get(categoryId);
+  if (!cat) return { success: false, error: "目标类型不存在" };
+  const g = await db.getGolden(id);
+  if (!g) return { success: false, error: "标准回答不存在" };
+  await db.goldens.update(id, {
+    categoryId,
+    categorySource: "manual",
+    categoryAt: Date.now(),
+  });
+  return { success: true };
 }
 
 // ─── 文件夹 CRUD ───────────────────────────────────────────────────────────────

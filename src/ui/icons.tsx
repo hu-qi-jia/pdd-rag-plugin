@@ -11,6 +11,7 @@ export {
   FolderOpen as FolderOpenIcon,
   FolderPlus as FolderPlusIcon,
   FolderInput as FolderInputIcon,
+  Tag as TagIcon,
   List as ListIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,

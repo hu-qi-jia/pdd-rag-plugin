@@ -57,6 +57,7 @@ import {
   getMemoryList,
   getPanelData,
   renameFolder,
+  updateGoldenCategory,
 } from "./panel";
 import { exportData, importData } from "./transfer";
 import {
@@ -360,6 +361,12 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
     "UPDATE_GOLDEN",
     (message) => updateGoldenWithReembed(message.payload),
     (err) => ({ error: String(err) }),
+  ),
+
+  UPDATE_GOLDEN_CATEGORY: route(
+    "UPDATE_GOLDEN_CATEGORY",
+    (message) => updateGoldenCategory(message),
+    (err) => ({ success: false, error: String(err) }),
   ),
 
   DELETE_GOLDEN: route(

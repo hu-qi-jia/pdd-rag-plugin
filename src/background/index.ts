@@ -74,8 +74,13 @@ const LEGACY_DB_NAME = "AIMemoryDB";
 
 /**
  * 补分类的待办计数缓存。`countBackfillCandidates()` 要把 qaRecords / goldens / categories
- * 三张表 `.toArray()` 后在 JS 里过滤(**整条记录、含向量**),而 running/done 的面板文案
- * 只读 `status`、根本不看 `pending` —— 所以只在 `idle` 时刷新它,运行期的 500ms 轮询不再全表扫。
+ * 三张表 `.toArray()` 后在 JS 里过滤(**整条记录、含向量**),所以运行期(running 的 500ms 轮询)
+ * **不刷新**它,免得每秒白扫两次。
+ *
+ * 刷新时机:`idle`(初次/下一次运行前)与 `done`(跑完的转换点)。done 必须刷新 —— 面板在
+ * done 态要**同时**显示完成报告与"下一次会外发多少"的预览行(ADR-0007 / spec §11.1,
+ * 按钮文案先算条数);若只在 idle 刷新,同一 SW 会话里第二次点「开始分类全部历史」时
+ * pending 还是启动那一刻的旧值,预览行就没了依据。轮询到 done 即停,故这是一次廉价刷新。
  */
 let backfillPending = { history: 0, golden: 0 };
 
@@ -505,9 +510,9 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
     "GET_BACKFILL_STATE",
     async () => {
       const status = getBackfillStatus();
-      // 待办计数 = 两张全表各物化一遍(含向量);只在 idle 时刷新,免得运行期每秒白扫两次。
-      // running/done 的文案只读 status,用上一次的缓存值即可。
-      if (status.phase === "idle") {
+      // 待办计数 = 两张全表各物化一遍(含向量);只在**非 running** 时刷新 —— 运行期每秒轮询
+      // 不再白扫,而 idle / done 的转换点各刷新一次(done 态会让预览行给出下一次的条数)。
+      if (status.phase !== "running") {
         backfillPending = await db.countBackfillCandidates();
       }
       return { status, pending: backfillPending };

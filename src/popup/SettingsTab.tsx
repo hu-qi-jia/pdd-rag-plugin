@@ -985,6 +985,24 @@ export function SettingsTab({
                     )} 条标准回答的问题发送到 ${hostOf(draft.jevBaseUrl)}(不含任何回复内容)`
                   : '先开启自动分类并填全配置'}
           </span>
+          {/* done 态必须**同时**保留知情行(ADR-0007 / spec §11.1 / 决策 D7:按钮文案先算条数)。
+              轮询到 done 就停了,后台在 done 这个转换点补算一次 pending —— 这里把这行与完成
+              报告并排渲染:报告回答"刚刚跑得怎么样",预览行回答"下一次会外发多少"。缺了它,
+              同一会话里第二次点「开始分类全部历史」就是在没有条数的情况下开始的。 */}
+          {backfillStatus?.phase === 'done' && backfillReady && (
+            <span
+              style={{
+                fontSize: formType.desc.size,
+                fontWeight: formType.desc.weight,
+                color: tk.textMuted,
+                lineHeight: 1.6,
+              }}
+            >
+              {`将把 ${fmtCount(backfill?.pending.history ?? 0)} 条历史问题 + ${fmtCount(
+                backfill?.pending.golden ?? 0,
+              )} 条标准回答的问题发送到 ${hostOf(draft.jevBaseUrl)}(不含任何回复内容)`}
+            </span>
+          )}
         </div>
       </Card>
 

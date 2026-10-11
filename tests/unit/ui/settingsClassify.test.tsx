@@ -416,6 +416,22 @@ describe('设置页 · 问题分类区 · 补存量', () => {
     expect(classifyCard().textContent).toContain('跳过 12')
   })
 
+  it('★ 跑完(done)后知情行仍在:完成报告与"将把 N 条…"预览**同时**渲染', async () => {
+    // ADR-0007 / spec §11.1 / 决策 D7:按钮文案必须先算出条数。跑完一轮后 pending 已被
+    // 后台在 done 转换点补算,若界面用完成报告盖掉预览行,同一 SW 会话里第二次点
+    // 「开始分类全部历史」就是在没有条数的情况下开始的 —— 这条钉住两行并存。
+    backfillStatus = { phase: 'done', total: 1285, done: 1285, ok: 1270, failed: 3, skipped: 12 }
+    backfillPending = { history: 1247, golden: 38 }
+    await renderSettings({ ...DEFAULT_SETTINGS, ...configured })
+
+    // 完成报告还在……
+    expect(classifyCard().textContent).toContain('成功 1270')
+    // ……且下一次运行的预览行也在(含条数与目标主机,千位分隔)
+    expect(classifyCard().textContent).toContain('将把 1,247 条历史问题 + 38 条标准回答')
+    expect(classifyCard().textContent).toContain('api.typesafe.ai')
+    expect(classifyCard().textContent).toContain('不含任何回复内容')
+  })
+
   it('被中断结束 → 报告里标明', async () => {
     backfillStatus = { phase: 'done', total: 1285, done: 400, ok: 398, failed: 2, skipped: 0, stopped: true }
     backfillPending = { history: 1247, golden: 38 }

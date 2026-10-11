@@ -112,12 +112,18 @@ export class PddDatabase extends Dexie {
       .upgrade(async (tx) => {
         const now = Date.now();
 
-        // ① 旧文件夹 → 自定义类型。filterable=false 是关键:它们不参与 jev 分类,
-        //    因此不能靠"类型匹配"被选中,必须永远进检索池 —— 否则夹里的条目
-        //    会在任何查询下都搜不到(纯粹的召回倒退,见 spec §7.2)。
-        //    position 从 100 起,让 6 个预置类型排在前面。
+        // ① 用户自建的旧文件夹 → 自定义类型。预置「默认文件夹」跳过:
+        //    它只是 addGolden 写新标答时的系统占位名,不是用户内容,且与新内置的
+        //    「未分类」是同一个概念,转出来是重复。用户真建过的夹(名字是自己起的)
+        //    才转 —— 不转就是把用户的内容丢了。
+        //    filterable=false 是关键:它们不参与 jev 分类,因此不能靠"类型匹配"
+        //    被选中,必须永远进检索池 —— 否则夹里的条目会在任何查询下都搜不到
+        //    (纯粹的召回倒退,见 spec §7.2)。
+        //    position 从 100 起(序号按过滤后的列表算,跳过的默认文件夹不占号),
+        //    让 6 个预置类型排在前面。
         const folders = (await tx.table("folders").toArray()) as FolderRecord[];
-        const legacyCats: CategoryRecord[] = folders.map((f, i) => ({
+        const legacyFolders = folders.filter((f) => f.id !== UNCATEGORIZED_FOLDER_ID);
+        const legacyCats: CategoryRecord[] = legacyFolders.map((f, i) => ({
           id: `legacy:${f.id}`,
           name: f.name,
           criteria: "",
@@ -130,15 +136,19 @@ export class PddDatabase extends Dexie {
         }));
         if (legacyCats.length > 0) await tx.table("categories").bulkAdd(legacyCats);
 
-        // ② 金标准的归属跟着搬。有夹的标 manual —— 用户手工摆过的东西,
-        //    补分类时一律跳过(见 spec §11.2)。没入夹的留 null(= 未分类),
-        //    它们会由补分类正常处理。
+        // ② 金标准的归属跟着搬,分两种(区别就在"用户有没有做过选择"):
+        //    · 落在预置默认文件夹里 → categoryId=null 且**不写** categorySource。
+        //      那是 addGolden 给的系统默认落点,用户没挑过;它们必须是补分类的
+        //      正常候选,否则现有标答几乎一条都不会被自动归类(spec §二 目标 1)。
+        //    · 落在用户自建夹里 → categoryId='legacy:<folderId>' 且标 manual。
+        //      用户手工摆过的归属,补分类一律跳过(见 spec §11.2)。
         const goldens = (await tx.table("goldens").toArray()) as GoldenRecord[];
         for (const g of goldens) {
+          const realFolder = g.folderId != null && g.folderId !== UNCATEGORIZED_FOLDER_ID;
           const patch: Partial<GoldenRecord> = {
-            categoryId: g.folderId ? `legacy:${g.folderId}` : null,
+            categoryId: realFolder ? `legacy:${g.folderId}` : null,
           };
-          if (g.folderId) {
+          if (realFolder) {
             patch.categorySource = "manual";
             patch.categoryAt = now;
           }

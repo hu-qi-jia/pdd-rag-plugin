@@ -164,6 +164,17 @@ async function seedLegacyV7(): Promise<void> {
       createdAt: 1,
       updatedAt: 1,
     },
+    {
+      // addGolden 的默认落点:用户从没挑过夹,不是"手工摆放"
+      id: 'gd-in-default',
+      folderId: 'uncategorized',
+      question: '发什么快递',
+      answer: '默认发中通',
+      questionHash: 'h3',
+      hasEmbedding: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    },
   ])
   legacy.close()
 }
@@ -173,7 +184,7 @@ describe('v7 → v8 旧文件夹迁移', () => {
     await Dexie.delete('PddCSDB')
   })
 
-  it('每个旧文件夹转成一条 filterable=false 的自定义类型', async () => {
+  it('用户自建的旧文件夹转成一条 filterable=false 的自定义类型', async () => {
     await seedLegacyV7()
     const upgraded = new PddDatabase()
     await upgraded.open()
@@ -185,8 +196,23 @@ describe('v7 → v8 旧文件夹迁移', () => {
     expect(hot!.filterable).toBe(false)
     expect(hot!.criteria).toBe('')
 
-    const presetDefault = await upgraded.categories.get('legacy:uncategorized')
-    expect(presetDefault!.name).toBe('默认文件夹')
+    // 预置「默认文件夹」不转:它只是 addGolden 写新标答时的系统占位,不是用户内容,
+    // 且与新内置「未分类」是同一个概念。转了它,默认夹里的标答就会被当成"手工摆放",
+    // 永远进不了补分类。
+    expect(await upgraded.categories.get('legacy:uncategorized')).toBeUndefined()
+    upgraded.close()
+  })
+
+  it('落在预置默认文件夹里的标答归为未分类,仍是补分类的候选', async () => {
+    await seedLegacyV7()
+    const upgraded = new PddDatabase()
+    await upgraded.open()
+
+    const inDefault = (await upgraded.goldens.get('gd-in-default'))!
+    expect(inDefault.categoryId).toBeNull()
+    // 用户没挑过夹,不是手工摆放 —— 不许打 manual,否则补分类会永远跳过它
+    expect(inDefault.categorySource).toBeUndefined()
+    expect(inDefault.categoryAt).toBeUndefined()
     upgraded.close()
   })
 

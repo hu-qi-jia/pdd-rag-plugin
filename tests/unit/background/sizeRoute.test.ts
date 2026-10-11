@@ -142,6 +142,19 @@ describe('尺码表标记', () => {
     expect(spy).toHaveBeenCalledTimes(2)
   })
 
+  it('★ deleteKbDoc 与 putKbDoc 对称:删掉被标记文档后,它的块回到检索池', async () => {
+    const { db, getRetrievalEntries } = await fresh()
+    await db.putKbDoc(kbDoc({ docId: '尺码表', content: 'S M L', isSizeTable: true }))
+    await addEmbeddedChunk(db, 'size-c0', '尺码表', 'S M L')
+
+    // 标记着 → 块被挡在池外
+    expect(await getRetrievalEntries()).toHaveLength(0)
+
+    // 文档删了,排除它的理由没了 → 缓存必须失效,块重新进池(不失效则读到陈旧的空池)
+    await db.deleteKbDoc('尺码表')
+    expect((await getRetrievalEntries()).map((e) => e.source.id)).toEqual(['size-c0'])
+  })
+
   it('重新上传文档分块不会丢掉标记', async () => {
     const { importKbDocument, setKbDocSizeTable, db, offscreen } = await fresh()
     vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})

@@ -812,6 +812,10 @@ export class PddDatabase extends Dexie {
 
   async deleteKbDoc(docId: string): Promise<void> {
     await this.kbDocs.delete(docId);
+    // 与 putKbDoc 对称:被删的文档可能带 isSizeTable,而它决定该文档的块进不进检索池。
+    // 现有调用方恰好"先删完块再删文档、块路径已失效",但把正确性押在调用顺序上是个陷阱 ——
+    // 换一个调用方、删的是被标记文档,缓存里就会留着本该重新进池的块(读取到已删文档的陈旧排除)。
+    invalidateRetrievalCache();
   }
 
   /**

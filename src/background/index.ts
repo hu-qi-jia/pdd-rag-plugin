@@ -19,6 +19,7 @@ import { processPendingEmbeddings } from "./syncEmbeddings";
 import { resplitStaleKbDocs } from "./kbResplit";
 import { registerAiPort } from "./aiIntegrate";
 import { isLlmConfigured, testLlmConnection } from "./llm";
+import { isJevConfigured, testJevConnection } from "./jev";
 import { handlePddIngest, restoreSegmenterState } from "./pddCapture";
 import { loadSettings } from "./settings";
 import { clearMetrics, metricsSnapshot, trackEvent } from "./metrics";
@@ -386,6 +387,25 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       };
       if (!isLlmConfigured(config)) return { ok: false, error: "unconfigured" };
       const r = await testLlmConnection(config);
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
+    },
+    (err) => ({ ok: false, error: String(err) }),
+  ),
+
+  // 测试连接(分类):与 TEST_LLM 同一条做法 —— 打真正会用的 System One 端点,
+  // 配置体来自设置页草稿。未配置直接回 unconfigured,**绝不发请求**(ADR-0007 零远程)。
+  TEST_JEV: route(
+    "TEST_JEV",
+    async (message) => {
+      const p = message.payload;
+      const config = {
+        baseUrl: String(p?.baseUrl ?? ""),
+        apiKey: String(p?.apiKey ?? ""),
+        model: String(p?.model ?? ""),
+        timeoutMs: Number(p?.timeoutMs) || DEFAULT_SETTINGS.jevTimeoutMs,
+      };
+      if (!isJevConfigured(config)) return { ok: false, error: "unconfigured" };
+      const r = await testJevConnection(config);
       return r.ok ? { ok: true } : { ok: false, error: r.error };
     },
     (err) => ({ ok: false, error: String(err) }),

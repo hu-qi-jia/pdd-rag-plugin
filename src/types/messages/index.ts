@@ -38,7 +38,7 @@ import type {
   FlattenFoldersRequest,
 } from './panel'
 import type { CreateKbRequest, UpdateKbRequest, DeleteKbRequest, UploadKbDocRequest } from './kb'
-import type { UpdateSettingsRequest, TestLlmRequest } from './settings'
+import type { UpdateSettingsRequest, TestLlmRequest, TestJevRequest } from './settings'
 import type { ExportDataRequest, ImportDataRequest } from './transfer'
 import type { FillInputRequest } from './fill'
 import type { TrackEventRequest, ClearMetricsRequest } from './metrics'
@@ -66,6 +66,7 @@ export type ExtensionMessage =
   | UploadKbDocRequest
   | UpdateSettingsRequest
   | TestLlmRequest
+  | TestJevRequest
   | ExportDataRequest
   | ImportDataRequest
   | FillInputRequest
@@ -97,7 +98,7 @@ import type {
   DeleteKbResponse,
   UploadKbDocResponse,
 } from './kb'
-import type { UpdateSettingsResponse, TestLlmResponse } from './settings'
+import type { UpdateSettingsResponse, TestLlmResponse, TestJevResponse } from './settings'
 import type { ExportDataResponse, ImportDataResponse } from './transfer'
 import type { FillInputResponse } from './fill'
 import type { TrackEventResponse, ClearMetricsResponse } from './metrics'
@@ -125,6 +126,7 @@ export type ExtensionMessageResponse =
   | UploadKbDocResponse
   | UpdateSettingsResponse
   | TestLlmResponse
+  | TestJevResponse
   | ExportDataResponse
   | ImportDataResponse
   | FillInputResponse

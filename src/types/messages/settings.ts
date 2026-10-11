@@ -26,3 +26,14 @@ export interface TestLlmResponse {
   type: 'TEST_LLM_RESPONSE'
   payload: { ok: boolean; error?: string }
 }
+
+/** 「测试连接」用**草稿里的**那份配置 —— 用户改完地址点测试,测的必须是刚改的那份 */
+export interface TestJevRequest {
+  type: 'TEST_JEV'
+  payload: { baseUrl: string; apiKey: string; model: string; timeoutMs?: number }
+}
+
+export interface TestJevResponse {
+  type: 'TEST_JEV_RESPONSE'
+  payload: { ok: boolean; error?: string }
+}

@@ -37,8 +37,24 @@ import {
   sameLlmFields,
   type LlmTestState,
 } from '../pdd/llm-form'
-import { LLM_TIMEOUT_MAX_MS, LLM_TIMEOUT_MIN_MS } from '../shared/constants'
-import type { TestLlmResponse } from '../types/messages'
+import {
+  JEV_DRAFT_DEBOUNCE_MS,
+  clearJevDraft,
+  loadJevDraft,
+  saveJevDraft,
+} from './jevDraft'
+import {
+  jevFormFromSettings,
+  jevFormReady,
+  type JevFormFields,
+  jevSettingsPatch,
+  jevTestFailed,
+  jevTestLabel,
+  sameJevFields,
+  type JevTestState,
+} from '../pdd/jev-form'
+import { JEV_TIMEOUT_MAX_MS, JEV_TIMEOUT_MIN_MS, LLM_TIMEOUT_MAX_MS, LLM_TIMEOUT_MIN_MS } from '../shared/constants'
+import type { TestJevResponse, TestLlmResponse } from '../types/messages'
 import { usageIsEmpty, usageRows } from './logic'
 
 /**
@@ -106,6 +122,41 @@ export function SettingsTab({
   useEffect(() => () => window.clearTimeout(draftTimer.current), [])
 
   const llmDirty = !!draft && !!llm && !sameLlmFields(llm, llmFormFromSettings(draft))
+
+  // ── 问题分类(第五十七轮 Task 3)──────────────────────────────────────────
+  // 与「AI 整合」同构的另一套外部端点配置:**独立的**草稿 / 测试结论 / 保存路径。
+  // 两块卡片同页相邻,任何状态都不能共用 —— 共用会让"改分类配置"把 AI 整合草稿顶掉。
+  const [jev, setJev] = useState<JevFormFields | null>(null)
+  const [showJevKey, setShowJevKey] = useState(false)
+  const [jevTest, setJevTest] = useState<JevTestState>({ phase: 'idle' })
+  // 只在首次拿到设置时灌一次初值(同 llmSeeded)
+  const jevSeeded = useRef(false)
+  useEffect(() => {
+    if (!draft || jevSeeded.current) return
+    jevSeeded.current = true
+    void (async () => {
+      const saved = await loadJevDraft()
+      setJev(saved ?? jevFormFromSettings(draft))
+    })()
+  }, [draft])
+
+  // 每次改动 300ms 后落一次 jev 草稿(与 llm 草稿同一套理由与同一档时长)
+  const jevDraftTimer = useRef<number>(0)
+  const updateJev = (patch: Partial<JevFormFields>) => {
+    setJev((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...patch }
+      window.clearTimeout(jevDraftTimer.current)
+      jevDraftTimer.current = window.setTimeout(
+        () => void saveJevDraft(next),
+        JEV_DRAFT_DEBOUNCE_MS,
+      )
+      return next
+    })
+  }
+  useEffect(() => () => window.clearTimeout(jevDraftTimer.current), [])
+
+  const jevDirty = !!draft && !!jev && !sameJevFields(jev, jevFormFromSettings(draft))
 
   const refreshStorageInfo = useCallback(async () => {
     try {
@@ -230,6 +281,60 @@ export function SettingsTab({
       )
     } catch (err) {
       setTest({ phase: 'fail', error: String(err) })
+    }
+  }
+
+  /** 保存分类接口配置:与 saveLlm 同一条路径 —— 先要权限、再落库(顺序不能反) */
+  const saveJev = async () => {
+    if (!draft || !jev) return
+    setBusy(true)
+    // 先掐掉挂起的草稿落盘:保存后草稿会被清掉,迟到的定时器会把旧值又写回去
+    window.clearTimeout(jevDraftTimer.current)
+    const origins = originsForBaseUrl(jev.baseUrl)
+    const granted = origins.length > 0 ? await ensureHostPermission(jev.baseUrl) : true
+    // 必须经 jevSettingsPatch 换名:表单叫 baseUrl、设置叫 jevBaseUrl
+    const next = { ...draft, ...jevSettingsPatch(jev) }
+    setJevTest({ phase: 'idle' }) // 改了配置,上一次的测试结论作废
+    const saved = await persist(next)
+    if (saved) {
+      setJev(jevFormFromSettings(saved))
+      await clearJevDraft()
+    }
+    if (!granted) {
+      setMsg({
+        ok: false,
+        text: `已保存,但未授权访问 ${origins[0] ?? '该域名'} —— 分类时会直接失败,请重试并点「允许」`,
+      })
+    }
+  }
+
+  /** 测试连接:拿**表单里的草稿**去测(改了地址还没存的场景才是真正会踩的坑) */
+  const testJev = async () => {
+    if (!jev) return
+    const origins = originsForBaseUrl(jev.baseUrl)
+    if (origins.length === 0) {
+      setJevTest({ phase: 'fail', error: 'badurl' })
+      return
+    }
+    setJevTest({ phase: 'testing' })
+    const granted = await ensureHostPermission(jev.baseUrl)
+    if (!granted) {
+      setJevTest({ phase: 'fail', error: 'network' })
+      setMsg({ ok: false, text: `未授权访问 ${origins[0]},请重试并点「允许」` })
+      return
+    }
+    try {
+      const resp = await sendMessage<TestJevResponse>({
+        type: 'TEST_JEV',
+        payload: { ...jev, timeoutMs: draft?.jevTimeoutMs ?? JEV_TIMEOUT_MAX_MS },
+      })
+      setJevTest(
+        resp.payload.ok
+          ? { phase: 'ok' }
+          : { phase: 'fail', error: resp.payload.error ?? 'unknown' },
+      )
+    } catch (err) {
+      setJevTest({ phase: 'fail', error: String(err) })
     }
   }
 
@@ -546,6 +651,142 @@ export function SettingsTab({
             </div>
           )}
         {llmDirty && (
+          <div style={{ fontSize: formType.desc.size, color: tk.textMuted, lineHeight: 1.6 }}>
+            有未保存的修改。
+          </div>
+        )}
+      </Card>
+
+      {/* 问题分类(第五十七轮 Task 3):结构逐段对应上面的「AI 整合」——
+          同一套显式保存(草稿边填边存、点保存才落库)与「测试连接」就地结论。 */}
+      <Card tk={tk} title="问题分类" style={SETTINGS_CARD_STYLE}>
+        <Toggle
+          tk={tk}
+          label="自动分类"
+          desc="开启后,新捕获的问答与手工新建的标准回答会自动归类;存量历史要在下方点一次按钮"
+          checked={draft.classifyEnabled}
+          onChange={(v) => void persist({ ...draft, classifyEnabled: v })}
+        />
+
+        {/* 数据边界(ADR-0007):外发内容仅三类 —— ①问题文本 ②类型名与判定说明
+            ③请求参数;回复与标准回答正文永不外发。与 ADR-0007「决策」段同源同义,
+            改动任一处都要同时核对另一处。 */}
+        <div
+          style={{
+            fontSize: formType.desc.size,
+            fontWeight: formType.desc.weight,
+            color: tk.textMuted,
+            lineHeight: 1.6,
+          }}
+        >
+          开启后,买家问题、历史问答的问题、标准回答的问题会发给 jev 判类型,
+          连同每个类型的名称与说明,以及请求本身携带的模型名等参数。
+          回复正文与标准回答正文永不外发,密钥只存本机。
+        </div>
+
+        {/* 滑杆读秒、设置存毫秒 —— 与 AI 区同一条单位换算坑(第五十二轮修):
+            Slider 的 value/min/max 必须与 format 同单位,否则值恒超上限、看起来"拖不动"。 */}
+        <Slider
+          tk={tk}
+          label="分类超时"
+          value={draft.jevTimeoutMs / 1000}
+          min={JEV_TIMEOUT_MIN_MS / 1000}
+          max={JEV_TIMEOUT_MAX_MS / 1000}
+          step={1}
+          onChange={(v) => persistSlider({ jevTimeoutMs: v * 1000 })}
+          format={(v) => `${v} 秒`}
+        />
+
+        <Field tk={tk} label="接口地址">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="https://api.typesafe.ai"
+            spellCheck={false}
+            value={jev?.baseUrl ?? ''}
+            onChange={(e) => updateJev({ baseUrl: e.target.value })}
+          />
+        </Field>
+
+        <Field tk={tk} label="API Key">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="sk-…"
+            spellCheck={false}
+            autoComplete="off"
+            type={showJevKey ? 'text' : 'password'}
+            value={jev?.apiKey ?? ''}
+            onChange={(e) => updateJev({ apiKey: e.target.value })}
+          />
+          <Btn tk={tk} variant="ghost" onClick={() => setShowJevKey((v) => !v)}>
+            {showJevKey ? '隐藏' : '显示'}
+          </Btn>
+        </Field>
+
+        <Field tk={tk} label="模型名">
+          <input
+            className="pddcs-input"
+            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            placeholder="jev-latest"
+            spellCheck={false}
+            value={jev?.model ?? ''}
+            onChange={(e) => updateJev({ model: e.target.value })}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+          <Btn
+            tk={tk}
+            variant="primary"
+            disabled={busy || !jevDirty}
+            title={jevDirty ? '保存分类接口配置' : '没有改动'}
+            onClick={() => void saveJev()}
+          >
+            保存
+          </Btn>
+          <Btn
+            tk={tk}
+            disabled={
+              busy ||
+              jevTest.phase === 'testing' ||
+              !jevFormReady(jev ?? { baseUrl: '', apiKey: '', model: '' })
+            }
+            title="用当前填写的地址与模型发一次最小请求,验证是否可用"
+            onClick={() => void testJev()}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {jevTest.phase === 'testing' && <LoaderIcon size={12} strokeWidth={2} />}
+              测试连接
+            </span>
+          </Btn>
+          {/* 测试结论就地显示在按钮右侧(不弹 toast:用户正盯着这一行等结果) */}
+          {jevTest.phase !== 'idle' && (
+            <span
+              style={{
+                fontSize: formType.desc.size,
+                fontWeight: formType.desc.weight,
+                color:
+                  jevTest.phase === 'ok'
+                    ? tk.textMuted
+                    : jevTestFailed(jevTest)
+                      ? tk.errorText
+                      : tk.textMuted,
+                lineHeight: 1.5,
+              }}
+            >
+              {jevTestLabel(jevTest)}
+            </span>
+          )}
+        </div>
+
+        {/* 两处"配了但不会生效"的自查提示(同 AI 区):开启未配置 / 改了没保存 */}
+        {draft.classifyEnabled && !jevFormReady(jevFormFromSettings(draft)) && (
+          <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
+            已开启,但接口地址 / API Key / 模型名尚未填全,分类不会生效。
+          </div>
+        )}
+        {jevDirty && (
           <div style={{ fontSize: formType.desc.size, color: tk.textMuted, lineHeight: 1.6 }}>
             有未保存的修改。
           </div>

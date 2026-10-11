@@ -128,8 +128,8 @@ describe('设置页滑杆:显示值必须落在自己的量程内(第五十二�
   it('每个滑杆的读数都在它的 [min, max] 里', async () => {
     await renderSettings()
     const all = probeSliders()
-    // 反空转:设置页的滑杆一个都不能少(阈值三档 + 保留期 + 整合超时 = 5)
-    expect(all.length).toBeGreaterThanOrEqual(5)
+    // 反空转:设置页的滑杆一个都不能少(相似度/标准回答/知识库/概率阈值四档 + 保留期 + 整合超时 + 分类超时 = 7)
+    expect(all.length).toBeGreaterThanOrEqual(7)
     for (const s of all) {
       expect(s.shown, `滑杆「${s.label}」读数 ${s.shown} 越出量程 [${s.min}, ${s.max}]`).toBeGreaterThanOrEqual(s.min)
       expect(s.shown, `滑杆「${s.label}」读数 ${s.shown} 越出量程 [${s.min}, ${s.max}]`).toBeLessThanOrEqual(s.max)
@@ -160,6 +160,28 @@ describe('设置页滑杆:显示值必须落在自己的量程内(第五十二�
     })
     expect(sentSettings).toHaveLength(1)
     expect(sentSettings[0].llmTimeoutMs).toBe(9000)
+  })
+})
+
+// 第五十七轮修复轮:概率阈值(§9.3 / §7.3)此前没有入口,只能手改 chrome.storage。
+// 0 是合法值(不按阈值过滤),滑杆给 0 必须原样落库 —— settings.ts 用 Number.isFinite
+// 判、不会把 0 当假值退成默认,这里钉住这条链路。
+describe('设置页 · 概率阈值滑杆', () => {
+  it('拖动概率阈值到 0 → 落库就是 0(0 是合法值)', async () => {
+    await renderSettings()
+    const s = probe('概率阈值')
+    expect(s.min).toBe(0)
+    expect(s.max).toBe(1)
+    expect(s.shown).toBe(DEFAULT_SETTINGS.classifyProbThreshold) // 默认 0.20
+
+    await drag(s.input, '0')
+    expect(probe('概率阈值').shown).toBe(0) // 即时反馈
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 650)) // 滑杆 500ms detent 防抖
+    })
+    expect(sentSettings).toHaveLength(1)
+    // 关键:0 不是"假值",必须原样进 payload(而不是被当成未改或退成默认)
+    expect(sentSettings[0].classifyProbThreshold).toBe(0)
   })
 })
 

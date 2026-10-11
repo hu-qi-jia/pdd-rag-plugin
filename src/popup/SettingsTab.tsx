@@ -815,6 +815,21 @@ export function SettingsTab({
           format={(v) => `${v} 秒`}
         />
 
+        {/* 概率阈值(spec §7.3 / §9.3「概率阈值 0.2」):分类结果低于此值的类型不进类型集合。
+            spec §十七把"默认值拍脑袋"列为高危风险、缓解措施是"P2 实测后回调" —— 没有入口
+            这个旋钮就永远回调不了。与其它阈值滑杆同构:0~1、step 0.05、两位小数。
+            0 是**合法值**(=不按阈值过滤),settings.ts 的夹取用 Number.isFinite 判、不会把 0 当假值。 */}
+        <Slider
+          tk={tk}
+          label="概率阈值"
+          value={draft.classifyProbThreshold}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => persistSlider({ classifyProbThreshold: v })}
+          format={(v) => v.toFixed(2)}
+        />
+
         <Field tk={tk} label="接口地址">
           <input
             className="pddcs-input"

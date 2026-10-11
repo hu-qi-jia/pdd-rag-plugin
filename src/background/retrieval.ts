@@ -13,6 +13,7 @@
  *    (同一条问答内部已在捕获时按 contentHash 幂等)。
  */
 import { hashText } from '../shared/text'
+import { UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
 import type { Suggestion } from '../types/messages'
 
 export type { Suggestion }
@@ -161,6 +162,8 @@ export function timeDecay(ts: number, now: number, halfLifeDays: number): number
  * 阈值按源独立(2026-09-16):历史 simThreshold(默认 0.5)、
  * 金标准 goldenThreshold(默认 0.4,放宽)、知识库 kbThreshold(默认 0.4,
  * 同档放宽但独立可调)——后两者均为人工精选源,宁多勿漏。
+ * `allowed` 省略或为 null 时不做类型过滤,结果与改动前逐字节相同;
+ * 传入集合时只保留集合内的历史/标答(知识库不参与分类,永不过滤)。
  * 返回按 rrfScore 降序排列。
  */
 export function rankCandidates(
@@ -169,10 +172,21 @@ export function rankCandidates(
   qvec: Float32Array,
   thresholds: { golden: number; history: number; knowledge: number },
   now: number,
+  allowed: ReadonlySet<string> | null = null,
 ): RankedSource[] {
   // 1. 阈值过滤(原始余弦;金标准/知识库放宽,各自独立)
   const survivors: Array<{ source: RetSource; cosine: number }> = []
   for (const { source, vec } of entries) {
+    // 类型过滤(第五十八轮):在**算余弦之前**跳过 —— 省下的是下游对 survivors 的
+    // BM25 分词,那才是这条管线真正的热路径。
+    // 知识库不参与分类,永不过滤;历史与标答按 categoryId 匹配。
+    if (
+      allowed !== null &&
+      source.kind !== 'knowledge' &&
+      !allowed.has(source.categoryId ?? UNCATEGORIZED_CATEGORY_ID)
+    ) {
+      continue
+    }
     const cosine = Math.max(0, Math.min(1, cosineSim(qvec, vec)))
     const gate =
       source.kind === 'history'

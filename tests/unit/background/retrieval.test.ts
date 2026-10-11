@@ -14,6 +14,7 @@ import {
   type RetSource,
   type RetReply,
 } from '../../../src/background/retrieval'
+import { UNCATEGORIZED_CATEGORY_ID } from '../../../src/shared/constants'
 
 const vec = (...xs: number[]) => new Float32Array(xs)
 const DAY = 86_400_000
@@ -480,5 +481,88 @@ describe('assembleSuggestions:类别配额', () => {
     })
     expect(out).toHaveLength(1)
     expect(out[0].kind).toBe('golden')
+  })
+})
+
+// ─── 类型过滤(第五十八轮:问题分类路由)──────────────────────────────────────
+
+describe('rankCandidates 的类型过滤', () => {
+  const qvec = vec(1, 0, 0)
+  const near = vec(1, 0, 0) // cosine=1,过所有阈值
+  const now = 100 * DAY
+  const thresholds = { golden: 0.4, history: 0.5, knowledge: 0.4 }
+  const withCat = (id: string, kind: RetSource['kind'], question: string, categoryId: string | null): {
+    source: RetSource
+    vec: Float32Array
+  } => ({ source: { ...mkSource(id, kind, question, 1000), categoryId }, vec: near })
+  // 逐字段快照:包含 id 序列、原始余弦与 rrfScore,且保持数组顺序
+  const dump = (rs: ReturnType<typeof rankCandidates>) =>
+    rs.map((r) => ({ id: r.source.id, cosine: r.cosine, rrfScore: r.rrfScore }))
+
+  it('★ allowed 为 null / 省略时,结果与不带过滤逐字节相同', () => {
+    // 特意放两条完全同分同时间的候选:排序退化为稳定序,任何位置/稳定性
+    // 变化都会在 id 序列上暴露;分数用 toEqual 严格相等(非 closeTo)。
+    const entries = [
+      withCat('g1', 'golden', '怎么开发票', 'cat-a'),
+      withCat('g2', 'golden', '怎么开发票', null),
+      withCat('h1', 'history', '怎么开发票', 'cat-a'),
+      withCat('h2', 'history', '怎么开发票', 'cat-b'),
+      withCat('h3', 'history', '怎么开发票', null),
+      withCat('k1', 'knowledge', '怎么开发票', null),
+    ]
+    const omitted = rankCandidates(entries, '怎么开发票', qvec, thresholds, now)
+    const withNull = rankCandidates(entries, '怎么开发票', qvec, thresholds, now, null)
+    expect(dump(withNull)).toEqual(dump(omitted))
+    expect(dump(omitted).length).toBeGreaterThan(0) // 空数组不算"等价"
+  })
+
+  it('allowed 是一个集合时,只保留该集合内的历史与标答', () => {
+    const entries = [
+      withCat('g-a', 'golden', '怎么开发票', 'cat-a'),
+      withCat('g-b', 'golden', '怎么开发票', 'cat-b'),
+      withCat('h-a', 'history', '怎么开发票', 'cat-a'),
+      withCat('h-b', 'history', '怎么开发票', 'cat-b'),
+    ]
+    const ranked = rankCandidates(entries, '怎么开发票', qvec, thresholds, now, new Set(['cat-a']))
+    expect(ranked.map((r) => r.source.id).sort()).toEqual(['g-a', 'h-a'])
+  })
+
+  it('★ 知识库永不受过滤 —— 它不参与分类', () => {
+    // k1 的 categoryId 为 null(知识库不分类的常态);若实现丢掉
+    // kind !== 'knowledge' 这段,它会被 `null ?? 'uncategorized'` 误杀。
+    const entries = [
+      withCat('k1', 'knowledge', '怎么开发票', null),
+      withCat('h-a', 'history', '怎么开发票', 'cat-a'),
+      withCat('h-b', 'history', '怎么开发票', 'cat-b'),
+    ]
+    const ranked = rankCandidates(entries, '怎么开发票', qvec, thresholds, now, new Set(['cat-a']))
+    const ids = ranked.map((r) => r.source.id)
+    expect(ids).toContain('k1') // 知识库在,且是以"不在集合里"的身份在
+    expect(ids.sort()).toEqual(['h-a', 'k1'])
+  })
+
+  it('categoryId 为 null 的记录按"未分类"匹配 —— 调用方要把它放进集合', () => {
+    const entries = [
+      withCat('h-null', 'history', '怎么开发票', null),
+      withCat('h-a', 'history', '怎么开发票', 'cat-a'),
+    ]
+    const ranked = rankCandidates(
+      entries,
+      '怎么开发票',
+      qvec,
+      thresholds,
+      now,
+      new Set([UNCATEGORIZED_CATEGORY_ID]),
+    )
+    expect(ranked.map((r) => r.source.id)).toEqual(['h-null'])
+  })
+
+  it('过滤后池子为空 → 返回空数组(由调用方决定要不要放宽)', () => {
+    const entries = [
+      withCat('g-b', 'golden', '怎么开发票', 'cat-b'),
+      withCat('h-b', 'history', '怎么开发票', 'cat-b'),
+    ]
+    const ranked = rankCandidates(entries, '怎么开发票', qvec, thresholds, now, new Set(['cat-a']))
+    expect(ranked).toEqual([])
   })
 })

@@ -11,6 +11,7 @@ import {
   type MetricEventKey,
 } from '../shared/metrics'
 import {
+  PRESET_CATEGORIES,
   UNCATEGORIZED_CATEGORY_ID,
   UNCATEGORIZED_CATEGORY_NAME,
   UNCATEGORIZED_CATEGORY_POSITION,
@@ -224,6 +225,53 @@ export function groupByCategory<T extends { categoryId: string }>(
   }
   if (uncategorized.length > 0) out.push({ category: uncCategory, items: uncategorized })
   return out
+}
+
+// ─── 判定说明与预置类型的"含义相近"提示(spec §5.3,纯提示不做拦截)──────────────
+
+/**
+ * 判定说明太短就不判定(去空白后的字符数)。比这更短的描述,一两个 bigram 偶然全中
+ * 并不能说明"含义相近" —— 阈值取 8 字:7 字串只有 6 个 bigram,要求其中 ≥50% 命中
+ * 太容易被"询问/商品"这类通用词凑出来;而预置描述最短的「价格优惠」约 40 字,
+ * 8 字以上才谈得上有可判断的语义体量。
+ */
+const CRITERIA_OVERLAP_MIN_CHARS = 8
+
+/** 包含度阈值:达到即把新建表单的说明行标成警示色(纯提示,不做计算式拦截) */
+const CRITERIA_OVERLAP_THRESHOLD = 0.5
+
+/** 相邻两字(bigram)集合 —— 中文无天然分词,bigram 是轻量的"含义相近"代理 */
+function bigrams(s: string): Set<string> {
+  const clean = s.replace(/\s+/g, '')
+  const out = new Set<string>()
+  for (let i = 0; i + 1 < clean.length; i++) out.add(clean.slice(i, i + 2))
+  return out
+}
+
+/**
+ * 判定说明是否与某个预置类型的描述高度重合(spec §5.3)。
+ *
+ * 用**包含度** `|a ∩ b| / min(|a|, |b|)`,而非 Sørensen–Dice(2·交/(|a|+|b|))。
+ * 原因:预置描述有 60~70 字(约 63 个 bigram),Dice 的分母被压死 —— 用户写
+ * 「尺码咨询」这类 4 字描述即使全部命中,Dice 也只有约 0.06,提示**永远不触发**,
+ * 而这条提示正是用来防"新增类型与预置重叠 → 全部类型判断质量一起下降"的静默失效。
+ * 包含度对短串归一,能识别"用户描述是预置描述的一个子集"这种真正危险的重叠形态。
+ *
+ * 太短的描述(< CRITERIA_OVERLAP_MIN_CHARS)直接放行:一两个 bigram 偶然全中不是
+ * "含义相近"。名字唯一性才是硬拦截,这里只负责把说明行标红。
+ */
+export function criteriaOverlapsPresets(criteria: string): boolean {
+  const clean = criteria.replace(/\s+/g, '')
+  if (clean.length < CRITERIA_OVERLAP_MIN_CHARS) return false
+  const a = bigrams(clean)
+  if (a.size === 0) return false
+  return PRESET_CATEGORIES.some((p) => {
+    const b = bigrams(p.criteria)
+    if (b.size === 0) return false
+    let inter = 0
+    for (const g of a) if (b.has(g)) inter++
+    return inter / Math.min(a.size, b.size) >= CRITERIA_OVERLAP_THRESHOLD
+  })
 }
 
 /** 标准回答按问题分组计数(questionHash → 条数):面板标"同问题 N 条 / 已满"用 */

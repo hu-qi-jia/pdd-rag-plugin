@@ -31,8 +31,14 @@ import type {
   UpdateGoldenCategoryResponse,
   UpdateGoldenResponse,
 } from '../types/messages'
-import { MAX_GOLDENS_PER_QUESTION, PRESET_CATEGORIES } from '../shared/constants'
-import { categoryOrder, countGoldensByQuestion, groupByCategory, orderGoldensByRecency } from './logic'
+import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
+import {
+  categoryOrder,
+  countGoldensByQuestion,
+  criteriaOverlapsPresets,
+  groupByCategory,
+  orderGoldensByRecency,
+} from './logic'
 import { hashText } from '../shared/text'
 import {
   Badge,
@@ -813,31 +819,4 @@ function BtnMini({
 }
 
 // ─── 判定说明与预置的"含义相近"提示(spec §五.3,纯提示不做拦截)──────────────────
-
-/** 重合度阈值:达到即把新建表单的说明行标成警示色 */
-const CRITERIA_OVERLAP_THRESHOLD = 0.5
-
-/** 相邻两字(bigram)集合 —— 中文无天然分词,bigram 是轻量的"含义相近"代理 */
-function bigrams(s: string): Set<string> {
-  const clean = s.replace(/\s+/g, '')
-  const out = new Set<string>()
-  for (let i = 0; i + 1 < clean.length; i++) out.add(clean.slice(i, i + 2))
-  return out
-}
-
-/**
- * 判定说明是否与某个预置类型的描述高度重合。
- * 用 Sørensen–Dice 系数衡量(2·交集 / 两边大小和),≥ 阈值即提示。
- * 刻意不做计算式拦截 —— 为一个保存时的提示引入嵌入或大模型不值得,名称唯一性才是硬拦截。
- */
-export function criteriaOverlapsPresets(criteria: string): boolean {
-  const a = bigrams(criteria)
-  if (a.size === 0) return false
-  return PRESET_CATEGORIES.some((p) => {
-    const b = bigrams(p.criteria)
-    if (b.size === 0) return false
-    let inter = 0
-    for (const g of a) if (b.has(g)) inter++
-    return (2 * inter) / (a.size + b.size) >= CRITERIA_OVERLAP_THRESHOLD
-  })
-}
+// 计算本体在 popup/logic.ts(与其它纯逻辑同层,便于单测);此处只负责调用与展示。

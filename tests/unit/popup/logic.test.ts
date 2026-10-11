@@ -13,6 +13,7 @@ import {
   missRate,
   usageIsEmpty,
   usageRows,
+  criteriaOverlapsPresets,
   type PanelFolder,
   type PanelGolden,
   type FolderNode,
@@ -231,5 +232,32 @@ describe('使用统计展示行', () => {
     expect(usageIsEmpty({})).toBe(true)
     expect(usageIsEmpty({ 'search.total': 0 })).toBe(true)
     expect(usageIsEmpty({ 'search.total': 1 })).toBe(false)
+  })
+})
+
+// spec §5.3:新增类型若与预置语义重叠,jev 会在相近选项间摇摆,全部类型的判断质量一起下降。
+// 这条提示此前用 Dice 系数,预置描述 60~70 字把分母压死、静默地从不触发;改为包含度 +
+// 最小长度守卫后,用**计划自己那个例子**(再建一个与「尺码推荐」相近的类型)钉住它会亮。
+describe('criteriaOverlapsPresets:与预置类型含义相近的提示', () => {
+  it('★ 与「尺码推荐」语义相近的判定说明 → 触发(计划 §五.3 的例子)', () => {
+    // 旧实现用 Dice:该串 dice≈0.28 < 0.5(从不触发);新实现包含度≈0.69 ≥ 0.5(触发)。
+    expect(criteriaOverlapsPresets('买家询问该选哪个尺码,给出身高体重')).toBe(true)
+  })
+
+  it('★ 无关的判定说明 → 不触发', () => {
+    expect(criteriaOverlapsPresets('询问发票抬头、开票税率与公司税号')).toBe(false)
+  })
+
+  it('直接抄预置原文的一个子串 → 触发(短串是预置描述的子集,这正是包含度能识别的形态)', () => {
+    expect(criteriaOverlapsPresets('询问发货时间、催发货、快递公司、运单号')).toBe(true)
+  })
+
+  it('太短的说明不判定:一两个 bigram 偶然全中不算"含义相近"', () => {
+    expect(criteriaOverlapsPresets('尺码咨询')).toBe(false)
+    expect(criteriaOverlapsPresets('退换货')).toBe(false)
+  })
+
+  it('空白说明 → 不触发(空描述本身由后台硬拦截)', () => {
+    expect(criteriaOverlapsPresets('   ')).toBe(false)
   })
 })

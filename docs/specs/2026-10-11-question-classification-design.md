@@ -313,7 +313,11 @@ jev 的 `choice` 返回**全部选项的概率分布**，不只返回被选中�
 
 ```ts
 for (const { source, vec } of entries) {
-  if (allowed !== null && source.categoryId !== null && !allowed.has(source.categoryId)) continue
+  // 用 != null（同时命中 undefined 与 null）：判据必须把"缺省"与"null"一视同仁。
+  // 迁移把 qaRecords.categoryId 留成**缺省**（等价 null，见 §10 第 4 步），
+  // 若写成 `!== null`，undefined !== null 为真，从未分类的记录会被**排除**出池 ——
+  // 与"未分类恒进池"直接矛盾，表现为静默的召回倒退。
+  if (allowed !== null && source.categoryId != null && !allowed.has(source.categoryId)) continue
   const cosine = Math.max(0, Math.min(1, cosineSim(qvec, vec)))
   ...
 }
@@ -322,6 +326,12 @@ for (const { source, vec } of entries) {
 `allowed === null` 表示不筛（情形 A / B / C 退化）。
 
 配套：`RetSource`（`retrieval.ts:23-30`）加 `categoryId: string | null`；`retrievalCache.ts` 重建时一并带上。
+**`RetSource.categoryId` 在 `retrievalCache` 边界处用 `?? null` 归一**：库里的记录可能**缺省**
+该字段（迁移后的 `qaRecords`、旧数据），归一后 `RetSource` 上只有 `string | null` 两种取值，
+上面那句 `!= null` 才是完整的防线。
+
+> **路由计划的落地要求**：必须补一条测试 —— 一条 `categoryId` **缺省**（字段不存在）的候选，
+> 在 `allowed` 非空（正在按类型过滤）时**仍留在池里**。只测 `null` 会漏掉缺省这条真实路径。
 
 **RRF、BM25、`PANEL_QUOTA`、阈值门控、时间衰减一律不动。**
 
@@ -456,7 +466,10 @@ export function updateCachedCategory(id: string, categoryId: string | null): voi
 - 入口：设置页「开始分类全部历史」按钮（D10）
 - 按钮文案**必须先算出条数**：`将把 N 条历史问题 + M 条标准回答的问题发送到 api.typesafe.ai（不含任何回复内容）`
 - 运行中显示进度 `382 / 1285`，可中断
-- 完成报告：`成功 N · 失败 M · 跳过 K（人工指定过）`
+- 完成报告：`成功 N · 失败 M · 跳过 K（运行中被保留期清理）`
+  - 这里的 K **不是**"人工指定过"的条数：`manual` 记录在快照阶段就被 `isBackfillCandidate`
+    排除，根本没进 `total`，K 若指它则恒为 0、永远为假。K 实际可计的是**运行中记录消失** ——
+    快照到写回之间记录被 TTL 清掉，Dexie `update` 匹配 0 行（不抛错）时计入。
 - **每条跑完立即落库**，中断不丢进度
 
 ### 11.2 跳过与失败

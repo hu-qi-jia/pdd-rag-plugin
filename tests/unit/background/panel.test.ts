@@ -7,13 +7,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Dexie from 'dexie'
 import type { QaRecord, ReplyRecord, GoldenRecord } from '../../../src/types/memory'
 import { hashText } from '../../../src/shared/text'
+import { UNCATEGORIZED_CATEGORY_ID } from '../../../src/shared/constants'
 
 /** 重置模块注册表 → panel.ts(及其单例 db)在已删库的 fake-indexeddb 上重建 */
 async function freshPanel() {
   vi.resetModules()
-  const { getMemoryList } = await import('../../../src/background/panel')
+  const { getMemoryList, getPanelData } = await import('../../../src/background/panel')
   const { db } = await import('../../../src/background/db')
-  return { getMemoryList, db }
+  return { getMemoryList, getPanelData, db }
 }
 
 function makeQa(over: Partial<QaRecord> & { id: string }): QaRecord {
@@ -255,5 +256,79 @@ describe('flattenFolders:遗留子文件夹一键拍平(2026-09-15 PM7)', () => 
     expect(out).toEqual({ success: true, flattened: 0 })
     expect(await db.folders.count()).toBe(1)
     expect((await db.goldens.get('g-1'))?.folderId).toBe('fd-root')
+  })
+})
+
+// ─── 分类字段回带(第五十七轮) ────────────────────────────────────────────────────
+//
+// 这一组钉的是"出口归一":库里的 categoryId 可能是 undefined / null / 具体 id 三种形态,
+// 面板拿到的必须是**具体的 id**且永不为 undefined —— 否则下游任何 `!== null` 判断
+// 都会把"没分类"当成"有分类"(见裁决 I2)。
+
+describe('面板回带分类', () => {
+  it('categoryId 缺省或为 null 的记录,一律归一成 uncategorized', async () => {
+    const { getMemoryList, db } = await freshPanel()
+    await db.addQaRecord(makeQa({ id: 'qa-undef', questionTs: 1 }))
+    await db.addQaRecord(makeQa({ id: 'qa-null', questionTs: 2, categoryId: null }))
+
+    const { items } = await getMemoryList({ type: 'GET_MEMORY_LIST' })
+    expect(items.find((i) => i.id === 'qa-undef')!.categoryId).toBe(
+      UNCATEGORIZED_CATEGORY_ID,
+    )
+    expect(items.find((i) => i.id === 'qa-null')!.categoryId).toBe(
+      UNCATEGORIZED_CATEGORY_ID,
+    )
+  })
+
+  it('有类型的记录原样回带', async () => {
+    const { getMemoryList, db } = await freshPanel()
+    await db.addQaRecord(makeQa({ id: 'qa-1', categoryId: 'preset:order' }))
+
+    const { items } = await getMemoryList({ type: 'GET_MEMORY_LIST' })
+    expect(items.find((i) => i.id === 'qa-1')!.categoryId).toBe('preset:order')
+  })
+
+  it('标答回带 categoryId 与 categorySource', async () => {
+    const { getPanelData, db } = await freshPanel()
+    await db.goldens.add(
+      makeGolden({ id: 'g-typed', categoryId: 'preset:price', categorySource: 'manual' }),
+    )
+    await db.goldens.add(makeGolden({ id: 'g-bare' }))
+
+    const out = await getPanelData({ type: 'GET_PANEL_DATA' })
+    const typed = out.goldens.find((g) => g.id === 'g-typed')!
+    expect(typed.categoryId).toBe('preset:price')
+    expect(typed.categorySource).toBe('manual')
+    const bare = out.goldens.find((g) => g.id === 'g-bare')!
+    expect(bare.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(bare.categorySource).toBeUndefined()
+  })
+
+  it('getPanelData 回带类型表(按 position 升序,未分类在后)', async () => {
+    const { getPanelData, db } = await freshPanel()
+    await db.ensurePresetCategories()
+
+    const out = await getPanelData({ type: 'GET_PANEL_DATA' })
+    expect(out.categories).toHaveLength(7)
+    expect(out.categories[0].id).toBe('preset:size')
+    expect(out.categories[6].id).toBe(UNCATEGORIZED_CATEGORY_ID)
+    // 面板 DTO 不带 criteria(那是喂给 jev 的,面板用不上)
+    for (const c of out.categories) {
+      expect(Object.keys(c).sort()).toEqual([
+        'filterable',
+        'id',
+        'kind',
+        'name',
+        'position',
+      ])
+    }
+  })
+
+  it('没跑过分类时 categories 仍回带(种子在 SW 启动已种下)', async () => {
+    const { getPanelData, db } = await freshPanel()
+    await db.ensurePresetCategories()
+
+    const out = await getPanelData({ type: 'GET_PANEL_DATA' })
+    expect(out.categories).toHaveLength(7)
   })
 })

@@ -283,7 +283,13 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
   GET_PANEL_DATA: route(
     "GET_PANEL_DATA",
     (message) => getPanelData(message),
-    (err) => ({ folders: [], goldens: [], knowledge: [], error: String(err) }),
+    (err) => ({
+      folders: [],
+      goldens: [],
+      knowledge: [],
+      categories: [],
+      error: String(err),
+    }),
   ),
 
   FLATTEN_FOLDERS: route(

@@ -3,7 +3,7 @@
  * 树构建等纯逻辑见 popup/logic.ts;本文件只做 DB 读取与形状组装。
  */
 import { db } from "./db";
-import { UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
+import { UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
 import type {
   ClearMemoryDataRequest,
   CreateFolderRequest,
@@ -59,6 +59,8 @@ export async function getMemoryList(
     questionTs: q.questionTs,
     replyCount: q.replyCount,
     replies: (byQa.get(q.id) ?? []).sort((a, b) => a.ts - b.ts),
+    // 出口归一(裁决 I2):库里三种形态(undefined / null / 具体 id)在这里收敛成一种
+    categoryId: q.categoryId ?? UNCATEGORIZED_CATEGORY_ID,
   }));
   return { items, total, hasMore: offset + items.length < total };
 }
@@ -93,18 +95,20 @@ export async function getPanelData(
 ): Promise<
   Pick<
     GetPanelDataResponse["payload"],
-    "folders" | "goldens" | "knowledge" | "legacyDocs" | "itemUsage"
+    "folders" | "goldens" | "knowledge" | "categories" | "legacyDocs" | "itemUsage"
   >
 > {
-  const [folders, goldens, knowledge, legacyDocs, itemUsage] = await Promise.all([
-    db.listFolders(),
-    db.goldens.toArray(),
-    db.listKnowledge(),
-    db.getLegacyDocIds(),
-    // 逐条用量随面板数据一起回:面板与知识库页本就每次开都取这份数据,
-    // 顺手带上比再开一条"取用量"的消息少一趟往返(计数只有几十行,可忽略)
-    db.listItemUsage(),
-  ]);
+  const [folders, goldens, knowledge, categories, legacyDocs, itemUsage] =
+    await Promise.all([
+      db.listFolders(),
+      db.goldens.toArray(),
+      db.listKnowledge(),
+      db.listCategories(),
+      db.getLegacyDocIds(),
+      // 逐条用量随面板数据一起回:面板与知识库页本就每次开都取这份数据,
+      // 顺手带上比再开一条"取用量"的消息少一趟往返(计数只有几十行,可忽略)
+      db.listItemUsage(),
+    ]);
   return {
     folders: folders.map((f) => ({
       id: f.id,
@@ -119,6 +123,8 @@ export async function getPanelData(
       answer: g.answer,
       hasEmbedding: g.hasEmbedding,
       updatedAt: g.updatedAt,
+      categoryId: g.categoryId ?? UNCATEGORIZED_CATEGORY_ID,
+      categorySource: g.categorySource,
     })),
     knowledge: knowledge.map((k) => ({
       id: k.id,
@@ -128,6 +134,14 @@ export async function getPanelData(
       enabled: k.enabled,
       ...(k.source !== undefined ? { source: k.source } : {}),
       updatedAt: k.updatedAt,
+    })),
+    // 面板 DTO 不带 criteria(那是喂给 jev 的选项描述)
+    categories: categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      kind: c.kind,
+      filterable: c.filterable,
+      position: c.position,
     })),
     legacyDocs,
     itemUsage,

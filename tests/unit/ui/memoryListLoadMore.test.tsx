@@ -19,7 +19,14 @@ const { lightTheme } = await import('../../../src/ui/theme')
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 function makeItem(id: string): MemoryListItem {
-  return { id, question: `问题${id}`, questionTs: 1, replyCount: 0, replies: [] }
+  return {
+    id,
+    question: `问题${id}`,
+    questionTs: 1,
+    replyCount: 0,
+    replies: [],
+    categoryId: 'uncategorized',
+  }
 }
 
 function page(items: MemoryListItem[], total: number, hasMore: boolean): GetMemoryListResponse {

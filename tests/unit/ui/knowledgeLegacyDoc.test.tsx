@@ -49,6 +49,7 @@ async function renderWith(legacyDocs?: string[]) {
       folders: [],
       goldens: [],
       knowledge: [chunk],
+      categories: [],
       ...(legacyDocs !== undefined ? { legacyDocs } : {}),
     },
   }

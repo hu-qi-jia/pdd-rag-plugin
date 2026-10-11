@@ -17,6 +17,11 @@ export interface MemoryListItem {
   questionTs: number
   replyCount: number
   replies: MemoryReplyItem[]
+  /**
+   * 问题类型 id。**已归一**:库里缺省或为 null 的记录在这里一律是 'uncategorized'。
+   * 面板据此分桶,不需要再做 null/undefined 判断。
+   */
+  categoryId: string
 }
 
 export interface GetMemoryListRequest {
@@ -73,6 +78,20 @@ export interface PanelGolden {
   answer: string
   hasEmbedding: number
   updatedAt: number
+  /** 问题类型 id;**已归一**(缺省 → 'uncategorized') */
+  categoryId: string
+  /** 谁打的标。'manual' = 你手工摆的,补分类会跳过;缺省 = 机器没跑过 */
+  categorySource?: string
+}
+
+/** 面板用的类型条目。**不带 criteria** —— 那是喂给 jev 的,面板用不上,也不该跟着 DTO 到处传 */
+export interface PanelCategory {
+  id: string
+  name: string
+  kind: 'preset' | 'custom' | 'uncategorized'
+  /** true = 参与类型过滤(与"是 jev 的选项"是同一个集合) */
+  filterable: boolean
+  position: number
 }
 
 /** 知识库条目面板线类型(剥向量) */
@@ -97,6 +116,8 @@ export interface GetPanelDataResponse {
     folders: PanelFolder[]
     goldens: PanelGolden[]
     knowledge: PanelKnowledge[]
+    /** 全部问题类型,按 position 升序(未分类恒最后);面板据此渲染类型表/分桶 */
+    categories: PanelCategory[]
     /** 升级前上传、无原文可重切的文档名(知识库页提示重新上传;缺省=无) */
     legacyDocs?: string[]
     /**

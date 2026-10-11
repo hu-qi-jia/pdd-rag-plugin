@@ -17,7 +17,10 @@ import {
   type PanelGolden,
   type FolderNode,
 } from '../../../src/popup/logic'
-import { UNCATEGORIZED_FOLDER_ID } from '../../../src/shared/constants'
+import {
+  UNCATEGORIZED_CATEGORY_ID,
+  UNCATEGORIZED_FOLDER_ID,
+} from '../../../src/shared/constants'
 const DAY = 86_400_000
 
 describe('filterQaRecords 关键词筛选', () => {
@@ -77,6 +80,7 @@ describe('buildFolderTree 两层文件夹树', () => {
     answer: `a-${id}`,
     hasEmbedding: 1,
     updatedAt: 1,
+    categoryId: UNCATEGORIZED_CATEGORY_ID,
   })
 
   it('根夹/子夹按 position 排序,金标准按 folderId 归组', () => {
@@ -129,6 +133,7 @@ describe('orderGoldensByRecency / countGoldensByQuestion', () => {
     answer: `a-${id}`,
     hasEmbedding: 1,
     updatedAt,
+    categoryId: UNCATEGORIZED_CATEGORY_ID,
   })
 
   it('同问题的多条按设置时间倒序,组位置取首成员位置', () => {

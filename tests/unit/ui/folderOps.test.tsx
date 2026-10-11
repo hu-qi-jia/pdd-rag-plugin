@@ -37,6 +37,7 @@ const golden = (id: string, overrides: Partial<PanelGolden> = {}): PanelGolden =
   answer: `回复${id}`,
   hasEmbedding: 1,
   updatedAt: 0,
+  categoryId: 'uncategorized',
   ...overrides,
 })
 

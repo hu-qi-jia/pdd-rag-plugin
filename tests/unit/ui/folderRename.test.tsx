@@ -47,7 +47,7 @@ afterEach(() => {
 async function renderWith(folders: PanelFolder[]) {
   mockedSend.mockResolvedValueOnce({
     type: 'GET_PANEL_DATA_RESPONSE',
-    payload: { folders, goldens: [], knowledge: [] },
+    payload: { folders, goldens: [], knowledge: [], categories: [] },
   } as GetPanelDataResponse)
   await act(async () => {
     root.render(<FoldersTab tk={lightTheme} onDataChanged={vi.fn()} />)

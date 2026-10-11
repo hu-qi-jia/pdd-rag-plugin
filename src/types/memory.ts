@@ -28,6 +28,14 @@ export interface QaRecord {
   embeddingVersion?: string
   /** 0=待嵌 1=已嵌 -1=失败(下次启动扫描重试) */
   hasEmbedding: number
+  /** 问题类型;null/'uncategorized' = 未分类 */
+  categoryId?: string | null
+  /** 打标时该标签的概率(0~1);低于阈值不落标,直接进未分类 */
+  categoryConfidence?: number
+  /** 谁打的标:jev 自动 / 人工指定 */
+  categorySource?: 'jev' | 'manual'
+  /** 打标时间;判定说明改动后可据此只重跑旧的 */
+  categoryAt?: number
   /** 冗余计数:挂载的回复条数 */
   replyCount: number
   createdAt: number
@@ -75,6 +83,14 @@ export interface GoldenRecord {
   /** 提升来源溯源(展示用,不参与检索) */
   sourceRecordId?: string
   sourceReplyId?: string
+  /** 取代原 folderId;null/'uncategorized' = 未分类 */
+  categoryId?: string | null
+  /** 打标时该标签的概率(0~1) */
+  categoryConfidence?: number
+  /** 比 qaRecords 多一个 'inherit':提升时从来源历史问答继承 */
+  categorySource?: 'jev' | 'inherit' | 'manual'
+  /** 打标时间 */
+  categoryAt?: number
   createdAt: number
   updatedAt: number
 }
@@ -131,6 +147,43 @@ export interface KbDocRecord {
   splitterVersion: string
   /** 最近一次分块产出的块数(展示用) */
   chunkCount: number
+  /** 是否尺码表。标记为尺码表的文档不做向量检索,整篇原文作为 LLM 生成材料(见 spec §八) */
+  isSizeTable?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 问题类型(categories):自动分类的分类轴(第五十六轮)。
+ *
+ * 取代 folders 的**分类**职责 —— folders 只挂金标准且是纯手工两层树,
+ * 这张表是机器自动打的、跨问答与标准回答两个实体的单一分类轴。
+ * folders 表本身保留不删(回滚用),迁移后不再被读写。
+ */
+export interface CategoryRecord {
+  /** 主键。预置为 'preset:size' 等;未分类为 'uncategorized';迁移来的旧文件夹为 'legacy:<旧夹id>';新建为 uuid */
+  id: string
+  /** 显示名 */
+  name: string
+  /**
+   * 判定说明 —— 原样作为 jev 的 criteria 选项描述。
+   * filterable=true 的类型此字段必非空(见 constants.ts 的 PRESET_CATEGORIES 与新增类型校验)。
+   */
+  criteria: string
+  kind: 'preset' | 'custom' | 'uncategorized'
+  /** 查询时怎么走:'retrieve' 按类型筛池;'size' 不走检索,走尺码表 + LLM 生成 */
+  route: 'retrieve' | 'size'
+  /**
+   * 是否参与类型过滤。
+   * true  = 查询时按类型筛(进了类型集合才会被检索)
+   * false = 永远进检索池,不做类型筛
+   *
+   * 硬约束:filterable === true 与「是 jev 的分类选项」是**同一个集合**,
+   * 不设第二个开关。未分类与迁移来的旧文件夹恒为 false。
+   */
+  filterable: boolean
+  /** 显示顺序(升序);未分类恒为 9999,排在最后 */
+  position: number
   createdAt: number
   updatedAt: number
 }

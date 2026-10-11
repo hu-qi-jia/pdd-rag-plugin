@@ -190,7 +190,8 @@ export async function runBackfill(opts: {
       try {
         const write = item.kind === "history" ? writeHistory : writeGolden
         const written = await write(item.id, hit)
-        // 0 = 行已不在(Dexie update 对缺失行不抛错,只返回 0)→ 计 skipped
+        // 写回条数为 0 有两种成因,都算 skipped:① 行已不在(Dexie update 对缺失行不抛错,只返回 0);
+        // ② 标准回答已被用户手工摆放(manual 守卫拒绝机器覆盖,见 db.updateGoldenCategory)。
         if (written === 0) progress.skipped++
         else if (hit) progress.ok++
         else progress.failed++

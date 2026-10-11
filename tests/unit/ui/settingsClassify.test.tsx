@@ -377,6 +377,35 @@ describe('设置页 · 问题分类区 · 补存量', () => {
     expect(classifyCard().textContent).toContain('先开启自动分类并填全配置')
   })
 
+  it('★ 端到端:未配置点「开始分类全部历史」不发任何请求(客户端禁用 + 后台短路,两层)', async () => {
+    // 客户端那道门禁靠按钮 disabled 钉(此前没有端到端测试);后台 unconfigured 短路也
+    // 只在 mock 掉 loadSettings 的单测里出现过。这条同时钉两层:① 点禁用按钮不发消息;
+    // ② 即便把 START_BACKFILL 直接喂给**真实**后台状态机,它也必须拒发、一次 fetch 都不发。
+    const { startBackfill } = await import('../../../src/background/backfillState')
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    try {
+      // ① 客户端:未配置 → 按钮禁用;点它没有任何 START_BACKFILL 离开弹窗
+      await renderSettings({ ...DEFAULT_SETTINGS, classifyEnabled: false })
+      const btn = textBtnIn(classifyCard(), '开始分类全部历史')
+      expect(btn.disabled).toBe(true)
+      await act(async () => {
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      await flush()
+      expect(sent.some((m) => m.type === 'START_BACKFILL')).toBe(false)
+
+      // ② 后台:真实 loadSettings 读到的是未配置(本用例的 chrome.storage.local 为空),
+      //    startBackfill 直接拒绝,绝不外发
+      const r = await startBackfill()
+      expect(r).toEqual({ started: false, error: '自动分类未开启' })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('点「开始分类全部历史」→ 发 START_BACKFILL', async () => {
     backfillPending = { history: 3, golden: 0 }
     await renderSettings({ ...DEFAULT_SETTINGS, ...configured })

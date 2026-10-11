@@ -644,16 +644,44 @@ export class PddDatabase extends Dexie {
     return record.id;
   }
 
-  /** 写回标准回答的分类结果(第五十六轮);hit 为 null 表示判不准/失败 → 落未分类。
-   *  返回 Dexie 更新条数(0 = 行已不在),语义与 updateQaCategory 一致。 */
+  /**
+   * **机器**写回标准回答的分类结果(第五十六轮);hit 为 null 表示判不准/失败 → 落未分类。
+   * 返回 Dexie 更新条数(0 = 行已不在 **或** 因 manual 守卫被跳过),语义与 updateQaCategory 一致。
+   *
+   * manual 守卫(第五十七轮 Task 6 修复轮 2/5):`isBackfillCandidate` 只在**挑候选那一刻**
+   * 排除 manual,挡不住两类迟到的机器写入 ——
+   *   ① 手工新建时即发即忘的打标:用户在建完一两秒内把标答移到类型(写 manual),
+   *      jev 的结果随后回来会把它改回机器判定,用户看到"我刚摆过去,它自己跳回去了";
+   *   ② 补分类运行期间:点了开始补分类之后、跑到某条之前,用户手工移动了那条。
+   * 收口在这里挡一次(与 classify 的 refuse() 同一思路:一处改,所有机器路径覆盖)。
+   * **人工写入不走这里** —— 见 setGoldenCategoryManual。
+   */
   async updateGoldenCategory(
     id: string,
     hit: { categoryId: string; confidence: number } | null,
   ): Promise<number> {
+    const existing = await this.goldens.get(id);
+    if (!existing) return 0;
+    if (existing.categorySource === "manual") return 0; // 机器永不许覆盖用户手工摆放
     return await this.goldens.update(id, {
       categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
       categoryConfidence: hit ? hit.confidence : undefined,
       categorySource: "jev",
+      categoryAt: Date.now(),
+    });
+  }
+
+  /**
+   * **人工**把标答摆到某个类型(panel#updateGoldenCategory 的落库口)。
+   *
+   * 无条件写入且把来源钉成 'manual' —— 它是 manual 的产生地,所以机器守卫再严也不挡它;
+   * 重复摆放(已是 manual 再改)同样生效。刻意不碰 categoryConfidence(那是机器置信度),
+   * 也不作废检索缓存(分类尚未进检索)。
+   */
+  async setGoldenCategoryManual(id: string, categoryId: string): Promise<number> {
+    return await this.goldens.update(id, {
+      categoryId,
+      categorySource: "manual",
       categoryAt: Date.now(),
     });
   }

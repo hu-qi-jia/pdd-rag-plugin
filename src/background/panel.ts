@@ -158,7 +158,8 @@ export async function getPanelData(
  * 补分类的候选判据对 manual 一律跳过(见 db#isBackfillCandidate / spec §11.2)。
  *
  * 刻意**不走 db.updateGolden()**:那条会作废检索缓存并带 updatedAt 变更语义,
- * 而分类尚未进检索,一次纯摆放不该惊动检索管线。直接写表,只动分类三字段。
+ * 而分类尚未进检索,一次纯摆放不该惊动检索管线。
+ * 落库走 `db.setGoldenCategoryManual` —— 人工写入无条件生效,机器的 manual 守卫不挡它。
  *
  * 目标类型不存在 / 标答不存在都报错且**不改动**。
  */
@@ -170,11 +171,7 @@ export async function updateGoldenCategory(
   if (!cat) return { success: false, error: "目标类型不存在" };
   const g = await db.getGolden(id);
   if (!g) return { success: false, error: "标准回答不存在" };
-  await db.goldens.update(id, {
-    categoryId,
-    categorySource: "manual",
-    categoryAt: Date.now(),
-  });
+  await db.setGoldenCategoryManual(id, categoryId);
   return { success: true };
 }
 

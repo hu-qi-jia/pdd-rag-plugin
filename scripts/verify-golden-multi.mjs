@@ -110,8 +110,8 @@ const CAT_NAME = '订单物流'
 const CAT_ID = 'preset:order'
 // 用独立问题,避免撞上上面那个问题的 3 条上限
 const gTyped = await send('ADD_GOLDEN', { question: '类型验收:订单什么时候发货?', answer: '类型验收答复' })
-// 等 add 时的异步打标落地:否则它可能在我们显式摆放之后才写回,抢掉 manual 标记
-await sleep(1500)
+// 无需等待 add 时的异步打标落地:db#updateGoldenCategory 有 manual 守卫,
+// 迟到的机器写入改不动我们刚摆好的 manual(见 db.ts 守卫注释)
 const movedCat = await send('UPDATE_GOLDEN_CATEGORY', { id: gTyped.id, categoryId: CAT_ID })
 check('移到类型成功(订单物流)', movedCat.success === true, JSON.stringify(movedCat))
 await pop.reload({ waitUntil: 'domcontentloaded' })

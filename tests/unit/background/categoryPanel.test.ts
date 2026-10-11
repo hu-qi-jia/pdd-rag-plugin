@@ -116,6 +116,18 @@ describe('UPDATE_GOLDEN_CATEGORY', () => {
     expect(out.error).toBe('标准回答不存在')
   })
 
+  it('人工写入永远生效:已经是 manual 也能再摆一次', async () => {
+    const { updateGoldenCategory, db } = await fresh()
+    await db.ensurePresetCategories()
+    await db.goldens.add(
+      makeGolden({ id: 'g1', categoryId: 'preset:price', categorySource: 'manual', categoryAt: 1 }),
+    )
+
+    const out = await updateGoldenCategory(msg('g1', 'preset:aftersale'))
+    expect(out).toEqual({ success: true })
+    expect((await db.goldens.get('g1'))?.categoryId).toBe('preset:aftersale')
+  })
+
   it('不触发 invalidateRetrievalCache —— 本计划分类还没进检索', async () => {
     const { updateGoldenCategory, db, getRetrievalEntries } = await fresh()
     await db.ensurePresetCategories()
@@ -135,5 +147,45 @@ describe('UPDATE_GOLDEN_CATEGORY', () => {
 
     // 缓存未被作废:仍是同一个数组引用(作废会整表重建出新的数组)
     expect(await getRetrievalEntries()).toBe(before)
+  })
+})
+
+// ─── 机器写入的 manual 守卫(第五十七轮 Task 6 修复轮 2/5)──────────────────────
+//
+// 「机器永不许覆盖用户手工摆放」不能只靠 isBackfillCandidate 的**快照期**排除:
+// 挑候选之后用户仍可能手工移动某条(补分类运行期间),手工新建的打标也会在用户
+// 摆完之后才回来。守卫必须落在**写入那一刻**的收口点(db#updateGoldenCategory)。
+
+describe('db#updateGoldenCategory:机器写入的 manual 守卫', () => {
+  it('标答是 manual 时,机器写入不改动 categoryId(保持 manual 不动)', async () => {
+    const { db } = await fresh()
+    await db.goldens.add(
+      makeGolden({ id: 'g1', categoryId: 'preset:price', categorySource: 'manual', categoryAt: 1 }),
+    )
+
+    const n = await db.updateGoldenCategory('g1', { categoryId: 'preset:stock', confidence: 0.99 })
+    expect(n).toBe(0) // 跳过写入
+    const g = await db.goldens.get('g1')
+    expect(g?.categoryId).toBe('preset:price')
+    expect(g?.categorySource).toBe('manual')
+    expect(g?.categoryAt).toBe(1)
+  })
+
+  it('标答是 jev 或没有来源时,机器写入正常生效', async () => {
+    const { db } = await fresh()
+    await db.goldens.add(
+      makeGolden({ id: 'g-jev', categoryId: 'preset:price', categorySource: 'jev' }),
+    )
+    await db.goldens.add(makeGolden({ id: 'g-bare' })) // 缺省 source
+
+    expect(await db.updateGoldenCategory('g-jev', { categoryId: 'preset:stock', confidence: 0.8 })).toBe(1)
+    const jev = await db.goldens.get('g-jev')
+    expect(jev?.categoryId).toBe('preset:stock')
+    expect(jev?.categorySource).toBe('jev')
+
+    expect(await db.updateGoldenCategory('g-bare', null)).toBe(1)
+    const bare = await db.goldens.get('g-bare')
+    expect(bare?.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(bare?.categorySource).toBe('jev')
   })
 })

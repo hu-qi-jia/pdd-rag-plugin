@@ -179,7 +179,7 @@ Dexie：`categories: "id, kind, position"`。
 ```ts
   /** 问题类型;null = 未分类 */
   categoryId?: string | null
-  /** jev 给的 confidence(0~1);补分类时用于判断是否落未分类 */
+  /** 打标时**该标签的概率**(0~1);低于 classifyProbThreshold 不落标,直接进未分类 */
   categoryConfidence?: number
   /** 谁打的标:jev 判的 / 人工指定的 */
   categorySource?: 'jev' | 'manual'

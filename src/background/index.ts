@@ -456,6 +456,8 @@ if (chrome.alarms?.onAlarm) {
 
 // 每次 SW 唤醒:预置文件夹、清理旧库、确保每日闹钟、恢复未结段快照、补嵌待嵌记录
 void db.ensurePresetFolders();
+// 第五十六轮:预置问题类型(幂等,已存在的不会被覆盖)
+void db.ensurePresetCategories();
 void db.dropLegacyDbIfExists(LEGACY_DB_NAME).then((dropped) => {
   if (dropped) console.log("[PDD CS] Dropped legacy database:", LEGACY_DB_NAME);
 });

@@ -746,10 +746,11 @@ git commit -m "feat: v7→v8 迁移 —— 旧文件夹转自定义类型,标答
 // 漏一个字段不会报错,只会让设置页填的值永远读不回来。所以每个字段都要有断言。
 
 describe('问题分类设置', () => {
-  it('默认全关、全空 —— 未配置时扩展必须保持完全本地', async () => {
+  it('默认全关、Key 为空 —— 未配置时扩展必须保持完全本地', async () => {
     const s = await loadSettings()
     expect(s.classifyEnabled).toBe(false)
-    expect(s.jevBaseUrl).toBe('')
+    // 地址有默认值(官方端点),用户要填的只有 key;下面那几条共同保证"未配置 ⇒ 零请求"
+    expect(s.jevBaseUrl).toBe('https://api.typesafe.ai')
     expect(s.jevApiKey).toBe('')
     expect(s.jevModel).toBe('jev-latest')
     expect(s.jevTimeoutMs).toBe(3000)
@@ -1677,10 +1678,28 @@ describe('捕获时自动打标', () => {
     const ingest = await freshIngest()
     const resp = await ingest({
       type: 'PDD_INGEST',
-      payload: { events: msgEvents('u1875210170837', 'event') },
+      payload: {
+        events: [
+          ...msgEvents('u1875210170837', 'event'),
+          {
+            kind: 'msg',
+            sessionKey: 'u1875210170837',
+            buyerIdTail: '0837',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-tag-2',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
     })
-    // 若这里 await 了打标,这一行根本执行不到 —— 测试会挂死而不是失败
-    expect(resp.queued).toBe(1)
+    // 若 pddCapture 在这条链路上 await 了打标,上面这个 await ingest(...) 会永远挂着,
+    // 测试以超时告终 —— 这正是我们要它失败的样子。
+    expect(resp.queued).toBe(2)
+    expect(classifyRecord).toHaveBeenCalledTimes(1)
     expect(db.updateQaCategory).not.toHaveBeenCalled()
     release(null)
   })
@@ -1690,9 +1709,25 @@ describe('捕获时自动打标', () => {
     const ingest = await freshIngest()
     const resp = await ingest({
       type: 'PDD_INGEST',
-      payload: { events: msgEvents('u1875210170838', 'event') },
+      payload: {
+        events: [
+          ...msgEvents('u1875210170838', 'event'),
+          {
+            kind: 'msg',
+            sessionKey: 'u1875210170838',
+            buyerIdTail: '0838',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-tag-3',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
     })
-    expect(resp.queued).toBe(1)
+    expect(resp.queued).toBe(2)
     expect(db.addQaRecord).toHaveBeenCalled()
     await vi.waitFor(() => expect(classifyRecord).toHaveBeenCalled())
     expect(db.updateQaCategory).not.toHaveBeenCalled()
@@ -1700,7 +1735,10 @@ describe('捕获时自动打标', () => {
 })
 ```
 
-> `msgEvents(sessionKey, 'event')` 造的是买家消息「这个能开发票吗?」，与文件里既有用例同源。注意**只发买家消息**时问题段不会关闭（段落由客服回复关闭），所以第一条用例带了客服回复；后两条只要验"不阻塞/不崩"，单条买家消息也够。
+> `msgEvents(sessionKey, 'event')` 造的是买家消息「这个能开发票吗?」，与文件里既有用例同源。
+> **三条用例都必须带上客服回复**：只发买家消息时问题段不会关闭（段落由客服回复关闭），
+> `closeQuestion` 不触发 → 打标根本不会被调用 —— 那样"即发即忘"那条会**假通过**、
+> "抛错不影响捕获"那条会**真失败**。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -2232,7 +2270,8 @@ describe('runBackfill', () => {
    */
   function harness(opts: {
     count: number
-    fetch: () => Promise<Response>
+    /** 带上真实请求体 —— 要按**问题内容**决定成败,不能按调用序号(见下) */
+    fetch: (url: string, init: RequestInit) => Promise<Response>
     shouldStop?: () => boolean
     write?: (id: string, hit: { categoryId: string; confidence: number } | null) => Promise<void>
   }) {
@@ -2277,18 +2316,19 @@ describe('runBackfill', () => {
   })
 
   it('单条 jev 失败不阻塞整批,失败的以 hit=null 写回(落未分类)', async () => {
-    let n = 0
     const h = harness({
       count: 5,
-      fetch: async () => {
-        n++
-        // 第一条 + 它的两次重试全 500,其余成功
-        return n <= 3 ? new Response('{}', { status: 500 }) : okResponse()
+      // 按**问题内容**判成败,不按调用序号:5 个 worker 并发跑,
+      // "第 N 次调用"属于哪个条目是不确定的,按序号写的测试会时绿时红。
+      fetch: async (_url, init) => {
+        const body = JSON.parse(init.body as string)
+        return body.state === '问题2' ? new Response('{}', { status: 500 }) : okResponse()
       },
     })
     const p = await h.promise
+    // 问题2 重试 2 次后放弃,以 hit=null 写回;其余四条成功
     expect(p).toMatchObject({ total: 5, ok: 4, failed: 1, done: 5 })
-    expect(h.written.find((w) => w.hit === null)).toBeDefined()
+    expect(h.written.find((w) => w.hit === null)?.id).toBe('qa-2')
   })
 
   it('失败重试 2 次后才放弃(单条共 3 次请求)', async () => {

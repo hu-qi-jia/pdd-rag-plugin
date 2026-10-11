@@ -105,7 +105,12 @@ describe('标准回答的分类', () => {
     vi.mocked(classifyRecord).mockResolvedValue({ categoryId: 'preset:price', confidence: 0.77 })
     const addGolden = await freshGoldens()
     const r = await addGolden({ question: '能便宜点吗?', answer: '亲,已经是活动价了哦' })
-    await vi.waitFor(() => expect(classifyRecord).toHaveBeenCalledTimes(1))
+    // 等**可观察的写入**,而不是等调用次数:调用计数可能早于另一条 Dexie 连接上
+    // fire-and-forget 的 updateGoldenCategory 提交,随后读库会读到写入前的状态(flake)
+    await vi.waitFor(async () =>
+      expect((await testDb.goldens.get(r.id!))?.categoryId).toBe('preset:price'),
+    )
+    expect(classifyRecord).toHaveBeenCalledTimes(1)
     expect(vi.mocked(classifyRecord).mock.calls[0][0]).toBe('能便宜点吗?')
     expect(await testDb.goldens.get(r.id!)).toMatchObject({
       categoryId: 'preset:price',
@@ -117,7 +122,9 @@ describe('标准回答的分类', () => {
     vi.mocked(classifyRecord).mockResolvedValue(null)
     const addGolden = await freshGoldens()
     const r = await addGolden({ question: '能便宜点吗?', answer: '亲,已经是活动价了哦' })
-    await vi.waitFor(() => expect(classifyRecord).toHaveBeenCalled())
-    expect((await testDb.goldens.get(r.id!))!.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID)
+    // 同上:等落库结果可见,别在写入提交前读库
+    await vi.waitFor(async () =>
+      expect((await testDb.goldens.get(r.id!))?.categoryId).toBe(UNCATEGORIZED_CATEGORY_ID),
+    )
   })
 })

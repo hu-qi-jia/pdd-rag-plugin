@@ -163,8 +163,9 @@ export async function getPanelData(
  * 写完把 categorySource 置成 'manual' —— 这是本设计里"机器永不许覆盖用户手工摆放"的落点:
  * 补分类的候选判据对 manual 一律跳过(见 db#isBackfillCandidate / spec §11.2)。
  *
- * 刻意**不走 db.updateGolden()**:那条会作废检索缓存并带 updatedAt 变更语义,
- * 而分类尚未进检索,一次纯摆放不该惊动检索管线。
+ * 刻意**不走 db.updateGolden()**:那条会整体作废检索缓存并带 updatedAt 变更语义,
+ * 而分类**已进检索**(第五十八轮)——写入生效后只需定点同步缓存(条目没增没减,
+ * 只改类型字段),一次纯摆放不必惊动整条检索管线。
  * 落库走 `db.setGoldenCategoryManual` —— 人工写入无条件生效,机器的 manual 守卫不挡它。
  *
  * 目标类型不存在 / 标答不存在都报错且**不改动**。

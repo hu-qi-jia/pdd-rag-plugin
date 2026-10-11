@@ -346,7 +346,7 @@ for (const { source, vec } of entries) {
 
 ### 7.7 缓存写回用定点更新
 
-单条记录的三条写路径（捕获新问答、手工新建标准回答、来源问答继承）走**定点更新** `updateCachedCategory`；只有批量路径（`deleteCategory` 一次把多条记录落回未分类）才调 `invalidateRetrievalCache()`。
+单条记录的三条写路径（捕获新问答打标 / 机器写标答分类 / 人工摆放标答类型）走**定点更新** `updateCachedCategory`；在分类写回路径中，只有批量路径（`deleteCategory` 一次把多条记录落回未分类）才调 `invalidateRetrievalCache()`。
 
 **旧版这里是错的，读到旧文别沿用**：旧文写"分类结果回来时**禁止**调 `invalidateRetrievalCache()`，因为它会让下次检索整体重建缓存（全表读），比不做缓存还差"。那个成本模型**不成立** ——
 

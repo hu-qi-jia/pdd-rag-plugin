@@ -103,6 +103,11 @@ const stripKbDoc = (d: KbDocRecord): ExportedKbDoc => ({
   content: d.content,
   splitterVersion: d.splitterVersion,
   chunkCount: d.chunkCount,
+  // 尺码表标记必须跟着走(与 knowledge 的 chunkKind/sectionSeq 同理):
+  // 漏了它,换台机器恢复后"这篇是尺码表"就静默消失 —— 块重新进检索池、尺码生成材料也没了。
+  // 只在真的为 true 时带上,未标记的文档保持缺省(与 knowledge.ts/panel.ts 的写法一致,
+  // 也让旧导出形状不被凭空补字段)。
+  ...(d.isSizeTable ? { isSizeTable: true } : {}),
   createdAt: d.createdAt,
   updatedAt: d.updatedAt,
 })
@@ -388,6 +393,9 @@ export function planKbDocImports(
       content: String(d.content ?? ""),
       splitterVersion: String(d.splitterVersion ?? ""),
       chunkCount: Number(d.chunkCount) || 0,
+      // 尺码表标记原样带过去。导入来源可能是旧导出文件(没有该字段)→ 保持缺省,
+      // 不会把"这篇是尺码表"凭空补上,也不会把它抹掉。
+      ...(d.isSizeTable ? { isSizeTable: true } : {}),
       createdAt: d.createdAt,
       updatedAt: d.updatedAt,
     });

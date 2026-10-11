@@ -512,3 +512,54 @@ describe('v0.16 导入:文档原文计划', () => {
     expect(r.toAdd[0].sectionSeq).toBe(0)
   })
 })
+
+// ─── 尺码表标记的导出往返 ──────────────────────────────────────────────────────
+// 修的是真问题:stripKbDoc 是**白名单**,漏 isSizeTable → 用户标好尺码表、导出、
+// 换台机器恢复后标记静默消失(该文档块重新进向量检索,尺码生成材料也没了),
+// 全程无任何提示 —— 正是本计划要消灭的那类"标记没生效",只不过走的是备份/恢复这条路。
+
+describe('尺码表标记 isSizeTable 导出往返', () => {
+  const markedDoc = (docId: string, isSizeTable?: boolean): KbDocRecord => ({
+    docId,
+    content: '原文正文',
+    splitterVersion: '1.2.0',
+    chunkCount: 2,
+    ...(isSizeTable ? { isSizeTable: true } : {}),
+    createdAt: 10,
+    updatedAt: 20,
+  })
+
+  it('标记 → 导出 → 导入:标记还在', () => {
+    // 导出(白名单剥离)后字段必须被带上,否则这一条在第 2 步就会 RED
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      knowledge: [],
+      kbDocs: [markedDoc('尺码表', true)],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.kbDocs?.[0].isSizeTable).toBe(true)
+
+    // 导入重建记录时同样要带过去
+    const plan = planKbDocImports(env.kbDocs as ExportedKbDoc[], new Set())
+    expect(plan.toAdd).toHaveLength(1)
+    expect(plan.toAdd[0].isSizeTable).toBe(true)
+  })
+
+  it('未标记的文档往返后仍无该字段(不凭空补上)', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      knowledge: [],
+      kbDocs: [markedDoc('普通文档')],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.kbDocs?.[0]).not.toHaveProperty('isSizeTable')
+    const plan = planKbDocImports(env.kbDocs as ExportedKbDoc[], new Set())
+    expect(plan.toAdd[0]).not.toHaveProperty('isSizeTable')
+  })
+})

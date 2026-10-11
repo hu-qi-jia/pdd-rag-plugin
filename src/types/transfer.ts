@@ -78,6 +78,12 @@ export interface ExportedKbDoc {
   /** 导出时的分块器版本;导入后与当前版本不符即自动重切(见 kbResplit.ts) */
   splitterVersion: string
   chunkCount: number
+  /**
+   * 是否尺码表(文档级标记)。**必须随导出往返** —— 漏了它,用户标好的尺码表
+   * 换台机器恢复后标记就没了:该文档的块重新进向量检索、尺码生成材料也没了,
+   * 全程无任何提示。旧导出文件没有这个字段,导入端保持缺省(等价"未标记")。
+   */
+  isSizeTable?: boolean
   createdAt: number
   updatedAt: number
 }

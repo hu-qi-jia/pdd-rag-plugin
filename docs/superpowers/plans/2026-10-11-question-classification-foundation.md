@@ -1871,7 +1871,7 @@ async function classifyAndTag(qaId: string, question: string): Promise<void> {
 - [ ] **Step 5: 跑测试确认通过**
 
 Run: `npx vitest run tests/unit/background/pddCapture.test.ts`
-Expected: PASS（原有用例 + 新增 4 个）
+Expected: PASS（原有用例 + 新增 3 个）
 
 - [ ] **Step 6: 跑全量测试**
 

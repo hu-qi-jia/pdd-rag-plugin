@@ -5,6 +5,7 @@ import {
   classifyQuestion,
   isJevConfigured,
   systemOneUrl,
+  testJevConnection,
   type JevConfig,
 } from '../../../src/background/jev'
 
@@ -180,5 +181,57 @@ describe('argmaxId', () => {
   })
   it('空对象返回空串', () => {
     expect(argmaxId({})).toBe('')
+  })
+})
+
+describe('testJevConnection', () => {
+  it('端点通且 2xx → { ok: true }', async () => {
+    stubJson({ answers: { ping: { type: 'noul', probability: 0.98 } } })
+    const r = await testJevConnection(CFG)
+    expect(r).toEqual({ ok: true })
+  })
+
+  it('非 2xx 归一为 http <码>', async () => {
+    stubJson({ error: 'nope' }, 401)
+    const r = await testJevConnection(CFG)
+    expect(r).toEqual({ ok: false, error: 'http 401' })
+  })
+
+  it('超时中止归一为 timeout', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_u: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            )
+          }),
+      ),
+    )
+    const r = await testJevConnection({ ...CFG, timeoutMs: 10 })
+    expect(r).toEqual({ ok: false, error: 'timeout' })
+  })
+
+  it('网络异常归一为 network', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('failed'))))
+    const r = await testJevConnection(CFG)
+    expect(r).toEqual({ ok: false, error: 'network' })
+  })
+
+  it('请求体走 System One 协议:state + questions.ping.type=noul', async () => {
+    stubJson({ answers: { ping: { type: 'noul', probability: 0.98 } } })
+    await testJevConnection(CFG)
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.typesafe.ai/v1/systemone')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test')
+    const body = JSON.parse(init.body as string)
+    expect(body.model).toBe('jev-latest')
+    expect(body.state).toBe('你好')
+    expect(body.questions.ping.type).toBe('noul')
+    // 探活只发一句问候,不含任何回复内容
+    expect(JSON.stringify(body)).not.toContain('answer')
   })
 })

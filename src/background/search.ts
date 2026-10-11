@@ -15,6 +15,8 @@ import {
 } from "./retrieval";
 import { loadSettings } from "./settings";
 import { aiRowAvailable } from "./aiIntegrate";
+import { classifyForQuery } from "./classify";
+import { decideRoute, pickByMargin } from "./route";
 import { recordSearchOutcome } from "./metrics";
 import { normalizeText } from "../shared/text";
 import type { GoldenRecord, KnowledgeRecord } from '../types/memory';
@@ -36,10 +38,17 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     };
   }
 
-  let qvec: Float32Array;
   const settings = await loadSettings();
+
+  // 分类与嵌入**并行**发起:分类是旁路,失败/超时一律吞成 null(classifyForQuery
+  // 内部有超时,不会挂住检索)。embedViaOffscreen 是这里唯一可能抛错的。
+  let qvec: Float32Array;
+  let probabilities: Record<string, number> | null;
   try {
-    qvec = await embedViaOffscreen(query);
+    [qvec, probabilities] = await Promise.all([
+      embedViaOffscreen(query),
+      classifyForQuery(query, settings),
+    ]);
   } catch (err) {
     return {
       suggestions: [],
@@ -50,20 +59,37 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
 
   const now = Date.now();
 
+  // 路线决策:jev 不可用 / 判不准 → no-filter(与今天逐字节一致)
+  const categories = await db.listCategories();
+  const route = decideRoute(categories, probabilities, settings.classifyProbThreshold);
+
+  if (route.kind === "size-only") {
+    // 纯尺码:答案取决于买家个体参数,历史回复不可复用 —— 不检索,池为空,
+    // 面板据 settings.sizeRoute 渲染「按尺码表生成」行。
+    // 埋点照样记(R29):漏掉它会让尺码类问题系统性地从"检索次数"里消失,
+    // 把未命中率的口径拉偏。代价是它们也计一次 miss —— 这是裁决接受的偏差。
+    recordSearchOutcome(0);
+    return { suggestions: [], settings: uiSettings(settings, [], { sizeRoute: true }) };
+  }
+
   // 三源条目走 SW 内存缓存(工程5b):命中时不触库,写路径已失效
   const entries = await getRetrievalEntries();
 
-  const ranked = rankCandidates(
-    entries,
-    query,
-    qvec,
-    {
-      golden: settings.goldenThreshold,
-      history: settings.simThreshold,
-      knowledge: settings.kbThreshold,
-    },
-    now,
-  );
+  const thresholds = {
+    golden: settings.goldenThreshold,
+    history: settings.simThreshold,
+    knowledge: settings.kbThreshold,
+  };
+
+  // B 全池:no-filter 只跑这一遍,与改动前完全一致;filter 时它是放宽的兜底。
+  const full = rankCandidates(entries, query, qvec, thresholds, now, null);
+  // A 切片:只有 filter 路线才多跑一遍,且仅在"全池没有显著更优"时采用(见 pickByMargin)。
+  // no-filter 下 allowed 为 null,narrowed 与 full 是**同一个引用** —— 不花第二次排名。
+  const allowed = route.kind === "filter" ? route.allowed : null;
+  const narrowed = allowed
+    ? rankCandidates(entries, query, qvec, thresholds, now, allowed)
+    : full;
+  const ranked = pickByMargin(narrowed, full);
 
   // 候选正文按需取(缓存只存锚+向量):只取过阈源,IO 与候选数成正比
   const qaIds = ranked
@@ -115,12 +141,15 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
 function uiSettings(
   s: Awaited<ReturnType<typeof loadSettings>>,
   suggestions: Suggestion[] = [],
+  opts: { sizeRoute?: boolean } = {},
 ): UiSettings {
   return {
     directFillEnabled: s.directFillEnabled,
     goldenPriorityEnabled: s.goldenPriorityEnabled,
     // 门禁在 SW 单方判定(aiIntegrate.ts),content 只照渲染 —— 免得两边口径漂移
     aiAvailable: aiRowAvailable(s, suggestions.some((x) => x.kind === "knowledge")),
+    // 只在真的时候写这个键:缺省即旧语义,响应体里多一个 undefined 也属噪音
+    ...(opts.sizeRoute ? { sizeRoute: true } : {}),
   };
 }
 

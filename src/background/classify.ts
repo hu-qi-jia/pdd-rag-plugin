@@ -18,7 +18,7 @@ import {
   type JevCategoryOption,
   type JevConfig,
 } from './jev'
-import type { CategoryRecord } from '../types/memory'
+import type { CategoryRecord, PddSettings } from '../types/memory'
 
 /** 可作为 jev 选项的类型。与"参与类型过滤"是同一个集合(filterable=true) */
 export function classifiableCategories(cats: CategoryRecord[]): JevCategoryOption[] {
@@ -45,16 +45,17 @@ export function pickRecordCategory(
 }
 
 /**
- * 给一段问题文本打标。
+ * 门禁 + 一次分类调用,返回**整份概率分布**。失败一律吞成 null。
  *
- * **从不抛错** —— 调用方在捕获链路与批量补分类里都是"失败就算了"的语义,
- * 一个网络错误不该把整条链路带崩。任何失败一律返回 null(落未分类)。
+ * 门禁顺序(与 classifyRecord 一致,三处共用同一份实现 —— 免得两条路径漂移):
+ *   ① 总开关 classifyEnabled;② 配置齐全 isJevConfigured;③ 有可问类型。
+ * 任一条不成立就**一次 fetch 都不发**(ADR-0007 的"未配置保持完全本地")。
  */
-export async function classifyRecord(
+async function classifyGated(
   question: string,
-): Promise<{ categoryId: string; confidence: number } | null> {
+  settings: PddSettings,
+): Promise<Record<string, number> | null> {
   try {
-    const settings = await loadSettings()
     // 门禁①:总开关
     if (!settings.classifyEnabled) return null
     // 门禁②:配置齐全
@@ -67,11 +68,44 @@ export async function classifyRecord(
     if (options.length === 0) return null
 
     const r = await classifyQuestion({ question, categories: options, config })
-    if (!r.ok) return null
-    return pickRecordCategory(r.probabilities, settings.classifyProbThreshold)
+    return r.ok ? r.probabilities : null
   } catch {
     return null
   }
+}
+
+/**
+ * 给一段问题文本打标。
+ *
+ * **从不抛错** —— 调用方在捕获链路与批量补分类里都是"失败就算了"的语义,
+ * 一个网络错误不该把整条链路带崩。任何失败一律返回 null(落未分类)。
+ */
+export async function classifyRecord(
+  question: string,
+): Promise<{ categoryId: string; confidence: number } | null> {
+  try {
+    const settings = await loadSettings()
+    const probabilities = await classifyGated(question, settings)
+    if (probabilities === null) return null
+    return pickRecordCategory(probabilities, settings.classifyProbThreshold)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 查询时的分类(第五十八轮 · 检索路由)—— 与 classifyRecord **同一套门禁**,
+ * 区别只在于返回**整份概率分布**:路由要的是"哪些类型过了线"(多意图取并集),
+ * 不是"哪一个赢了"。`null` = 没判出来(未配置 / 无可问类型 / 超时 / 报错),
+ * 调用方据此走"不筛"路线 —— 分类失败绝不能阻塞检索。
+ *
+ * settings 由调用方传入:检索链路已经读过一次,没必要为门禁再读一遍存储。
+ */
+export async function classifyForQuery(
+  question: string,
+  settings: PddSettings,
+): Promise<Record<string, number> | null> {
+  return classifyGated(question, settings)
 }
 
 /** 补分类进度。total 是**待办条数**(不含跳过的),设置页按钮上的文案与它同源 */

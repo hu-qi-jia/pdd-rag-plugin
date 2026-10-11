@@ -33,6 +33,12 @@ export interface UiSettings {
    * 非自动回复 + 本轮有知识库候选),content 不自行推断 —— 免得两边口径漂移。
    */
   aiAvailable: boolean
+  /**
+   * 本次检索被判为「纯尺码」(第五十八轮):池为空是设计意图 —— 答案取决于买家
+   * 个体参数,历史回复不可复用,改走尺码表 + 生成。面板据此渲染生成行。
+   * 缺省(undefined)即旧语义:没有尺码路由。
+   */
+  sizeRoute?: boolean
 }
 
 export interface GetSuggestionsResponse {

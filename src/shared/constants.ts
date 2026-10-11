@@ -65,6 +65,9 @@ export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
  *  与 SETTINGS_STORAGE_KEY 分开 —— 草稿不是生效配置,半途而废的密钥不会出网。 */
 export const LLM_DRAFT_STORAGE_KEY = 'pddcs:llmDraft'
 
+/** jev 表单草稿(边填边存):与 llm 草稿分开,理由同上 —— 半途而废的密钥不会出网 */
+export const JEV_DRAFT_STORAGE_KEY = 'pddcs:jevDraft'
+
 /** 同一问题可保留的标准回答条数上限(用户指定:合计最多 3 条)。
  *  后台写入口径与聊天页 UI 提示共用同一个数字。 */
 export const MAX_GOLDENS_PER_QUESTION = 3

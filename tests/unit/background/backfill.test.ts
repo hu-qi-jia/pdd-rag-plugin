@@ -134,6 +134,15 @@ describe('补分类候选口径', () => {
     expect(counts.golden).toBe(snap.golden.length)
     expect(counts.history).toBe(2)
   })
+
+  it('两个分类写回都返回 Dexie 更新条数(缺失行=0,不抛错)', async () => {
+    await testDb.qaRecords.add(makeQa({ id: 'x' }))
+    await testDb.goldens.add(makeGolden({ id: 'g' }))
+    expect(await testDb.updateQaCategory('x', null)).toBe(1)
+    expect(await testDb.updateQaCategory('missing', null)).toBe(0)
+    expect(await testDb.updateGoldenCategory('g', null)).toBe(1)
+    expect(await testDb.updateGoldenCategory('missing', null)).toBe(0)
+  })
 })
 
 // ─── Group B:批量执行编排(注入 deps,不触库不触网) ────────────────────────────
@@ -148,7 +157,11 @@ describe('runBackfill', () => {
     /** 带上真实请求体 —— 要按**问题内容**决定成败,不能按调用序号(见下) */
     fetch: (url: string, init: RequestInit) => Promise<Response>
     shouldStop?: () => boolean
-    write?: (id: string, hit: { categoryId: string; confidence: number } | null) => Promise<void>
+    /** 写回返回值 = Dexie 更新条数;0 表示记录已不在(被 TTL 清掉) */
+    write?: (
+      id: string,
+      hit: { categoryId: string; confidence: number } | null,
+    ) => Promise<number | void>
   }) {
     const fetchMock = vi.fn(opts.fetch)
     vi.stubGlobal('fetch', fetchMock)
@@ -162,6 +175,7 @@ describe('runBackfill', () => {
       opts.write ??
       (async (id: string, hit: { categoryId: string; confidence: number } | null) => {
         written.push({ id, hit })
+        return 1
       })
     const promise = runBackfill({
       onProgress: (p) => progress.push({ ...p }),
@@ -256,6 +270,29 @@ describe('runBackfill', () => {
     })
     const p = await h.promise
     expect(p).toMatchObject({ total: 4, done: 4, skipped: 1, ok: 3 })
+  })
+
+  it('写回返回 0(行已被 TTL 清掉、Dexie update 不抛错)→ 计 skipped,不计 ok', async () => {
+    const h = harness({
+      count: 4,
+      fetch: async () => okResponse(),
+      write: async (id) => (id === 'qa-1' ? 0 : 1),
+    })
+    const p = await h.promise
+    expect(p).toMatchObject({ total: 4, done: 4, skipped: 1, ok: 3, failed: 0 })
+  })
+
+  it('4xx(如 401)不重试 —— 配错 key 不该把 1 条放大成 3 次外发', async () => {
+    const h = harness({ count: 1, fetch: async () => new Response('{}', { status: 401 }) })
+    const p = await h.promise
+    expect(h.fetchMock).toHaveBeenCalledTimes(1)
+    expect(p).toMatchObject({ total: 1, ok: 0, failed: 1, done: 1 })
+  })
+
+  it('5xx 仍重试 2 次(可恢复错误与 4xx 区别对待)', async () => {
+    const h = harness({ count: 1, fetch: async () => new Response('{}', { status: 503 }) })
+    await h.promise
+    expect(h.fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('进度回调按完成数递增,最后一次 done === total', async () => {

@@ -369,8 +369,10 @@ export class PddDatabase extends Dexie {
   async updateQaCategory(
     id: string,
     hit: { categoryId: string; confidence: number } | null,
-  ): Promise<void> {
-    await this.qaRecords.update(id, {
+  ): Promise<number> {
+    // 返回 Dexie 更新条数:0 = 行已不在(被 TTL 清掉),调用方据此计 skipped;
+    // Dexie 的 update 对缺失行**不抛错**,只看异常会把"没写成功"误计成成功
+    return await this.qaRecords.update(id, {
       categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
       categoryConfidence: hit ? hit.confidence : undefined,
       categorySource: "jev",
@@ -642,12 +644,13 @@ export class PddDatabase extends Dexie {
     return record.id;
   }
 
-  /** 写回标准回答的分类结果(第五十六轮);hit 为 null 表示判不准/失败 → 落未分类 */
+  /** 写回标准回答的分类结果(第五十六轮);hit 为 null 表示判不准/失败 → 落未分类。
+   *  返回 Dexie 更新条数(0 = 行已不在),语义与 updateQaCategory 一致。 */
   async updateGoldenCategory(
     id: string,
     hit: { categoryId: string; confidence: number } | null,
-  ): Promise<void> {
-    await this.goldens.update(id, {
+  ): Promise<number> {
+    return await this.goldens.update(id, {
       categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
       categoryConfidence: hit ? hit.confidence : undefined,
       categorySource: "jev",

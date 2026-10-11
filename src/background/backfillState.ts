@@ -42,6 +42,26 @@ export function getBackfillStatus(): BackfillStatus {
   return { ...status }
 }
 
+/** 待办计数(与补分类快照同口径:{history, golden}) */
+export type BackfillPending = { history: number; golden: number }
+
+/**
+ * 待办计数的**重算时机**:只在**非 running** 时重算 —— running 期面板每秒轮询,
+ * 每轮都把一个全表(含向量)物化一遍是纯白扫(第五十七轮修复轮 1/5)。idle 与 done
+ * 的转换点各刷新一次;done 态**尤其**必须刷新:面板在 done 态要**同时**显示完成报告与
+ * "下一次会外发多少"的预览行(ADR-0007 / spec §11.1),沿用旧计数的话预览行就失去依据。
+ * running 时返回 undefined,调用方保留上一次的计数。
+ *
+ * 抽成独立函数是为了可单测:消息 handler 所在的 `index.ts` 无法单测(import 即挂 chrome),
+ * 而"running 不重算、done/idle 重算"这条判断逻辑挂在那里时,回退它没有任何用例会红。
+ */
+export async function refreshBackfillPending(
+  phase: BackfillStatus['phase'],
+): Promise<BackfillPending | undefined> {
+  if (phase === 'running') return undefined
+  return db.countBackfillCandidates()
+}
+
 /** 请求中断当前这一轮:worker 在下一轮循环顶部看到 `shouldStop()` 为真即退出 */
 export function requestBackfillStop(): void {
   stopRequested = true

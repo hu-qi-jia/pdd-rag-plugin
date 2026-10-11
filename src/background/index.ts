@@ -22,6 +22,7 @@ import { isLlmConfigured, testLlmConnection } from "./llm";
 import { isJevConfigured, testJevConnection } from "./jev";
 import {
   getBackfillStatus,
+  refreshBackfillPending,
   requestBackfillStop,
   startBackfill,
 } from "./backfillState";
@@ -519,9 +520,9 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       const status = getBackfillStatus();
       // 待办计数 = 两张全表各物化一遍(含向量);只在**非 running** 时刷新 —— 运行期每秒轮询
       // 不再白扫,而 idle / done 的转换点各刷新一次(done 态会让预览行给出下一次的条数)。
-      if (status.phase !== "running") {
-        backfillPending = await db.countBackfillCandidates();
-      }
+      // 判断逻辑在 refreshBackfillPending 里(本文件不可单测,那里可)。
+      const next = await refreshBackfillPending(status.phase);
+      if (next) backfillPending = next;
       return { status, pending: backfillPending };
     },
     (err) => ({ status: { ...getBackfillStatus(), error: String(err) }, pending: { history: 0, golden: 0 } }),

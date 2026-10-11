@@ -270,4 +270,19 @@ describe('补分类后台状态', () => {
     expect(mod.getBackfillStatus()).toMatchObject({ phase: 'done', total: 0, done: 0 })
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  // GET_BACKFILL_STATE 的 pending 重算挂在 index.ts 的 handler 上,那个文件单测挂不起来
+  // (import 即触 chrome)。逻辑抽到 refreshBackfillPending 后在这里钉死:回退成"每轮都重算"
+  // 或"永不重算",下面两条断言都会红。
+  it('★ done/idle 重算待办计数,running 期不重算(面板每秒轮询,不能全表白扫)', async () => {
+    dbMock.countBackfillCandidates.mockResolvedValue({ history: 7, golden: 2 })
+
+    expect(await mod.refreshBackfillPending('idle')).toEqual({ history: 7, golden: 2 })
+    expect(await mod.refreshBackfillPending('done')).toEqual({ history: 7, golden: 2 })
+    expect(dbMock.countBackfillCandidates).toHaveBeenCalledTimes(2)
+
+    // running:返回 undefined,调用方沿用旧计数 —— 一次库读都不该发生
+    expect(await mod.refreshBackfillPending('running')).toBeUndefined()
+    expect(dbMock.countBackfillCandidates).toHaveBeenCalledTimes(2)
+  })
 })

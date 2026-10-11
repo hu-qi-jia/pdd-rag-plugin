@@ -65,6 +65,7 @@ import {
   createKnowledge,
   deleteKnowledge,
   importKbDocument,
+  setKbDocSizeTable,
   updateKnowledgeWithReembed,
 } from "./knowledge";
 import { saveSettings } from "./settings";
@@ -361,6 +362,12 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
     "UPLOAD_KB_DOC",
     (message) => importKbDocument(message.payload),
     (err) => ({ error: String(err) }),
+  ),
+
+  SET_KB_SIZE_TABLE: route(
+    "SET_KB_SIZE_TABLE",
+    (message) => setKbDocSizeTable(message.payload.docId, message.payload.on),
+    (err) => ({ success: false, error: String(err) }),
   ),
 
   UPDATE_GOLDEN: route(

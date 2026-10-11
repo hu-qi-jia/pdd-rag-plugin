@@ -8,7 +8,7 @@
  * 与 llm.ts 的分工:这里管"该不该发、发什么",llm.ts 只管"怎么发"。
  */
 import { loadSettings } from './settings'
-import { collectMaterials } from './aiMaterials'
+import { collectMaterials, collectSizeTableMaterials } from './aiMaterials'
 import { NO_ANSWER_SENTINEL, integrateReply, isLlmConfigured, llmConfigFromSettings } from './llm'
 import type { PddSettings } from '../types/memory'
 import { AI_PORT_NAME, type AiIntegrateRequest, type AiPortEvent } from '../types/messages/ai'
@@ -19,6 +19,21 @@ export function aiRowAvailable(s: PddSettings, hasKnowledgeCandidate: boolean): 
   if (!s.aiIntegrateEnabled || s.directFillEnabled) return false
   if (!isLlmConfigured(llmConfigFromSettings(s))) return false
   return hasKnowledgeCandidate
+}
+
+/**
+ * 尺码生成行的渲染门禁(spec §8.1 前提)——**与知识库整合行同一套外发闸门**,不新增开关:
+ *   ① `aiIntegrateEnabled`(ADR-0006 的总开关)
+ *   ② 已配 LLM
+ *   ③ 非「自动回复」(那条路径不弹面板、不调 LLM)
+ * 外加 §8.1 的前提 1:**至少一篇被标记的尺码表** —— 没有材料,发出去也无意义。
+ *
+ * 与 aiRowAvailable 的差别只在"候选"的含义:那边是本轮知识库候选,这边是尺码表文档。
+ */
+export function sizeRowAvailable(s: PddSettings, hasSizeTableDoc: boolean): boolean {
+  if (!s.aiIntegrateEnabled || s.directFillEnabled) return false
+  if (!isLlmConfigured(llmConfigFromSettings(s))) return false
+  return hasSizeTableDoc
 }
 
 export async function handleAiIntegrate(
@@ -36,7 +51,12 @@ export async function handleAiIntegrate(
     return
   }
 
-  const materials = await collectMaterials(payload.knowledgeIds ?? [])
+  // 材料来源按 payload.source 分叉:缺省('knowledge')即今天的语义 —— 本轮面板展示的
+  // 知识库候选;'size' 取尺码表整篇原文。门禁、哨兵缓冲、流式、失败归一**全部复用**。
+  const materials =
+    payload.source === 'size'
+      ? await collectSizeTableMaterials()
+      : await collectMaterials(payload.knowledgeIds ?? [])
   if (materials.length === 0) {
     emit({ type: 'ERROR', payload: { error: 'no material' } })
     return

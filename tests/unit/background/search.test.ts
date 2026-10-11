@@ -384,6 +384,97 @@ describe('searchSuggestions 的类型路由', () => {
     expect(vi.mocked(recordSearchOutcome)).toHaveBeenCalledWith(0)
   })
 
+  it('★ 混合意图(类型集合含尺码) → 池照常算,且额外挂尺码生成行(R31)', async () => {
+    const { searchSuggestions, db } = await freshSearch()
+    await db.ensurePresetCategories()
+    await seedQa(db, 'qa-order', {
+      question: '什么时候发货?',
+      // 本文件的嵌入桩:含"发票"→[1,0],否则→[0,1];查询里没有"发票" ⇒ 用 [0,1] 同向
+      embedding: [0, 1],
+      categoryId: 'preset:order',
+      replyText: '48 小时内发货。',
+    })
+    // §8.1 尺码路由前提:至少一篇被标记的尺码表 + 已配 LLM
+    await db.putKbDoc({
+      docId: '尺码表',
+      content: '165cm/M 170cm/L',
+      splitterVersion: 'test',
+      chunkCount: 1,
+      isSizeTable: true,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    // 一单两意:订单 0.52 / 尺码 0.43,都过 0.2 阈值
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.52, 尺码推荐: 0.43 })))
+    await saveSettings({
+      classifyEnabled: true,
+      jevApiKey: 'sk-test',
+      aiIntegrateEnabled: true,
+      llmBaseUrl: 'https://api.example.com/v1',
+      llmApiKey: 'sk-test',
+      llmModel: 'fast-model',
+    })
+
+    const out = await searchSuggestions('什么时候发货,165 穿多大?')
+    // 池照常算:订单物流候选一条不少
+    expect(out.suggestions.some((s) => s.text.includes('48 小时内发货'))).toBe(true)
+    // 额外挂尺码生成行:路线信号 + 渲染门禁(§8.1 前提)都亮
+    expect(out.settings.sizeRoute).toBe(true)
+    expect(out.settings.sizeAvailable).toBe(true)
+  })
+
+  it('混合意图但没标记尺码表 → 有路线信号,却不挂生成行(没材料)', async () => {
+    const { searchSuggestions, db } = await freshSearch()
+    await db.ensurePresetCategories()
+    await seedQa(db, 'qa-order', {
+      question: '什么时候发货?',
+      embedding: [0, 1],
+      categoryId: 'preset:order',
+      replyText: '48 小时内发货。',
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.52, 尺码推荐: 0.43 })))
+    await saveSettings({
+      classifyEnabled: true,
+      jevApiKey: 'sk-test',
+      aiIntegrateEnabled: true,
+      llmBaseUrl: 'https://api.example.com/v1',
+      llmApiKey: 'sk-test',
+      llmModel: 'fast-model',
+    })
+
+    const out = await searchSuggestions('什么时候发货,165 穿多大?')
+    expect(out.settings.sizeRoute).toBe(true)
+    expect(out.settings.sizeAvailable).toBeUndefined()
+  })
+
+  it('★ 纯尺码 + §8.1 前提齐备(有尺码表 + 已配 LLM)→ 生成行可用', async () => {
+    const { searchSuggestions, db } = await freshSearch()
+    await db.ensurePresetCategories()
+    await db.putKbDoc({
+      docId: '尺码表',
+      content: '165cm/M 170cm/L',
+      splitterVersion: 'test',
+      chunkCount: 1,
+      isSizeTable: true,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 尺码推荐: 0.9 })))
+    await saveSettings({
+      classifyEnabled: true,
+      jevApiKey: 'sk-test',
+      aiIntegrateEnabled: true,
+      llmBaseUrl: 'https://api.example.com/v1',
+      llmApiKey: 'sk-test',
+      llmModel: 'fast-model',
+    })
+
+    const out = await searchSuggestions('165 穿多大?')
+    expect(out.suggestions).toHaveLength(0) // 池为空是设计意图
+    expect(out.settings.sizeRoute).toBe(true)
+    expect(out.settings.sizeAvailable).toBe(true)
+  })
+
   it('尺码路由前提不满足(没配 key) → 退化成不过滤', async () => {
     const { searchSuggestions, db } = await freshSearch()
     await db.ensurePresetCategories()

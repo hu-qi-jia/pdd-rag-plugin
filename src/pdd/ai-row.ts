@@ -24,22 +24,34 @@ export type AiRowState =
   /** 失败,可重试 */
   | { phase: 'error'; error: string }
 
+/**
+ * 这一行的材料来源(第五十八轮):知识库候选,还是尺码表整篇原文。
+ * 状态机、DOM、重试入口**完全共用**,只有材料与文案分叉 —— 所以是参数,不是新行。
+ */
+export type AiRowSource = 'knowledge' | 'size'
+
 /** 请求发出后多久才显示"正在整合" —— 更短的等待走完就不闪这一下 */
 export const AI_LOADING_DELAY_MS = 200
 
 /** 行内主文案。loadingVisible=false 时不宣称"正在整合"(请求可能已经回来了) */
-export function aiRowLabel(state: AiRowState, loadingVisible = true): string {
+export function aiRowLabel(
+  state: AiRowState,
+  loadingVisible = true,
+  source: AiRowSource = 'knowledge',
+): string {
+  const idle = source === 'size' ? '根据尺码表生成回复' : '根据知识库内容整合并回复'
+  const busy = source === 'size' ? '正在生成…' : '正在整合知识库…'
   switch (state.phase) {
     case 'idle':
-      return '根据知识库内容整合并回复'
+      return idle
     case 'working':
-      return loadingVisible ? '正在整合知识库…' : '根据知识库内容整合并回复'
+      return loadingVisible ? busy : idle
     case 'streaming':
-      return '正在整合知识库…'
+      return busy
     case 'done':
       return '✓ 已生成'
     case 'noanswer':
-      return '知识库内容不足以回答'
+      return source === 'size' ? '尺码表内容不足以回答' : '知识库内容不足以回答'
     case 'error':
       return aiErrorText(state.error)
   }
@@ -62,22 +74,31 @@ export function aiRowLabel(state: AiRowState, loadingVisible = true): string {
  * 第二块字号已与生成结果统一成 13.5px(见 overlay-css `.pddcs-ai-hint`),
  * 21 字 × 13.5 ≈ 284px 仍在 311px 的可用宽度内,两句话各占一行、行高稳定。
  */
-export function aiRowHint(state: AiRowState, knowledgeCount: number): string {
+export function aiRowHint(
+  state: AiRowState,
+  knowledgeCount: number,
+  source: AiRowSource = 'knowledge',
+): string {
   /** 去哪儿 + 什么留下 —— ADR-0006 的知情口径要求这两件事在点击之前就在行内 */
   const staysHome = '发给你配置的接口;历史与标准回答不出本机'
   switch (state.phase) {
     case 'idle':
-      // 上行 = 外发内容清单(带实际条数),下行 = 去哪儿 + 留下什么;两句各占一行、互不复述
-      return `点击后只发送这 ${knowledgeCount} 条知识库内容与买家问题\n${staysHome}`
+      // 上行 = 外发内容清单,下行 = 去哪儿 + 留下什么;两句各占一行、互不复述。
+      // 尺码那份不说条数:材料是**整篇**尺码表原文,没有"N 条"这回事(spec §八)。
+      return source === 'size'
+        ? `点击后只发送尺码表内容与买家问题\n${staysHome}`
+        : `点击后只发送这 ${knowledgeCount} 条知识库内容与买家问题\n${staysHome}`
     case 'working':
       // 在途沿用同一句边界声明 —— 内容正在路上,这句话此刻最该被看见
-      return `正在发送这 ${knowledgeCount} 条知识库内容…\n${staysHome}`
+      return source === 'size'
+        ? `正在发送尺码表内容…\n${staysHome}`
+        : `正在发送这 ${knowledgeCount} 条知识库内容…\n${staysHome}`
     case 'streaming':
       return '正在生成…'
     case 'done':
       return '' // 结果本身就是第二块,不再赘述"已填入输入框"(主行已说)
     case 'noanswer':
-      return '换个问法,或往知识库补充这条内容'
+      return source === 'size' ? '换个问法,或补充尺码表文档' : '换个问法,或往知识库补充这条内容'
     case 'error':
       return '去设置页检查接口地址与密钥'
   }

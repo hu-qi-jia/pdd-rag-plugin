@@ -45,3 +45,18 @@ export interface UploadKbDocResponse {
   type: 'UPLOAD_KB_DOC_RESPONSE'
   payload: { docId?: string; chunkCount?: number; replaced?: boolean; error?: string }
 }
+
+// ─── 尺码表标记(第五十八轮)─────────────────────────────────────────────────────
+//
+// 文档级标记,落在 kbDocs.isSizeTable(不随块存 —— 那是会漂移的冗余)。
+// 标记后该文档不做向量检索,整篇原文作为尺码生成的 LLM 材料(见 spec §八)。
+
+export interface SetKbSizeTableRequest {
+  type: 'SET_KB_SIZE_TABLE'
+  payload: { docId: string; on: boolean }
+}
+
+export interface SetKbSizeTableResponse {
+  type: 'SET_KB_SIZE_TABLE_RESPONSE'
+  payload: { success: boolean; error?: string }
+}

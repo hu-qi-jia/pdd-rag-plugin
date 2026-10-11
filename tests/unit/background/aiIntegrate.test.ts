@@ -10,8 +10,10 @@ vi.mock('../../../src/background/settings', () => ({
 }))
 
 const collectMaterials = vi.fn()
+const collectSizeTableMaterials = vi.fn()
 vi.mock('../../../src/background/aiMaterials', () => ({
   collectMaterials: (ids: string[]) => collectMaterials(ids),
+  collectSizeTableMaterials: () => collectSizeTableMaterials(),
 }))
 
 const BASE = {
@@ -46,6 +48,7 @@ async function run(over: Partial<typeof BASE> = {}, ids: string[] = ['k1']) {
 
 beforeEach(() => {
   collectMaterials.mockReset().mockResolvedValue(['常见问答 · 防水吗？\n不防水。'])
+  collectSizeTableMaterials.mockReset().mockResolvedValue(['尺码表\n165cm/M 170cm/L'])
 })
 
 afterEach(() => {
@@ -166,5 +169,64 @@ describe('aiRowAvailable(面板行的渲染门禁)', () => {
     expect(aiRowAvailable({ ...on, llmApiKey: '' } as never, true)).toBe(false)
     expect(aiRowAvailable({ ...on, directFillEnabled: true } as never, true)).toBe(false)
     expect(aiRowAvailable(on as never, false)).toBe(false) // 本轮无知识库候选
+  })
+})
+
+describe('材料来源分叉(第五十八轮):source 缺省即知识库', () => {
+  it('source 为 size 时取尺码表整篇原材料,而不是知识库候选', async () => {
+    const f = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response(sse(['L 码']), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', f)
+    loadSettings.mockResolvedValue({ ...BASE })
+    const { handleAiIntegrate } = await import('../../../src/background/aiIntegrate')
+    const events: AiPortEvent[] = []
+    await handleAiIntegrate(
+      { query: '165 穿多大', knowledgeIds: ['k1'], source: 'size' },
+      (e) => events.push(e),
+    )
+    expect(collectSizeTableMaterials).toHaveBeenCalledTimes(1)
+    expect(collectMaterials).not.toHaveBeenCalled()
+    // 材料确实进了 prompt:外发的是尺码表原文 + 买家问题
+    const body = String((f.mock.calls[0][1] as RequestInit).body)
+    expect(body).toContain('165cm/M 170cm/L')
+    expect(body).toContain('165 穿多大')
+    // 知识库候选 k1 的正文一个字节都不该在这条请求里
+    expect(body).not.toContain('常见问答 · 防水吗')
+  })
+
+  it('source 缺省 → 仍走知识库候选材料(向后兼容既有调用)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(sse(['x']), { status: 200 })))
+    await run({}, ['k2', 'k1'])
+    expect(collectMaterials).toHaveBeenCalledWith(['k2', 'k1'])
+    expect(collectSizeTableMaterials).not.toHaveBeenCalled()
+  })
+
+  it('size 且没有尺码表材料 → 报错且不发请求(不让模型凭空编)', async () => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    collectSizeTableMaterials.mockResolvedValue([])
+    loadSettings.mockResolvedValue({ ...BASE })
+    const { handleAiIntegrate } = await import('../../../src/background/aiIntegrate')
+    const events: AiPortEvent[] = []
+    await handleAiIntegrate({ query: '165 穿多大', knowledgeIds: [], source: 'size' }, (e) =>
+      events.push(e),
+    )
+    expect(events).toEqual([{ type: 'ERROR', payload: { error: 'no material' } }])
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('size 也走同一套门禁:没配 LLM → unconfigured,零网络请求', async () => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    loadSettings.mockResolvedValue({ ...BASE, llmApiKey: '' })
+    const { handleAiIntegrate } = await import('../../../src/background/aiIntegrate')
+    const events: AiPortEvent[] = []
+    await handleAiIntegrate({ query: '165 穿多大', knowledgeIds: [], source: 'size' }, (e) =>
+      events.push(e),
+    )
+    expect(events).toEqual([{ type: 'ERROR', payload: { error: 'unconfigured' } }])
+    expect(f).not.toHaveBeenCalled()
+    expect(collectSizeTableMaterials).not.toHaveBeenCalled()
   })
 })

@@ -12,8 +12,14 @@ export interface AiIntegrateRequest {
   payload: {
     /** 本轮买家问题(合并后的全文) */
     query: string
-    /** 本轮面板展示的知识库候选 id,按展示顺序 */
+    /** 本轮面板展示的知识库候选 id,按展示顺序(source='size' 时忽略) */
     knowledgeIds: string[]
+    /**
+     * 材料来源(第五十八轮)。**可选,缺省即今天的语义** = 知识库候选 ——
+     * 向后兼容既有调用与既有测试。'size' 时 SW 取**尺码表整篇原文**
+     * (collectSizeTableMaterials),不走知识库候选。
+     */
+    source?: 'knowledge' | 'size'
   }
 }
 

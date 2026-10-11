@@ -14,9 +14,9 @@ import {
   type Suggestion,
 } from "./retrieval";
 import { loadSettings } from "./settings";
-import { aiRowAvailable } from "./aiIntegrate";
+import { aiRowAvailable, sizeRowAvailable } from "./aiIntegrate";
 import { classifyForQuery } from "./classify";
-import { decideRoute, pickByMargin } from "./route";
+import { decideRoute, pickByMargin, pickedHasSize } from "./route";
 import { recordSearchOutcome } from "./metrics";
 import { normalizeText } from "../shared/text";
 import type { GoldenRecord, KnowledgeRecord } from '../types/memory';
@@ -65,12 +65,22 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
 
   if (route.kind === "size-only") {
     // 纯尺码:答案取决于买家个体参数,历史回复不可复用 —— 不检索,池为空,
-    // 面板据 settings.sizeRoute 渲染「按尺码表生成」行。
+    // 面板据 settings.sizeRoute / sizeAvailable 渲染「按尺码表生成」行。
     // 埋点照样记(R29):漏掉它会让尺码类问题系统性地从"检索次数"里消失,
     // 把未命中率的口径拉偏。代价是它们也计一次 miss —— 这是裁决接受的偏差。
     recordSearchOutcome(0);
-    return { suggestions: [], settings: uiSettings(settings, [], { sizeRoute: true }) };
+    return {
+      suggestions: [],
+      settings: uiSettings(settings, [], {
+        sizeRoute: true,
+        sizeAvailable: await sizeRowReady(settings),
+      }),
+    };
   }
+
+  // 混合意图(spec §7.1【D】,裁决 R31):类型集合含尺码推荐时,池照常算,
+  // **额外**挂一条尺码生成行。池是否含尺码看 picked —— 它就是这个信号的载体。
+  const mixedSize = route.kind === "filter" && pickedHasSize(categories, route.picked);
 
   // 三源条目走 SW 内存缓存(工程5b):命中时不触库,写路径已失效
   const entries = await getRetrievalEntries();
@@ -135,21 +145,34 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
   // 命中率口径:v0.16 起记"发起多少次、其中多少次一条候选都捞不着"。
   // 即发即忘 —— 埋点不在这条链路上加一次 DB 写入的等待(见 metrics.ts)。
   recordSearchOutcome(suggestions.length);
-  return { suggestions, settings: uiSettings(settings, suggestions) };
+  return {
+    suggestions,
+    settings: uiSettings(settings, suggestions, {
+      sizeRoute: mixedSize,
+      sizeAvailable: mixedSize && (await sizeRowReady(settings)),
+    }),
+  };
+}
+
+/** spec §8.1 前提:至少一篇被标记的尺码表 + 三道外发闸门 → 尺码生成行可渲染 */
+async function sizeRowReady(s: Awaited<ReturnType<typeof loadSettings>>): Promise<boolean> {
+  const docIds = await db.listSizeTableDocIds();
+  return sizeRowAvailable(s, docIds.size > 0);
 }
 
 function uiSettings(
   s: Awaited<ReturnType<typeof loadSettings>>,
   suggestions: Suggestion[] = [],
-  opts: { sizeRoute?: boolean } = {},
+  opts: { sizeRoute?: boolean; sizeAvailable?: boolean } = {},
 ): UiSettings {
   return {
     directFillEnabled: s.directFillEnabled,
     goldenPriorityEnabled: s.goldenPriorityEnabled,
     // 门禁在 SW 单方判定(aiIntegrate.ts),content 只照渲染 —— 免得两边口径漂移
     aiAvailable: aiRowAvailable(s, suggestions.some((x) => x.kind === "knowledge")),
-    // 只在真的时候写这个键:缺省即旧语义,响应体里多一个 undefined 也属噪音
+    // 只在真的时候写这些键:缺省即旧语义,响应体里多一个 undefined 也属噪音
     ...(opts.sizeRoute ? { sizeRoute: true } : {}),
+    ...(opts.sizeAvailable ? { sizeAvailable: true } : {}),
   };
 }
 

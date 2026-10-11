@@ -18,7 +18,35 @@ import {
   UNCATEGORIZED_FOLDER_ID,
   UNCATEGORIZED_FOLDER_NAME,
 } from '../shared/constants'
-import type { PanelCategory, PanelFolder, PanelGolden } from '../types/messages'
+import type { PanelCategory, PanelFolder, PanelGolden, PanelKnowledge } from '../types/messages'
+
+/**
+ * 文档分块 id → 块序号。
+ *
+ * `importKbDocument` 造的 id 形如 `${rootId}-c${i}`(rootId 是随机 id);
+ * 只有一块时 id 就是 rootId、**不带** `-c<n>` 后缀 —— 视为第 0 块。
+ * 不能写成 `id === docId + '-c0'`:那是把文档名误当作了 id 前缀。
+ */
+export function chunkOrdinal(id: string): number {
+  const m = /-c(\d+)$/.exec(id)
+  return m ? Number(m[1]) : 0
+}
+
+/**
+ * 每篇文档的**第一块** id 集合。
+ *
+ * 「是不是尺码表」是**文档级**的(落在 kbDocs,不随块存),而面板一篇文档一篇文档地
+ * 切成许多块、每块一条记录 —— 开关只能在该文档的第一块上渲染一次,否则一篇 20 块的
+ * 文档会冒出 20 个开关,点哪个都改同一篇文档,用户无从判断自己改的是什么。
+ */
+export function firstChunkIds(items: PanelKnowledge[]): Set<string> {
+  const out = new Set<string>()
+  for (const k of items) {
+    if (k.source !== 'doc' || !k.docId) continue
+    if (chunkOrdinal(k.id) === 0) out.add(k.id)
+  }
+  return out
+}
 
 export type { PanelCategory, PanelFolder, PanelGolden }
 

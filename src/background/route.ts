@@ -41,6 +41,18 @@ export function filterAllowed(categories: CategoryRecord[], picked: string[]): S
 }
 
 /**
+ * 类型集合里是否含「尺码」型。
+ *
+ * 混合意图(spec §7.1【D】)的判据:"什么时候发货,165 穿多大" 这类问题类型集合
+ * 同时含订单物流与尺码推荐 —— 池照常算(订单物流的候选要出来),**额外**挂一条
+ * 尺码生成行。纯尺码【C】由 decideRoute 单独判,不走这里。
+ */
+export function pickedHasSize(categories: CategoryRecord[], picked: string[]): boolean {
+  const byId = new Map(categories.map((c) => [c.id, c]))
+  return picked.some((id) => byId.get(id)?.route === 'size')
+}
+
+/**
  * 概率 → 路线。
  *
  * `probabilities` 为 `null` 表示 jev 不可用(未配置 / 超时 / 报错)—— 调用方

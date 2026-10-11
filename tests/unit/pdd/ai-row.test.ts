@@ -243,3 +243,57 @@ describe('aiRowInsertIndex', () => {
     expect(aiRowInsertIndex([])).toBe(-1)
   })
 })
+
+// ─── 尺码来源分叉(第五十八轮 Task 5)─────────────────────────────────────────────
+//
+// 尺码行与知识库整合行共用同一套状态机与 DOM,**只有材料来源与文案不同**。
+// 文案必须与 ADR-0007 同源同义:说清外发的是尺码表内容 + 买家问题,
+// 且「历史与标准回答不出本机」这层意思一个都不能少。
+describe('aiRowLabel / aiRowHint:尺码来源文案', () => {
+  it('idle 主行说「尺码表」,不说「知识库」', () => {
+    expect(aiRowLabel({ phase: 'idle' }, true, 'size')).toBe('根据尺码表生成回复')
+    expect(aiRowLabel({ phase: 'idle' }, true, 'size')).not.toContain('知识库')
+  })
+
+  it('尺码说明行:上行说清外发的是尺码表内容 + 买家问题', () => {
+    const [out] = aiRowHint({ phase: 'idle' }, 0, 'size').split('\n')
+    expect(out).toContain('尺码表内容')
+    expect(out).toContain('买家问题')
+    expect(out).not.toContain('知识库')
+  })
+
+  it('尺码说明行:下行仍保留「历史与标准回答不出本机」', () => {
+    const stays = aiRowHint({ phase: 'idle' }, 0, 'size').split('\n')[1]
+    expect(stays).toContain('发给你配置的接口')
+    expect(stays).toContain('历史')
+    expect(stays).toContain('标准回答')
+    expect(stays).toContain('不出本机')
+    // 在途同样保留这句 —— 内容正在路上,此刻最该被看见
+    expect(aiRowHint({ phase: 'working' }, 0, 'size').split('\n')[1]).toBe(stays)
+  })
+
+  it('尺码没有「条数」:不出现知识库那份的 N 条口径', () => {
+    expect(aiRowHint({ phase: 'idle' }, 3, 'size')).not.toContain('3 条')
+    expect(aiRowHint({ phase: 'working' }, 3, 'size')).not.toContain('3 条')
+  })
+
+  it('尺码每句也短到一行放得下(第二块字号 13.5px,放不下就会把行撑高)', () => {
+    const MAX_CHARS = 22
+    for (const phase of [{ phase: 'idle' as const }, { phase: 'working' as const }]) {
+      for (const line of aiRowHint(phase, 0, 'size').split('\n')) {
+        expect(line.length).toBeLessThanOrEqual(MAX_CHARS)
+      }
+    }
+  })
+
+  it('终态:资料不足说的是尺码表,下一步指向补尺码表', () => {
+    expect(aiRowLabel({ phase: 'noanswer' }, true, 'size')).toContain('尺码表')
+    expect(aiRowHint({ phase: 'noanswer' }, 0, 'size')).toContain('尺码表')
+  })
+
+  it('缺省 source 即知识库语义(向后兼容既有调用)', () => {
+    expect(aiRowLabel({ phase: 'idle' })).toBe('根据知识库内容整合并回复')
+    expect(aiRowHint({ phase: 'idle' }, 3)).toContain('3 条知识库内容')
+    expect(aiRowHint({ phase: 'idle' }, 3, 'knowledge')).toBe(aiRowHint({ phase: 'idle' }, 3))
+  })
+})

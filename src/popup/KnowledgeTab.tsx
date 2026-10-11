@@ -15,6 +15,7 @@ import type {
   FillInputResponse,
   GetPanelDataResponse,
   PanelKnowledge,
+  SetKbSizeTableResponse,
   UpdateKbResponse,
   UploadKbDocResponse,
 } from '../types/messages'
@@ -26,13 +27,14 @@ import {
   EmptyState,
   Notice,
   SearchInput,
+  Toggle,
   formatTs,
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
 import { fontSize, fontWeight, radius, spacing } from '../ui/design'
 import { FileTextIcon, UploadIcon } from '../ui/icons'
-import { legacyDocNotice } from './logic'
+import { firstChunkIds, legacyDocNotice } from './logic'
 
 export function KnowledgeTab({
   tk,
@@ -94,6 +96,9 @@ export function KnowledgeTab({
   }, [items, keyword])
 
   const legacyNotice = useMemo(() => legacyDocNotice(legacyDocs), [legacyDocs])
+
+  /** 每篇文档的**第一块** id:尺码表开关是文档级的,只在这些块上渲染一次 */
+  const sizeSwitchIds = useMemo(() => firstChunkIds(shown), [shown])
 
   /** 上传 md 文档:读文本 → UPLOAD_KB_DOC(分块+逐块向量化,同名整篇替换) */
   const uploadDoc = async (file: File) => {
@@ -179,6 +184,33 @@ export function KnowledgeTab({
       else await refresh()
     } catch (err) {
       setMsg({ ok: false, text: `操作失败:${String(err)}` })
+    }
+  }
+
+  /**
+   * 标记/取消「该文档是尺码表」(文档级)。标记后整篇原文作尺码生成的 LLM 材料、
+   * 且该文档的块不再进向量检索池(spec §八)。
+   */
+  const toggleSizeTable = async (k: PanelKnowledge, on: boolean) => {
+    if (!k.docId) return
+    try {
+      const resp = await sendMessage<SetKbSizeTableResponse>({
+        type: 'SET_KB_SIZE_TABLE',
+        payload: { docId: k.docId, on },
+      })
+      if (resp.payload.error) {
+        setMsg({ ok: false, text: `标记失败:${resp.payload.error}` })
+      } else {
+        setMsg({
+          ok: true,
+          text: on
+            ? '已标为尺码表:整篇原文作生成材料,不再参与向量检索'
+            : '已取消尺码表标记:该文档恢复参与向量检索',
+        })
+        await refresh()
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `标记失败:${String(err)}` })
     }
   }
 
@@ -322,6 +354,7 @@ export function KnowledgeTab({
           <Card
             key={k.id}
             tk={tk}
+            className="pddcs-kb-card"
             style={{
               padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`,
               gap: spacing.sm + 1,
@@ -402,6 +435,17 @@ export function KnowledgeTab({
                 >
                   {k.content}
                 </div>
+                {/* 尺码表开关:文档级标记,**只在该文档的第一块上渲染一次**
+                    (一篇文档切成很多块、每块一条记录,见 firstChunkIds) */}
+                {k.source === 'doc' && sizeSwitchIds.has(k.id) && (
+                  <Toggle
+                    tk={tk}
+                    label="尺码表"
+                    desc="整篇原文作为尺码生成的资料,不再参与向量检索"
+                    checked={k.isSizeTable === true}
+                    onChange={(v) => void toggleSizeTable(k, v)}
+                  />
+                )}
                 {/* 操作行(v2.6.30 合并 / v2.6.31 常驻):填充在左,复制/编辑/停用/删除紧随其右,
                     **默认可见**(不再悬浮才显) */}
                 <div

@@ -34,11 +34,19 @@ export interface UiSettings {
    */
   aiAvailable: boolean
   /**
-   * 本次检索被判为「纯尺码」(第五十八轮):池为空是设计意图 —— 答案取决于买家
-   * 个体参数,历史回复不可复用,改走尺码表 + 生成。面板据此渲染生成行。
+   * 本次检索的**路线信号**:类型集合里含「尺码推荐」—— 纯尺码(池为空)或
+   * 混合意图(池照常算)都会亮(spec §7.1【C】/【D】,第五十八轮)。
+   * 它只说"这条路与尺码有关",**不等于该渲染生成行** —— 渲染与否看 `sizeAvailable`。
    * 缺省(undefined)即旧语义:没有尺码路由。
    */
   sizeRoute?: boolean
+  /**
+   * 尺码生成行**是否可渲染**(第五十八轮):`sizeRoute` 之外还要满足 spec §8.1 前提
+   * ——至少一篇被标记的尺码表 + 三道外发闸门(开关/已配 LLM/非自动回复)。
+   * 与 `aiAvailable` 同源同构:SW 单方判定,content 只照渲染,免得两边口径漂移。
+   * 缺省(undefined)=不渲染(旧语义,响应体里不写这个键)。
+   */
+  sizeAvailable?: boolean
 }
 
 export interface GetSuggestionsResponse {

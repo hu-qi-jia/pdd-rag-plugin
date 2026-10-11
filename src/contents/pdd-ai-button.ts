@@ -35,6 +35,7 @@ import {
   aiRowRetryLabel,
   aiRowRetryable,
   reduceAiRow,
+  type AiRowSource,
   type AiRowState,
 } from '../pdd/ai-row'
 import type {
@@ -378,6 +379,16 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
   if (DEBUG) console.log('[PDD CS UI] action:', act.action, suggestions.length)
 
   if (act.action === 'none') {
+    // 纯尺码:候选本就为空是设计意图,尺码生成行就是面板的全部内容(spec §7.1【C】/§8.3)。
+    // 没有这一支,尺码问题点按钮只会得到"未找到匹配的历史回复",生成行永远看不到。
+    if (settings.sizeAvailable) {
+      trackEvent('panel.open.click')
+      openPopup(btn, suggestions, query, {
+        aiAvailable: settings.aiAvailable,
+        sizeAvailable: true,
+      })
+      return
+    }
     toast('未找到匹配的历史回复')
     return
   }
@@ -395,7 +406,10 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
     return
   }
   trackEvent('panel.open.click')
-  openPopup(btn, act.items, query, { aiAvailable: settings.aiAvailable })
+  openPopup(btn, act.items, query, {
+    aiAvailable: settings.aiAvailable,
+    sizeAvailable: settings.sizeAvailable,
+  })
 }
 
 // ─── 候选弹窗 ─────────────────────────────────────────────────────────────────
@@ -421,10 +435,14 @@ function closePopup(): void {
 }
 
 /**
- * 面板里的一行:普通候选,或 AI 整合行。键盘导航按这个数组走,
- * 索引与 DOM 里 `.pddcs-cand` 的顺序一一对应(AI 行也是 `.pddcs-cand`)。
+ * 面板里的一行:普通候选,或"生成行"。键盘导航按这个数组走,
+ * 索引与 DOM 里 `.pddcs-cand` 的顺序一一对应(生成行也是 `.pddcs-cand`)。
+ *
+ * 生成行**只有材料来源不同**(知识库候选 / 尺码表整篇原文)—— 状态机、DOM、重试入口
+ * 完全共用。所以这里是 `{ ai: true; source }` 而**不是**再加一个 `{ size: true }` 分支:
+ * 后者会让每一处 `r.ai` 的 switch 都得再分叉一次(第五十八轮)。
  */
-type PanelRow = { ai: false; s: Suggestion } | { ai: true }
+type PanelRow = { ai: false; s: Suggestion } | { ai: true; source: AiRowSource }
 
 /** 把选中态渲染到行上:唯一高亮源,**只有键盘**写这里(导航键;第五十三轮起鼠标不再参与) */
 function applySelection(): void {
@@ -488,16 +506,27 @@ function setBusy(btn: HTMLButtonElement, on: boolean): void {
 }
 
 /**
- * 「根据知识库内容整合并回复」行(P4 AI 整合)。
+ * 生成行(P4 AI 整合;第五十八轮加尺码来源)。
  *
- * 只在 SW 判定 aiAvailable(开关开 + 已配 API + 非自动回复 + 本轮有知识库候选)
- * 时才由 openPopup 渲染;点它才发起请求 —— 面板出现本身不产生任何网络流量。
+ * 只在 SW 判定行可用(aiAvailable / sizeAvailable:开关开 + 已配 API + 非自动回复 +
+ * 有材料)时才由 openPopup 渲染;点它才发起请求 —— 面板出现本身不产生任何网络流量。
  * 结果直接填输入框,但**发送仍由人工点击**(与候选行同一条硬边界)。
+ *
+ * source='knowledge' 时材料是本轮面板展示的知识库候选(口径 ADR-0006「所见即所发」);
+ * source='size' 时材料是**整篇尺码表原文**(spec §八)。文案必须与 ADR-0007 同源同义:
+ * 说清外发的是哪类内容 + 买家问题,且"历史与标准回答不出本机"一句不落。
  */
-function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
+function aiIntegrateRow(
+  query: string,
+  knowledgeIds: string[],
+  source: AiRowSource,
+): HTMLDivElement {
   const row = document.createElement('div')
   row.className = 'pddcs-cand pddcs-ai-row'
-  row.title = '把本轮命中的知识库内容整合成一段可直接发送的话术(会调用你在设置里配置的 API)'
+  row.title =
+    source === 'size'
+      ? '把整篇尺码表原文交给模型,生成一段可直接发送的话术(会调用你在设置里配置的 API)'
+      : '把本轮命中的知识库内容整合成一段可直接发送的话术(会调用你在设置里配置的 API)'
 
   const label = document.createElement('span')
   label.className = 'pddcs-ai-label'
@@ -528,13 +557,13 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
     row.classList.toggle('is-busy', aiRowBusy(state))
     row.classList.toggle('is-error', state.phase === 'error')
     row.classList.toggle('is-idle', state.phase === 'idle')
-    label.textContent = aiRowLabel(state, loadingVisible)
+    label.textContent = aiRowLabel(state, loadingVisible, source)
     const text = aiRowDraft(state)
     draft.textContent = text
     draft.style.display = text ? '' : 'none'
     // 正文出现时说明行让位:出结果后"会发生什么"已是既成事实,
     // 再说一遍只会把行撑成三层、比候选行高出一截
-    const hintText = text ? '' : aiRowHint(state, knowledgeIds.length)
+    const hintText = text ? '' : aiRowHint(state, knowledgeIds.length, source)
     hint.textContent = hintText
     hint.style.display = hintText ? '' : 'none'
     const canRetry = aiRowRetryable(state)
@@ -578,13 +607,13 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
         // 生成结果还在行里,用户要从这儿手动复制,面板是唯一的载体
         if (fillInput(ev.payload.text)) {
           trackEvent('fill.ai')
-          toast('已整合并填充:知识库 · 请手动发送')
+          toast(`已整合并填充:${source === 'size' ? '尺码表' : '知识库'} · 请手动发送`)
           closePopup()
         } else {
           toast('已整合,但未找到输入框,请手动粘贴')
         }
       } else if (ev.type === 'NO_ANSWER') {
-        toast('知识库内容不足以回答该问题')
+        toast(source === 'size' ? '尺码表内容不足以回答该问题' : '知识库内容不足以回答该问题')
       } else if (ev.type === 'ERROR') {
         toast(aiRowLabel(state))
       }
@@ -599,7 +628,11 @@ function aiIntegrateRow(query: string, knowledgeIds: string[]): HTMLDivElement {
       dropPort()
       render()
     })
-    const req: AiPortRequest = { type: 'AI_INTEGRATE', payload: { query, knowledgeIds } }
+    const req: AiPortRequest = {
+      type: 'AI_INTEGRATE',
+      // source 缺省即知识库语义(向后兼容)—— 只有尺码来源才显式带上
+      payload: { query, knowledgeIds, ...(source === 'size' ? { source } : {}) },
+    }
     p.postMessage(req)
   }
 
@@ -762,7 +795,7 @@ function openPopup(
   anchor: HTMLElement,
   items: Suggestion[],
   query: string,
-  opts: { keyboard?: boolean; aiAvailable?: boolean } = {},
+  opts: { keyboard?: boolean; aiAvailable?: boolean; sizeAvailable?: boolean } = {},
 ): void {
   closePopup()
   const overlay = ensureOverlay()
@@ -800,14 +833,21 @@ function openPopup(
   const body = document.createElement('div')
   body.className = 'pddcs-popup-body'
 
-  // AI 整合行插在首个知识库候选之前(没有知识库候选就不渲染,面板与现状零差异)
+  // 生成行有两种来源,插位不同(spec §8.3 尺码行在**面板顶部**):
+  //  - 尺码行:纯尺码时候选本就为空,它是唯一一行;混合意图时它压在候选之上;
+  //  - 知识库整合行:插在首个知识库候选之前(没有知识库候选就不渲染,与现状零差异)。
   const rows: PanelRow[] = items.map((s) => ({ ai: false as const, s }))
+  const sizeAt = opts.sizeAvailable ? 0 : -1
+  if (sizeAt >= 0) rows.splice(sizeAt, 0, { ai: true, source: 'size' })
   const aiAt = opts.aiAvailable ? aiRowInsertIndex(items) : -1
-  if (aiAt >= 0) rows.splice(aiAt, 0, { ai: true })
+  if (aiAt >= 0) {
+    // aiRowInsertIndex 返回的是**候选数组**里的下标;尺码行占了一格时要右移一位
+    rows.splice(aiAt + (sizeAt >= 0 ? 1 : 0), 0, { ai: true, source: 'knowledge' })
+  }
   const kbIds = items.filter((s) => s.kind === 'knowledge').map((s) => s.sourceId)
 
   for (const [i, r] of rows.entries()) {
-    const row = r.ai ? aiIntegrateRow(query, kbIds) : candidateRow(r.s, query)
+    const row = r.ai ? aiIntegrateRow(query, kbIds, r.source) : candidateRow(r.s, query)
     row.dataset.idx = String(i)
     body.appendChild(row)
   }
@@ -959,7 +999,8 @@ async function onHotkey(): Promise<void> {
     toast(`检索失败:${error}`)
     return
   }
-  if (suggestions.length === 0) {
+  // 纯尺码:候选为空是设计意图 —— 只要有尺码生成行可挂,面板照样开(spec §8.3)
+  if (suggestions.length === 0 && !settings.sizeAvailable) {
     toast('未找到匹配的历史回复')
     return
   }
@@ -982,7 +1023,11 @@ async function onHotkey(): Promise<void> {
     (document.querySelector(INPUT_SEL) as HTMLElement | null) ??
     (latest as HTMLElement)
   trackEvent('panel.open.hotkey')
-  openPopup(anchor, suggestions, query, { keyboard: true, aiAvailable: settings.aiAvailable })
+  openPopup(anchor, suggestions, query, {
+    keyboard: true,
+    aiAvailable: settings.aiAvailable,
+    sizeAvailable: settings.sizeAvailable,
+  })
 }
 
 document.addEventListener(

@@ -15,6 +15,7 @@ import {
   isJevConfigured,
   jevConfigFromSettings,
   type JevCategoryOption,
+  type JevConfig,
 } from './jev'
 import type { CategoryRecord } from '../types/memory'
 
@@ -70,4 +71,115 @@ export async function classifyRecord(
   } catch {
     return null
   }
+}
+
+/** 补分类进度。total 是**待办条数**(不含跳过的),设置页按钮上的文案与它同源 */
+export interface BackfillProgress {
+  total: number
+  done: number
+  ok: number
+  failed: number
+  skipped: number
+}
+
+/** 并发上限:官方限流约 1200 req/min,5 并发远在安全区 */
+const BACKFILL_CONCURRENCY = 5
+/** 单条失败重试次数(不含首发) */
+const BACKFILL_RETRIES = 2
+
+/** 打一条,失败重试。成功返回打标结果(可能是 null = 判不准) */
+async function classifyWithRetry(
+  question: string,
+  config: JevConfig,
+  options: JevCategoryOption[],
+  threshold: number,
+): Promise<{ categoryId: string; confidence: number } | null> {
+  for (let attempt = 0; attempt <= BACKFILL_RETRIES; attempt++) {
+    const r = await classifyQuestion({ question, categories: options, config })
+    if (r.ok) return pickRecordCategory(r.probabilities, threshold)
+  }
+  return null
+}
+
+/**
+ * 批量补存量。
+ *
+ * 前置门禁由调用方负责(通过才会调到这里),本函数不重复判。
+ * 每条跑完立即落库 —— 中断不丢进度。写回失败(记录已被 TTL 清掉)计入 skipped,
+ * **不中断整批**:一次清理不该让几千条的补分类停在中途。
+ */
+export async function runBackfill(opts: {
+  onProgress: (p: BackfillProgress) => void
+  shouldStop: () => boolean
+  /** 测试注入用;不传则走真实设置、真库 */
+  deps?: {
+    config?: JevConfig
+    categories?: JevCategoryOption[]
+    threshold?: number
+    snapshot?: () => Promise<{
+      history: Array<{ id: string; question: string }>
+      golden: Array<{ id: string; question: string }>
+    }>
+    writeHistory?: (
+      id: string,
+      hit: { categoryId: string; confidence: number } | null,
+    ) => Promise<void>
+    writeGolden?: (
+      id: string,
+      hit: { categoryId: string; confidence: number } | null,
+    ) => Promise<void>
+  }
+}): Promise<BackfillProgress> {
+  const settings = await loadSettings()
+  const config = opts.deps?.config ?? jevConfigFromSettings(settings)
+  const options = opts.deps?.categories ?? classifiableCategories(await db.listCategories())
+  const threshold = opts.deps?.threshold ?? settings.classifyProbThreshold
+  const snapshot = opts.deps?.snapshot ?? (() => db.snapshotBackfillCandidates())
+  const writeHistory = opts.deps?.writeHistory ?? ((id, hit) => db.updateQaCategory(id, hit))
+  const writeGolden = opts.deps?.writeGolden ?? ((id, hit) => db.updateGoldenCategory(id, hit))
+
+  const snap = await snapshot()
+  const items = [
+    ...snap.history.map((r) => ({ ...r, kind: "history" as const })),
+    ...snap.golden.map((r) => ({ ...r, kind: "golden" as const })),
+  ]
+  const progress: BackfillProgress = {
+    total: items.length,
+    done: 0,
+    ok: 0,
+    failed: 0,
+    skipped: 0,
+  }
+  opts.onProgress({ ...progress })
+  if (items.length === 0) return progress
+
+  // 固定的 worker 池 + 共享游标:并发数恒等于池大小,不需要信号量
+  let cursor = 0
+  let stopped = false
+  const workers = Array.from({ length: BACKFILL_CONCURRENCY }, async () => {
+    for (;;) {
+      if (stopped || opts.shouldStop()) {
+        stopped = true
+        return
+      }
+      const idx = cursor++
+      if (idx >= items.length) return
+      const item = items[idx]
+
+      const hit = await classifyWithRetry(item.question, config, options, threshold)
+      try {
+        const write = item.kind === "history" ? writeHistory : writeGolden
+        await write(item.id, hit)
+        if (hit) progress.ok++
+        else progress.failed++
+      } catch {
+        progress.skipped++
+      }
+      progress.done++
+      opts.onProgress({ ...progress })
+    }
+  })
+  await Promise.all(workers)
+
+  return progress
 }

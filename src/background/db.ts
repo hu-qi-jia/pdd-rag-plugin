@@ -242,6 +242,76 @@ export class PddDatabase extends Dexie {
     return false;
   }
 
+  // ─── 补分类候选(第五十六轮) ─────────────────────────────────────────────────
+
+  /**
+   * 一条记录是否在补分类的候选里。
+   *
+   *  - 待分类:categoryId 缺失或是未分类
+   *  - 重跑:机器打的标,且类型定义在此之后改过(旧标签可能已失效)
+   *  - 跳过:人工指定的(机器永不许覆盖)
+   *  - inherit 两边都不进:标签有效,而且问题文本与来源相同,重跑是白花钱
+   *
+   * 注意迁移的时间戳:迁移把类型的 updatedAt 与标答的 categoryAt 写成同一个
+   * Date.now(),两者相等 → `<` 不成立 → 迁移来的标答不会被误判成"待重跑"。
+   */
+  private isBackfillCandidate(
+    rec: { categoryId?: string | null; categorySource?: string; categoryAt?: number },
+    catUpdatedAt: Map<string, number>,
+  ): boolean {
+    if (rec.categorySource === "manual") return false;
+    if (!rec.categoryId || rec.categoryId === UNCATEGORIZED_CATEGORY_ID) return true;
+    if (rec.categorySource !== "jev") return false;
+    const catUpdated = catUpdatedAt.get(rec.categoryId);
+    if (catUpdated === undefined) return false;
+    return (rec.categoryAt ?? 0) < catUpdated;
+  }
+
+  private async categoryUpdatedAtMap(): Promise<Map<string, number>> {
+    const cats = await this.categories.toArray();
+    return new Map(cats.map((c) => [c.id, c.updatedAt]));
+  }
+
+  /** 补分类候选条数(设置页按钮上显示的必须是待办的条数,不是库里的总数) */
+  async countBackfillCandidates(): Promise<{ history: number; golden: number }> {
+    const [qas, goldens, catUpdatedAt] = await Promise.all([
+      this.qaRecords.toArray(),
+      this.goldens.toArray(),
+      this.categoryUpdatedAtMap(),
+    ]);
+    return {
+      history: qas.filter((r) => this.isBackfillCandidate(r, catUpdatedAt)).length,
+      golden: goldens.filter((r) => this.isBackfillCandidate(r, catUpdatedAt)).length,
+    };
+  }
+
+  /**
+   * 补分类候选的**快照**:一次读全表,只带 id 与问题文本(向量不带走)。
+   *
+   * 为什么是快照而不是分页:每跑完一条,它就离开候选集合 —— 对**会缩小的集合**
+   * 做 offset 分页会静默跳过条目(跑完前 200 条后,原第 400 条会变成新集合的
+   * 第 200 条,而下一页取的是新集合第 200 条起,原第 200~399 条就此丢失)。
+   * id + 问题文本很小,几万条也就几百 KB,一次取全没有代价问题。
+   */
+  async snapshotBackfillCandidates(): Promise<{
+    history: Array<{ id: string; question: string }>;
+    golden: Array<{ id: string; question: string }>;
+  }> {
+    const [qas, goldens, catUpdatedAt] = await Promise.all([
+      this.qaRecords.toArray(),
+      this.goldens.toArray(),
+      this.categoryUpdatedAtMap(),
+    ]);
+    return {
+      history: qas
+        .filter((r) => this.isBackfillCandidate(r, catUpdatedAt))
+        .map((r) => ({ id: r.id, question: r.question })),
+      golden: goldens
+        .filter((r) => this.isBackfillCandidate(r, catUpdatedAt))
+        .map((r) => ({ id: r.id, question: r.question })),
+    };
+  }
+
   // ─── 错误日志 ────────────────────────────────────────────────────────────────
 
   async logError(message: string, context?: Record<string, unknown>): Promise<void> {

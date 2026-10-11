@@ -86,11 +86,17 @@ export async function collectMaterials(knowledgeIds: string[]): Promise<string[]
  * 只读 `kbDocs.content`:这是"回复正文与标准回答正文永不出本机"的落点 ——
  * 材料里一个字节都不来自 replies/goldens。
  *
- * 顺序按 docId 稳定排序,保证材料顺序可复现(多篇时不能靠 Map 的插入序)。
- * 总量以 MAX_MATERIAL_CHARS 为硬上限:最后一篇越界时**截到剩余额度**(spec §八
- * 「超长时截断到 3000 字」)。这里与 collectMaterials 的"尾部整块丢弃"不同 ——
- * 那里的单位是自足的块,丢一块不影响其余;而整篇尺码表是一个原子单位,丢了就等于
- * 这次生成没有材料、功能静默失效。
+ * 顺序按 docId 的**码点序**稳定排序,保证材料顺序可复现(多篇时不能靠 Map 的插入序)。
+ * 这里**刻意不用 localeCompare**:它按运行时 locale 排序,Node 的 ICU 与 Chrome
+ * (zh-CN / en-US)对 CJK 可能给出不同次序 —— 而这个顺序决定"多篇超预算时先截哪一篇",
+ * 顺序一飘,同样的库在不同环境就会拼出不同材料。码点序只依赖字符串本身,与 locale 无关。
+ * 它保证的是"跨环境可复现",不是"对人更自然"。
+ *
+ * 总量以 MAX_MATERIAL_CHARS 为硬上限:最后一篇越界时,回退到预算内**最后一个 `\n`**,
+ * 只发完整行(spec §八「超长时截断到 3000 字」)。半行(如 `165cm 50`)比没有更糟:
+ * 模型会拿残行自信作答,而丢掉的那几行恰恰是正确答案所在的边界。若预算内连一整行都
+ * 放不下(无换行,或首个换行前就超预算),整篇丢弃,绝不发残片 —— 多篇时同理,
+ * 后一篇被切到只剩几个字符比直接不发它更坏。
  */
 export async function collectSizeTableMaterials(): Promise<string[]> {
   const docIds = await db.listSizeTableDocIds()
@@ -98,12 +104,22 @@ export async function collectSizeTableMaterials(): Promise<string[]> {
 
   const out: string[] = []
   let total = 0
-  for (const docId of [...docIds].sort((a, b) => a.localeCompare(b))) {
+  for (const docId of [...docIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
     const remaining = MAX_MATERIAL_CHARS - total
     if (remaining <= 0) break
     const doc = await db.getKbDoc(docId)
     if (!doc || !doc.content) continue
-    const text = doc.content.length > remaining ? doc.content.slice(0, remaining) : doc.content
+
+    if (doc.content.length <= remaining) {
+      out.push(doc.content)
+      total += doc.content.length
+      continue
+    }
+
+    const cut = doc.content.slice(0, remaining)
+    const lastNewline = cut.lastIndexOf('\n')
+    if (lastNewline <= 0) continue // 一行都放不下 → 整篇丢弃
+    const text = cut.slice(0, lastNewline)
     out.push(text)
     total += text.length
   }

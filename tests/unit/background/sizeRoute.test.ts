@@ -219,14 +219,73 @@ describe('collectSizeTableMaterials', () => {
     expect(await collectSizeTableMaterials()).toEqual(['A 表', 'B 表', 'C 表'])
   })
 
-  it('超长时截断到 MAX_MATERIAL_CHARS', async () => {
+  it('超长单篇:截到预算内最后一个完整行,绝不发半行', async () => {
     const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
-    const big = '甲'.repeat(MAX_MATERIAL_CHARS + 500)
-    await db.putKbDoc(kbDoc({ docId: '大表', content: big }))
+    const lines = Array.from(
+      { length: 300 },
+      (_, i) => `身高${150 + i}cm 体重${40 + i}kg → ${i % 2 ? 'L' : 'M'}`,
+    )
+    const full = lines.join('\n') // 远超 3000 字
+    await db.putKbDoc(kbDoc({ docId: '大表', content: full }))
     await setKbDocSizeTable('大表', true)
 
     const m = await collectSizeTableMaterials()
-    expect(m.join('').length).toBe(MAX_MATERIAL_CHARS)
+    expect(m).toHaveLength(1) // 没有把尾巴拼成第二段
+    const out = m[0]
+    expect(out.length).toBeLessThanOrEqual(MAX_MATERIAL_CHARS)
+    // 原文以整行收尾的**行级前缀**:后面紧跟一个换行,而不是切在 `165cm 50` 之类半行中间
+    expect(full.startsWith(out + '\n')).toBe(true)
+    expect(out.split('\n').length).toBeGreaterThan(1)
+  })
+
+  it('越界且预算内放不下任何完整行 → 整篇丢弃,不发残片', async () => {
+    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    // 无换行的一整行:切点落在行内,回退不到任何行边界 → 直接丢弃
+    const oneLine = '甲'.repeat(MAX_MATERIAL_CHARS + 500)
+    await db.putKbDoc(kbDoc({ docId: '大表', content: oneLine }))
+    await setKbDocSizeTable('大表', true)
+
+    expect(await collectSizeTableMaterials()).toEqual([])
+  })
+
+  it('多篇时后一篇越界 → 同样按行边界截,不为塞缝发几个残字', async () => {
+    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    const a = 'A 表'
+    const lines = Array.from({ length: 300 }, (_, i) => `第${i}行:身高${150 + i}cm`)
+    const b = lines.join('\n')
+    await db.putKbDoc(kbDoc({ docId: 'aa', content: a }))
+    await db.putKbDoc(kbDoc({ docId: 'bb', content: b }))
+    await setKbDocSizeTable('aa', true)
+    await setKbDocSizeTable('bb', true)
+
+    const m = await collectSizeTableMaterials()
+    expect(m).toHaveLength(2)
+    expect(m[0]).toBe(a)
+    expect(b.startsWith(m[1] + '\n')).toBe(true) // 后一篇也是整行收尾
+    expect(m.join('').length).toBeLessThanOrEqual(MAX_MATERIAL_CHARS)
+  })
+
+  it('后一篇的剩余额度过小、连一行都放不下 → 丢弃它而非截成几个字符', async () => {
+    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    const a = '甲'.repeat(2900) // 单行 2900 字,先占掉预算
+    const b = '乙'.repeat(2000) // 单行 2000 字,剩余 100 字放不下 → 丢
+    await db.putKbDoc(kbDoc({ docId: 'aa', content: a }))
+    await db.putKbDoc(kbDoc({ docId: 'bb', content: b }))
+    await setKbDocSizeTable('aa', true)
+    await setKbDocSizeTable('bb', true)
+
+    expect(await collectSizeTableMaterials()).toEqual([a])
+  })
+
+  it('★ 多篇排序用码点序,与 locale 无关 —— 顺序决定超预算时先截哪篇', async () => {
+    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    // 码点序:'Z'(U+005A) < 'a'(U+0061) → Zebra 在前;localeCompare 会因大小写折叠给出相反次序
+    await db.putKbDoc(kbDoc({ docId: 'apple', content: '小写表' }))
+    await db.putKbDoc(kbDoc({ docId: 'Zebra', content: '大写表' }))
+    await setKbDocSizeTable('apple', true)
+    await setKbDocSizeTable('Zebra', true)
+
+    expect(await collectSizeTableMaterials()).toEqual(['大写表', '小写表'])
   })
 
   it('★ 材料里只有尺码表原文(不含任何回复正文)', async () => {

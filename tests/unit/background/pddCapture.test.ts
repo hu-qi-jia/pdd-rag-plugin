@@ -22,11 +22,16 @@ vi.mock('../../../src/background/db', () => {
       hasReplyContent: vi.fn(async () => false),
       addReply: vi.fn(async () => undefined),
       recountReplyCount: vi.fn(async () => undefined),
+      updateQaCategory: vi.fn(async () => undefined),
       latestQaOfSession: vi.fn(async () => undefined),
       logError: vi.fn(async () => undefined),
     },
   }
 })
+
+vi.mock('../../../src/background/classify', () => ({
+  classifyRecord: vi.fn(),
+}))
 
 vi.mock('../../../src/background/offscreen', () => ({
   queueEmbedding: vi.fn(),
@@ -43,6 +48,7 @@ vi.mock('../../../src/background/settings', () => ({
 }))
 
 import { db } from '../../../src/background/db'
+import { classifyRecord } from '../../../src/background/classify'
 import type { PddCapturedEvent, PddIngestRequest } from '../../../src/types/messages'
 
 type Ingest = (m: PddIngestRequest, tabId?: number) => Promise<{
@@ -331,5 +337,116 @@ describe('未结段持久化(chrome.storage.session,SW 休眠防御)', () => {
       question: '有优惠吗?',
     })
     expect(db.addReply).not.toHaveBeenCalled()
+  })
+})
+
+// ─── 捕获即打标(第五十六轮) ────────────────────────────────────────────────────
+//
+// 两条要求,一条关于"要不要做",一条关于"别拖慢":
+//  ① 落盘后要带着分类结果写回库;
+//  ② 打标必须即发即忘 —— 它是网络请求,await 它会把整条捕获链路的吞吐拖垮。
+
+describe('捕获时自动打标', () => {
+  beforeEach(() => {
+    vi.mocked(classifyRecord).mockReset()
+  })
+
+  it('落盘后触发一次打标,并把结果写回', async () => {
+    vi.mocked(classifyRecord).mockResolvedValue({ categoryId: 'preset:order', confidence: 0.91 })
+    const ingest = await freshIngest()
+    const resp = await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          ...msgEvents('u1875210170836', 'event'),
+          {
+            kind: 'msg',
+            sessionKey: 'u1875210170836',
+            buyerIdTail: '0836',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-tag-1',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
+    })
+    expect(resp.queued).toBe(2)
+    // 打标是即发即忘的:让挂着的微任务跑一轮
+    await vi.waitFor(() => expect(classifyRecord).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(classifyRecord).mock.calls[0][0]).toBe('这个能开发票吗?')
+    expect(db.updateQaCategory).toHaveBeenCalledWith(expect.any(String), {
+      categoryId: 'preset:order',
+      confidence: 0.91,
+    })
+  })
+
+  it('★ 即发即忘:打标还挂着的时候,捕获已经返回了', async () => {
+    let release: (v: null) => void = () => {}
+    vi.mocked(classifyRecord).mockImplementation(
+      () =>
+        new Promise<null>((res) => {
+          release = res
+        }),
+    )
+    const ingest = await freshIngest()
+    const resp = await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          ...msgEvents('u1875210170837', 'event'),
+          {
+            kind: 'msg',
+            sessionKey: 'u1875210170837',
+            buyerIdTail: '0837',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-tag-2',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
+    })
+    // 若 pddCapture 在这条链路上 await 了打标,上面这个 await ingest(...) 会永远挂着,
+    // 测试以超时告终 —— 这正是我们要它失败的样子。
+    expect(resp.queued).toBe(2)
+    expect(classifyRecord).toHaveBeenCalledTimes(1)
+    expect(db.updateQaCategory).not.toHaveBeenCalled()
+    release(null)
+  })
+
+  it('打标抛错不影响捕获:记录照常入库,且不写分类', async () => {
+    vi.mocked(classifyRecord).mockRejectedValue(new Error('boom'))
+    const ingest = await freshIngest()
+    const resp = await ingest({
+      type: 'PDD_INGEST',
+      payload: {
+        events: [
+          ...msgEvents('u1875210170838', 'event'),
+          {
+            kind: 'msg',
+            sessionKey: 'u1875210170838',
+            buyerIdTail: '0838',
+            msg: {
+              source: 'dom',
+              role: 'agent',
+              text: '可以的,支持电子发票。',
+              msgId: 'a-tag-3',
+              ts: Date.now(),
+            },
+          },
+        ],
+      },
+    })
+    expect(resp.queued).toBe(2)
+    expect(db.addQaRecord).toHaveBeenCalled()
+    await vi.waitFor(() => expect(classifyRecord).toHaveBeenCalled())
+    expect(db.updateQaCategory).not.toHaveBeenCalled()
   })
 })

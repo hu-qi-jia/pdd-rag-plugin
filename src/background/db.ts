@@ -289,6 +289,25 @@ export class PddDatabase extends Dexie {
 
   // ─── 问答记录(qaRecords) ──────────────────────────────────────────────────────
 
+  /**
+   * 写回分类结果(第五十六轮)。
+   *
+   * `hit === null` 表示判不准 / jev 失败 / 未启用 —— 一律落未分类,而不是保持 null。
+   * 两者在检索时等价(都恒进池),但显式的 'uncategorized' 让面板能区分
+   * "还没跑过"与"跑过但判不出来",补分类的候选统计也要靠它。
+   */
+  async updateQaCategory(
+    id: string,
+    hit: { categoryId: string; confidence: number } | null,
+  ): Promise<void> {
+    await this.qaRecords.update(id, {
+      categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
+      categoryConfidence: hit ? hit.confidence : undefined,
+      categorySource: "jev",
+      categoryAt: Date.now(),
+    });
+  }
+
   async addQaRecord(record: QaRecord): Promise<string> {
     await this.qaRecords.add(record);
     return record.id;

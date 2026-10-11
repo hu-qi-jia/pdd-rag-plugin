@@ -8,6 +8,7 @@
  * 事件全部经 segmenter 内部 promise 链串行,避免 DB 写竞态。
  */
 import { db } from "./db";
+import { classifyRecord } from "./classify";
 import { queueEmbedding } from "./offscreen";
 import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "../pdd/segmenter";
 import { loadSettings } from "./settings";
@@ -31,6 +32,21 @@ async function hookLog(fn: string, ctx: Record<string, unknown>, err: unknown): 
     await db.logError(`pddCapture.${fn}`, { ...ctx, err: String(err) });
   } catch {
     /* 错误表也写不进去则放弃 */
+  }
+}
+
+/**
+ * 给一条刚入库的问答打标并写回(第五十六轮)。
+ *
+ * 独立于 closeQuestion 的 try/catch —— 打标失败绝不能走上 hookLog + throw 那条路,
+ * 那会让一次网络抖动表现成一次捕获失败。
+ */
+async function classifyAndTag(qaId: string, question: string): Promise<void> {
+  try {
+    const hit = await classifyRecord(question);
+    await db.updateQaCategory(qaId, hit);
+  } catch {
+    /* 静默:打标失败 = 保持未分类 */
   }
 }
 
@@ -69,6 +85,11 @@ const segmenterHooks: SegmenterHooks = {
       };
       await db.addQaRecord(record);
       queueEmbedding("qa", id, ctx.question);
+      // 打标即发即忘:捕获链路是 segmenter 内部串行的 promise 链,
+      // 一条最长 3 秒的网络请求卡在这里会把后续消息落盘一起拖住。
+      // 失败一律静默 —— 没打上标的记录会以「未分类」参与检索(未分类不参与类型过滤,
+      // 所以功能上零损失,见 spec §7.2)。
+      void classifyAndTag(id, ctx.question);
       return id;
     } catch (err) {
       await hookLog("closeQuestion", { q: ctx.question.slice(0, 60), sk: ctx.sessionKey }, err);

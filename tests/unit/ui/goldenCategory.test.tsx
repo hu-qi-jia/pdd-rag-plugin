@@ -172,6 +172,29 @@ describe('标准回答页 · 类型分区', () => {
     expect(values).not.toContain('ghost')
   })
 
+  it('同一类型内:同问题的多条答案最近设置的在前(不按库内 id 序)', async () => {
+    // 库里 goldens.toArray() 是 id 序(最旧在前),分区前必须补排一次,
+    // 否则最旧的会顶到最前 —— 与聊天页候选口径相反
+    panelData.goldens = [
+      golden('g-old', {
+        question: '怎么发货',
+        answer: '旧答案',
+        categoryId: 'preset:logistics',
+        updatedAt: 1000,
+      }),
+      golden('g-new', {
+        question: '怎么发货',
+        answer: '新答案',
+        categoryId: 'preset:logistics',
+        updatedAt: 2000,
+      }),
+    ]
+    await render()
+    const text = container.textContent ?? ''
+    expect(text).toContain('物流 · 2')
+    expect(text.indexOf('新答案')).toBeLessThan(text.indexOf('旧答案'))
+  })
+
   it('空类型不渲染分区容器', async () => {
     panelData.goldens = [golden('g1', { question: '物流问题', categoryId: 'preset:logistics' })]
     await render()

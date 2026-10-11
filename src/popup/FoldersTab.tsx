@@ -27,7 +27,7 @@ import type {
   UpdateGoldenResponse,
 } from '../types/messages'
 import { MAX_GOLDENS_PER_QUESTION } from '../shared/constants'
-import { categoryOrder, countGoldensByQuestion, groupByCategory } from './logic'
+import { categoryOrder, countGoldensByQuestion, groupByCategory, orderGoldensByRecency } from './logic'
 import { hashText } from '../shared/text'
 import {
   Badge,
@@ -98,10 +98,22 @@ export function FoldersTab({
   const questionCounts = useMemo(() => countGoldensByQuestion(goldens), [goldens])
 
   /**
+   * 分区前必须**先把顺序排好**(groupByCategory 的契约:组内保持传入顺序,它不排)。
+   * GET_PANEL_DATA 回来的是 `db.goldens.toArray()` = id 序 = **最旧在前** ——
+   * 直接喂给 groupByCategory 会让同问题的多条答案把最旧的顶到最前,与既定口径相反。
+   * 这里补回旧路径(`buildFolderTree`)原有的 `orderGoldensByRecency`:同问题多条按
+   * updatedAt 倒序(最近设置的靠前,与聊天页候选同一口径)。
+   */
+  const orderedGoldens = useMemo(() => orderGoldensByRecency(goldens), [goldens])
+
+  /**
    * 按问题类型分区(第五十七轮 Task 6):复用 logic#groupByCategory —— 未分类恒最后、
    * 类型表里没有的 id 并进未分类、空组不产出。这里不再有第二套分组实现。
    */
-  const groups = useMemo(() => groupByCategory(goldens, categories), [goldens, categories])
+  const groups = useMemo(
+    () => groupByCategory(orderedGoldens, categories),
+    [orderedGoldens, categories],
+  )
 
   /** 类型下拉的选项:未分类在内,已删除的类型不在(它本来就不在类型表里) */
   const categoryOptions = useMemo(

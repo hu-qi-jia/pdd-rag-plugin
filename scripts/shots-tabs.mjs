@@ -105,7 +105,7 @@ await sleep(1500)
 // ── 逐页签 × 亮/暗色截图 ──
 const TABS = [
   ['memory', '记忆'],
-  ['folders', '文件夹'],
+  ['folders', '标准回答'],
   ['knowledge', '知识库'],
   ['settings', '设置'],
 ]

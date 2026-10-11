@@ -56,11 +56,11 @@ const preg = (q) => pop.evaluate(async (q) => {
   return (resp?.payload?.goldens ?? []).filter((g) => g.question === q)
 }, q)
 const add = (answer) => send('ADD_GOLDEN', { question: Q, answer })
-/** 用户在文件夹页看到的真实顺序:重载 popup → 文件夹页 → 按 DOM 顺序取答复序号 */
+/** 用户在标准回答页看到的真实顺序:重载 popup → 标准回答页 → 按 DOM 顺序取答复序号 */
 const panelOrder = async () => {
   await pop.reload({ waitUntil: 'domcontentloaded' })
   await sleep(1500)
-  await pop.locator('button[title="文件夹"]').click()
+  await pop.locator('button[title="标准回答"]').click()
   await sleep(1200)
   return pop.evaluate(() => {
     const txt = document.body.innerText
@@ -91,7 +91,7 @@ check(
 
 // ── ④ 面板展示顺序 = 最近设置靠前 ──
 const order1 = await panelOrder()
-check('文件夹页按最近设置靠前展示(3 → 2 → 1)', order1.join(',') === '3,2,1', `order=${order1.join(',')}`)
+check('标准回答页按最近设置靠前展示(3 → 2 → 1)', order1.join(',') === '3,2,1', `order=${order1.join(',')}`)
 check('同问题多条在面板上标注「同问题 3 条 · 已满」', await pop.locator('text=同问题 3 条 · 已满').count() > 0)
 
 // ── ⑤ 取消一条后额度释放 ──
@@ -104,50 +104,49 @@ check('取消的那条已不在库中,新条入列', !after.some((g) => g.id ===
 const order2 = await panelOrder()
 check('取消+新设后,最新设置的排最前(5 → 3 → 1)', order2.join(',') === '5,3,1', `order=${order2.join(',')}`)
 
-// ── ⑥ 结构:文件夹优先于内容(2026-09-15 文件夹页重设计)──
-const rootF = await send('CREATE_FOLDER', { name: '结构验收根夹', parentId: null })
-const childF = await send('CREATE_FOLDER', { name: '结构验收子夹', parentId: rootF.id })
+// ── ⑥ 结构:按问题类型分区(第五十七轮 Task 6 起,顶层由文件夹树改为类型分区)──
+// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认它落在该类型的分区里。
+const CAT_NAME = '订单物流'
+const CAT_ID = 'preset:order'
 // 用独立问题,避免撞上上面那个问题的 3 条上限
-const gStruct = await send('ADD_GOLDEN', { question: '结构验收:换个问题问一次?', answer: '结构验收答复' })
-const moved = await send('UPDATE_GOLDEN', { id: gStruct.id, folderId: rootF.id })
-check('搬家成功(结构验收用标准回答已入根夹)', moved.id === gStruct.id, JSON.stringify(moved))
+const gTyped = await send('ADD_GOLDEN', { question: '类型验收:订单什么时候发货?', answer: '类型验收答复' })
+// 等 add 时的异步打标落地:否则它可能在我们显式摆放之后才写回,抢掉 manual 标记
+await sleep(1500)
+const movedCat = await send('UPDATE_GOLDEN_CATEGORY', { id: gTyped.id, categoryId: CAT_ID })
+check('移到类型成功(订单物流)', movedCat.success === true, JSON.stringify(movedCat))
 await pop.reload({ waitUntil: 'domcontentloaded' })
 await sleep(1500)
-await pop.locator('button[title="文件夹"]').click()
+await pop.locator('button[title="标准回答"]').click()
 await sleep(1200)
-const rel = await pop.evaluate(() => {
-  // 按 data-folder-id 找分区头(原先用的 .pddcs-row 钩子在 v2.6.31 退役,
-  // 这里有很长一段时间是在 0 个元素里找,失败信息指向的却是排序 —— 见 FoldersTab 注释)
-  const headers = [...document.querySelectorAll('[data-folder-id]')]
-  const head = headers.find((el) => (el.textContent || '').includes('结构验收根夹'))
-  const box = head && head.parentElement
-  const t = box?.innerText ?? ''
+const rel = await pop.evaluate((catName) => {
+  // 分区容器的标题 div 文案为「类型名 · 条数」(见 FoldersTab 的 Card title);
+  // 取标题所在 Card 的 innerText 看条目是否真落在这一块里
+  const titles = [...document.querySelectorAll('div')].filter(
+    (d) => d.children.length === 0 && (d.textContent || '').startsWith(`${catName} ·`),
+  )
+  const title = titles[0]
+  const card = title && title.parentElement
+  const t = card?.innerText ?? ''
   return {
-    childIdx: t.indexOf('结构验收子夹'),
-    answerIdx: t.indexOf('结构验收答复'),
-    // 失败时最想知道的是"盒子里到底有什么":根夹没渲染 / 夹是折叠的 / 内容没进来
-    // 三种情况修法完全不同,只报 -1/-1 等于没说
-    rows: headers.length,
-    found: !!head,
+    headerText: title ? title.textContent : '',
+    answerIdx: t.indexOf('类型验收答复'),
+    // 失败时最想知道的是"页面上到底有没有这个分区":没分区 / 分区在但内容没进来
+    // 修法完全不同,只报 -1 等于没说
+    cards: titles.length,
     box: t.replace(/\s+/g, ' ').slice(0, 200),
   }
-})
+}, CAT_NAME)
 check(
-  '子文件夹排在父夹标准回答之前(文件夹优先于内容)',
-  rel.childIdx >= 0 && rel.answerIdx >= 0 && rel.childIdx < rel.answerIdx,
+  '标答落在「订单物流」类型分区内,分区标题带条数',
+  rel.cards === 1 && /·\s*\d+/.test(rel.headerText) && rel.answerIdx >= 0,
   JSON.stringify(rel),
 )
 
 // ── ⑦ 清理 ──
 for (const g of after) await send('DELETE_GOLDEN', { id: g.id })
 check('清理完毕(该问题下无残留)', (await preg(Q)).length === 0)
-await send('DELETE_GOLDEN', { id: gStruct.id })
-await send('DELETE_FOLDER', { id: childF.id })
-await send('DELETE_FOLDER', { id: rootF.id })
-check('结构验收文件夹已清理', !(await pop.evaluate(async () => {
-  const r = await chrome.runtime.sendMessage({ type: 'GET_PANEL_DATA' })
-  return (r?.payload?.folders ?? []).some((f) => String(f.name).startsWith('结构验收'))
-})))
+await send('DELETE_GOLDEN', { id: gTyped.id })
+check('类型验收标答已清理', (await preg('类型验收:订单什么时候发货?')).length === 0)
 check('无页面错误', pageErrors.length === 0, JSON.stringify(pageErrors))
 
 console.log(`\n合计 ${results.filter((r) => r.ok).length}/${results.length} 通过`)

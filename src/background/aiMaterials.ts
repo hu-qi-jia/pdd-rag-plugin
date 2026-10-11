@@ -74,3 +74,38 @@ export async function collectMaterials(knowledgeIds: string[]): Promise<string[]
   }
   return out
 }
+
+/**
+ * 尺码路由的材料组装(spec §八):**全部**被标记文档的整篇原文,不走分块、不走向量。
+ *
+ * 为什么整表而不检索:尺码表通常 5~8 行,小到可以整表进 prompt;而向量检索对它
+ * 是**有害**的 —— 买家问"165cm 50kg 穿什么码",检索可能只命中 M 那一行、漏掉
+ * 相邻的 L 行,而正确答案往往在边界上。整表喂进去让 LLM 自己对着挑,没有检索
+ * 失败这一说,结果也可复现。
+ *
+ * 只读 `kbDocs.content`:这是"回复正文与标准回答正文永不出本机"的落点 ——
+ * 材料里一个字节都不来自 replies/goldens。
+ *
+ * 顺序按 docId 稳定排序,保证材料顺序可复现(多篇时不能靠 Map 的插入序)。
+ * 总量以 MAX_MATERIAL_CHARS 为硬上限:最后一篇越界时**截到剩余额度**(spec §八
+ * 「超长时截断到 3000 字」)。这里与 collectMaterials 的"尾部整块丢弃"不同 ——
+ * 那里的单位是自足的块,丢一块不影响其余;而整篇尺码表是一个原子单位,丢了就等于
+ * 这次生成没有材料、功能静默失效。
+ */
+export async function collectSizeTableMaterials(): Promise<string[]> {
+  const docIds = await db.listSizeTableDocIds()
+  if (docIds.size === 0) return []
+
+  const out: string[] = []
+  let total = 0
+  for (const docId of [...docIds].sort((a, b) => a.localeCompare(b))) {
+    const remaining = MAX_MATERIAL_CHARS - total
+    if (remaining <= 0) break
+    const doc = await db.getKbDoc(docId)
+    if (!doc || !doc.content) continue
+    const text = doc.content.length > remaining ? doc.content.slice(0, remaining) : doc.content
+    out.push(text)
+    total += text.length
+  }
+  return out
+}

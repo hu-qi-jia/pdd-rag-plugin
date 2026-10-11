@@ -99,7 +99,7 @@ export async function getPanelData(
     "folders" | "goldens" | "knowledge" | "categories" | "legacyDocs" | "itemUsage"
   >
 > {
-  const [folders, goldens, knowledge, categories, legacyDocs, itemUsage] =
+  const [folders, goldens, knowledge, categories, legacyDocs, itemUsage, sizeTableDocIds] =
     await Promise.all([
       db.listFolders(),
       db.goldens.toArray(),
@@ -109,6 +109,9 @@ export async function getPanelData(
       // 逐条用量随面板数据一起回:面板与知识库页本就每次开都取这份数据,
       // 顺手带上比再开一条"取用量"的消息少一趟往返(计数只有几十行,可忽略)
       db.listItemUsage(),
+      // 尺码表标记是文档级的:每次现算一份 docId 集合,映射时按 docId 查,
+      // **不**给每个块存一份 isSizeTable(那是会漂移的冗余 —— 重传/重切一块块地改)
+      db.listSizeTableDocIds(),
     ]);
   return {
     folders: folders.map((f) => ({
@@ -134,6 +137,9 @@ export async function getPanelData(
       hasEmbedding: k.hasEmbedding,
       enabled: k.enabled,
       ...(k.source !== undefined ? { source: k.source } : {}),
+      ...(k.docId !== undefined ? { docId: k.docId } : {}),
+      // 现算:只有被标记文档的块才带这个字段(手工条目永不带)
+      ...(k.docId && sizeTableDocIds.has(k.docId) ? { isSizeTable: true } : {}),
       updatedAt: k.updatedAt,
     })),
     // 面板 DTO 不带 criteria(那是喂给 jev 的选项描述)

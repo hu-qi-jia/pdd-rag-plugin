@@ -92,6 +92,28 @@ export async function updateKnowledgeWithReembed(
   return { id: payload.id, reembed: plan.reembed }
 }
 
+export interface SetKbSizeTableOutcome {
+  success: boolean
+  error?: string
+}
+
+/**
+ * 标记/取消「该文档是尺码表」(文档级,落在 kbDocs.isSizeTable)。
+ *
+ * 读原文记录 → 改标记 → putKbDoc(失效检索缓存由 putKbDoc 负责,见 db.ts)。
+ * 原文不存在时报错返回,**绝不**凭空写一条只有 docId+标记的空记录 —— 空记录会让
+ * 重分块流出一条空文档、也让面板以为这篇文档存在。
+ */
+export async function setKbDocSizeTable(
+  docId: string,
+  on: boolean,
+): Promise<SetKbSizeTableOutcome> {
+  const doc = await db.getKbDoc(docId)
+  if (!doc) return { success: false, error: '文档原文不存在,无法标记尺码表' }
+  await db.putKbDoc({ ...doc, isSizeTable: on, updatedAt: Date.now() })
+  return { success: true }
+}
+
 /** 删除知识条目;删掉的是某文档最后一块时,连带清掉 kbDocs 原文(否则重分块会把它复活) */
 export async function deleteKnowledge(id: string): Promise<void> {
   const existing = await db.getKnowledge(id)
@@ -144,6 +166,9 @@ export async function importKbDocument(
   // 整篇替换必须原子:删旧块 + 写新块同事务,中途失败整体回滚(旧文档原样保留)
   // (metrics 也要列入:删块会连带清掉旧块的逐条用量键,属同一事务的一部分)
   await db.transaction('rw', db.knowledge, db.kbDocs, db.metrics, async () => {
+    // 标记是**文档级**的:整篇替换会重写 kbDocs 记录,标记必须跟着这篇文档活下来,
+    // 否则用户改一版尺码表(重传)就被悄悄取消标记了。这里先读旧记录再带上。
+    const wasSizeTable = (await db.getKbDoc(docId))?.isSizeTable === true
     replaced = (await db.deleteKnowledgeByDoc(docId)) > 0
     for (let i = 0; i < chunks.length; i++) {
       const id = chunks.length === 1 ? rootId : `${rootId}-c${i}`
@@ -176,6 +201,7 @@ export async function importKbDocument(
       content,
       splitterVersion: SPLITTER_VERSION,
       chunkCount: chunks.length,
+      ...(wasSizeTable ? { isSizeTable: true } : {}),
       createdAt: now,
       updatedAt: now,
     })

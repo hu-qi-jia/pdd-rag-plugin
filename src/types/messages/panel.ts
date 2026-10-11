@@ -103,6 +103,13 @@ export interface PanelKnowledge {
   enabled: number
   /** manual=手工;doc=md 文档分块(只读) */
   source?: 'manual' | 'doc'
+  /** 所属文档名(去扩展名);手工条目缺省。分块 id 形态 `${docId}-c${序号}` */
+  docId?: string
+  /**
+   * 该文档被标记为尺码表(文档级,**由 kbDocs 现算**,不随块存)。
+   * 面板据此在文档第一块上渲染开关;缺省/手工条目一律无此字段。
+   */
+  isSizeTable?: boolean
   updatedAt: number
 }
 

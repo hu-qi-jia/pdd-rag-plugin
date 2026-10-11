@@ -798,6 +798,12 @@ export class PddDatabase extends Dexie {
 
   async putKbDoc(record: KbDocRecord): Promise<void> {
     await this.kbDocs.put(record);
+    // 必须失效检索缓存 —— 理由是**行为**上的,不是"顺手同步":
+    // kbDocs 现在承载 isSizeTable,而它是**唯一**一个决定"该文档的块进不进检索池"
+    // 的文档级字段(见 retrievalCache.getRetrievalEntries)。标记一改,池子就变。
+    // 不失效的话,用户勾选尺码表后紧接着的搜索仍会命中该文档的块(缓存里还留着),
+    // 表现为"我明明标记了却不生效"。这里宁可整体重建(写路径低频,代价可忽略)。
+    invalidateRetrievalCache();
   }
 
   async getKbDoc(docId: string): Promise<KbDocRecord | undefined> {
@@ -806,6 +812,19 @@ export class PddDatabase extends Dexie {
 
   async deleteKbDoc(docId: string): Promise<void> {
     await this.kbDocs.delete(docId);
+  }
+
+  /**
+   * 被标记为尺码表的文档名集合(尺码路由的读口)。
+   *
+   * **整表读 kbDocs 是刻意的**:这儿只有寥寥几篇"上传的整篇原文"记录(文档级,
+   * 一篇一行),为它发明索引不值当 —— 别"优化"成索引查询。标记(isSizeTable)
+   * 是**文档级**的,存在 kbDocs 而不是 knowledge 块上:块会随分块规则/重传漂移,
+   * 而"是不是尺码表"只有一份,复制到每块就得处处同步。
+   */
+  async listSizeTableDocIds(): Promise<Set<string>> {
+    const docs = await this.kbDocs.toArray();
+    return new Set(docs.filter((d) => d.isSizeTable === true).map((d) => d.docId));
   }
 
   /** 分块器版本失配的文档(SW 启动时按新规则重切) */

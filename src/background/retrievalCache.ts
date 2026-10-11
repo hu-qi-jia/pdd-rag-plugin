@@ -39,10 +39,15 @@ export function invalidateRetrievalCache(): void {
 /** 检索源条目(缓存命中时不触库) */
 export async function getRetrievalEntries(): Promise<CachedEntry[]> {
   if (!cache) {
-    const [qas, goldens, kbs] = await Promise.all([
+    const [qas, goldens, kbs, sizeTableDocIds] = await Promise.all([
       db.getEmbeddedQaRecords(),
       db.getEmbeddedGoldens(),
       db.getEmbeddedKnowledge(),
+      // 尺码表不做向量检索(spec §八):被标记文档的块在投影处剔除。
+      // 检索对尺码表是有害的 —— 买家问"165cm 50kg 穿什么码",向量可能只命中 M
+      // 那一行、漏掉相邻的 L 行,而正确答案往往在边界上。整表原文改由
+      // collectSizeTableMaterials 直接喂 prompt(见 aiMaterials.ts)。
+      db.listSizeTableDocIds(),
     ]);
     cache = [
       ...qas.map(
@@ -70,20 +75,23 @@ export async function getRetrievalEntries(): Promise<CachedEntry[]> {
           vec: g.qEmbedding as Float32Array,
         }),
       ),
-      ...kbs.map(
-        (k): CachedEntry => ({
-          source: {
-            id: k.id,
-            kind: "knowledge",
-            // 锚文本统一走 kbAnchorText(嵌入/BM25/来源摘要同源,见 kbAnchor.ts)
-            question: kbAnchorText(k),
-            questionTs: k.updatedAt,
-            // 知识库不分类(恒 null;不是"缺省归一",是它本就没有类型)
-            categoryId: null,
-          },
-          vec: k.qEmbedding as Float32Array,
-        }),
-      ),
+      ...kbs
+        // 尺码表的块不进池:标记是文档级(docId),这里按 docId 剔除整篇
+        .filter((k) => !(k.docId && sizeTableDocIds.has(k.docId)))
+        .map(
+          (k): CachedEntry => ({
+            source: {
+              id: k.id,
+              kind: "knowledge",
+              // 锚文本统一走 kbAnchorText(嵌入/BM25/来源摘要同源,见 kbAnchor.ts)
+              question: kbAnchorText(k),
+              questionTs: k.updatedAt,
+              // 知识库不分类(恒 null;不是"缺省归一",是它本就没有类型)
+              categoryId: null,
+            },
+            vec: k.qEmbedding as Float32Array,
+          }),
+        ),
     ];
     // 建索引与缓存同生:定点更新靠它 O(1) 找位
     index = new Map(cache.map((entry, i) => [entry.source.id, i]));

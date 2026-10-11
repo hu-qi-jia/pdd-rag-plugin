@@ -572,6 +572,19 @@ export class PddDatabase extends Dexie {
     return record.id;
   }
 
+  /** 写回标准回答的分类结果(第五十六轮);hit 为 null 表示判不准/失败 → 落未分类 */
+  async updateGoldenCategory(
+    id: string,
+    hit: { categoryId: string; confidence: number } | null,
+  ): Promise<void> {
+    await this.goldens.update(id, {
+      categoryId: hit ? hit.categoryId : UNCATEGORIZED_CATEGORY_ID,
+      categoryConfidence: hit ? hit.confidence : undefined,
+      categorySource: "jev",
+      categoryAt: Date.now(),
+    });
+  }
+
   async getGolden(id: string): Promise<GoldenRecord | undefined> {
     return this.goldens.get(id);
   }

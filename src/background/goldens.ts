@@ -8,10 +8,15 @@
  * 决策纯逻辑在 goldenEdit.ts(planGoldenAdd / planGoldenEdit),此处只做 IO。
  */
 import { db } from "./db";
+import { classifyRecord } from "./classify";
 import { queueEmbedding } from "./offscreen";
 import { hashText, normalizeText } from "../shared/text";
 import { planGoldenAdd, planGoldenEdit } from "./goldenEdit";
-import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
+import {
+  MAX_GOLDENS_PER_QUESTION,
+  UNCATEGORIZED_CATEGORY_ID,
+  UNCATEGORIZED_FOLDER_ID,
+} from '../shared/constants';
 import type {
   AddGoldenRequest,
   UpdateGoldenRequest,
@@ -52,9 +57,16 @@ export async function addGoldenFromSuggestion(
   const answer = normalizeText(payload.answer ?? "");
   const now = Date.now();
   const id = `gd-${now}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // 分类继承(第五十六轮):判定的是**问题**的类型,同一个问题在历史里问过、
+  // 又在标准回答里存着,类型不会变 —— 重跑一次 jev 是纯浪费外加多一次外发。
+  // 用户手工摆放过的(map 到 manual)不在此列,那条路径走 updateGolden 不改分类。
+  const source = payload.sourceRecordId ? await db.getQaRecord(payload.sourceRecordId) : undefined;
+  const inherited = source?.categoryId ?? null;
+
   await db.addGolden({
     id,
-    // 默认入预置"默认文件夹"夹(设计文档 §6.3);展示层另有 null→默认文件夹兜底
+    // 保留:回滚用,迁移后不再被读写
     folderId: UNCATEGORIZED_FOLDER_ID,
     question,
     answer,
@@ -62,10 +74,18 @@ export async function addGoldenFromSuggestion(
     hasEmbedding: 0,
     sourceRecordId: payload.sourceRecordId,
     sourceReplyId: payload.sourceReplyId,
+    categoryId: inherited ?? UNCATEGORIZED_CATEGORY_ID,
+    categorySource: "inherit",
+    categoryAt: now,
     createdAt: now,
     updatedAt: now,
   });
   queueEmbedding("golden", id, question);
+
+  // 手工新建(没有来源)时,继承不出来任何东西 —— 补一次打标。
+  // 有来源但来源还没打标的情况由补分类统一处理,这里不重复发请求。
+  if (!source) void classifyAndTagGolden(id, question);
+
   return { id, count: siblings.length + 1 };
 }
 
@@ -117,4 +137,17 @@ export async function updateGoldenWithReembed(
 /** 删除标准回答(不影响历史问答记录)—— 即"取消标准回答" */
 export async function deleteGolden(id: string): Promise<void> {
   await db.deleteGolden(id);
+}
+
+/**
+ * 手工新建的标准回答:补一次打标。
+ * 与 pddCapture 的同名逻辑一样即发即忘 —— 失败保持未分类,不打扰用户。
+ */
+async function classifyAndTagGolden(goldenId: string, question: string): Promise<void> {
+  try {
+    const hit = await classifyRecord(question)
+    await db.updateGoldenCategory(goldenId, hit)
+  } catch {
+    /* 静默 */
+  }
 }

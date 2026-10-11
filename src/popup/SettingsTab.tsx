@@ -224,6 +224,12 @@ export function SettingsTab({
     }, 500)
   }
 
+  /**
+   * ⚠ 本函数与下方的 `saveJev` 是**刻意的平行实现**(两套独立的外部端点:AI 整合 / 问题分类,
+   * 不同的外发通道与门禁,故意不共用组件)。改这里时必须**同时核对 `saveJev`**:
+   *   ① 主机权限申请必须是用户手势里的**第一个 await**(MV3 gesture token 规则);
+   *   ② 表单字段 → 设置字段的改名必须走 `*SettingsPatch`(llm 与 jev 各一份)。
+   */
   /** 保存 AI 接口配置:先要权限、再落库(顺序不能反 —— 见 ensureHostPermission 注释) */
   const saveLlm = async () => {
     if (!draft || !llm) return
@@ -284,6 +290,12 @@ export function SettingsTab({
     }
   }
 
+  /**
+   * ⚠ 本函数与上方的 `saveLlm` 是**刻意的平行实现**(两套独立的外部端点:AI 整合 / 问题分类,
+   * 不同的外发通道与门禁,故意不共用组件)。改这里时必须**同时核对 `saveLlm`**:
+   *   ① 主机权限申请必须是用户手势里的**第一个 await**(MV3 gesture token 规则);
+   *   ② 表单字段 → 设置字段的改名必须走 `*SettingsPatch`(llm 与 jev 各一份)。
+   */
   /** 保存分类接口配置:与 saveLlm 同一条路径 —— 先要权限、再落库(顺序不能反) */
   const saveJev = async () => {
     if (!draft || !jev) return
@@ -530,6 +542,9 @@ export function SettingsTab({
         />
       </Card>
 
+      {/* ⚠ 本卡与下面的「问题分类」卡是**刻意的平行实现**(不同的外发通道与门禁,故意不共用
+          组件)。改这里的结构/状态时必须**同时核对那张卡**:① 主机权限申请必须是手势里的
+          第一个 await;② 字段改名必须走 `*SettingsPatch`。 */}
       <Card tk={tk} title="AI 整合" style={SETTINGS_CARD_STYLE}>
         <Toggle
           tk={tk}
@@ -658,7 +673,10 @@ export function SettingsTab({
       </Card>
 
       {/* 问题分类(第五十七轮 Task 3):结构逐段对应上面的「AI 整合」——
-          同一套显式保存(草稿边填边存、点保存才落库)与「测试连接」就地结论。 */}
+          同一套显式保存(草稿边填边存、点保存才落库)与「测试连接」就地结论。
+          ⚠ 本卡与「AI 整合」卡是**刻意的平行实现**(不同的外发通道与门禁,故意不共用组件)。
+          改这里的结构/状态时必须**同时核对那张卡**:① 主机权限申请必须是手势里的第一个
+          await;② 字段改名必须走 `*SettingsPatch`。 */}
       <Card tk={tk} title="问题分类" style={SETTINGS_CARD_STYLE}>
         <Toggle
           tk={tk}

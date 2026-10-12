@@ -1,5 +1,5 @@
 /**
- * 细滚动条统一规格(2026-09-16 第二十三轮):悬浮显现、圆角滑块、6px 细轨。
+ * 细滚动条统一规格:悬浮显现、**直角**滑块(v3.0 随全站去圆角)、6px 细轨。
  * 两处调用共享同一份生成逻辑,改宽度/最小滑块高只动这里:
  *  - popup「设置」等页签滚动容器:RESET_CSS 以 `.pddcs-scroll` 落地,
  *    滑块色走 CSS 变量(--pddcs-scroll-thumb,主题切换免重建);
@@ -25,7 +25,7 @@ ${selector} { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 ${selector}:hover { scrollbar-color: ${thumbColor} transparent; }
 ${selector}::-webkit-scrollbar { width: ${SCROLLBAR_WIDTH}px; height: ${SCROLLBAR_WIDTH}px; }
 ${selector}::-webkit-scrollbar-thumb {
-  background: transparent; border-radius: 9999px; border: 2px solid transparent;
+  background: transparent; border-radius: 0; border: 2px solid transparent;
   background-clip: content-box; min-height: ${SCROLLBAR_MIN_THUMB}px;
 }
 ${selector}:hover::-webkit-scrollbar-thumb {

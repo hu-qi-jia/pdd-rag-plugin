@@ -81,15 +81,18 @@ const inputIn = (root: HTMLElement, p: string): HTMLInputElement => {
 }
 
 /**
- * 「问题分类」卡片本身 —— 同页的「AI 整合」卡片有同名的「保存 / 测试连接」按钮,
- * 全页查按钮会拿到上面那一张卡的(它默认禁用),测的就不是本卡。一律在卡内查。
+ * 「问题分类」分区本身 —— 同页的「AI 整合」分区有同名的「保存 / 测试连接」按钮,
+ * 全页查按钮会拿到上面那一块的(它默认禁用),测的就不是本区。一律在区内查。
+ *
+ * 按 `data-card-title` 找(Card 在标题为字符串时自动挂的稳定锚点),不按 DOM 形状找:
+ * v3.0 把 Card 的标题从"直接渲染的一个 div"改成了 SectionHeader(标记 + 标题 + 延伸线),
+ * 旧写法(`children.length === 0 && textContent === '问题分类'` 再取 parentElement)
+ * 于是拿到的是标题那一行,而不是整块分区 —— 失败信息还是"找不到卡片",极具迷惑性。
  */
 function classifyCard(): HTMLElement {
-  const title = Array.from(container.querySelectorAll<HTMLElement>('div')).find(
-    (e) => e.children.length === 0 && e.textContent?.trim() === '问题分类',
-  )
-  if (!title?.parentElement) throw new Error('找不到「问题分类」卡片')
-  return title.parentElement
+  const el = container.querySelector<HTMLElement>('[data-card-title="问题分类"]')
+  if (!el) throw new Error('找不到「问题分类」分区')
+  return el
 }
 
 const textBtnIn = (root: HTMLElement, label: string): HTMLButtonElement => {

@@ -4,7 +4,7 @@
 //     必须并进「未分类」组,不能静默消失;
 //  ② 未分类恒排最后一组,不管它的 position。
 import { describe, it, expect } from 'vitest'
-import { categoryOrder, groupByCategory } from '../../../src/popup/logic'
+import { categoryNavItems, categoryOrder, groupByCategory, navBucketOf } from '../../../src/popup/logic'
 import type { PanelCategory } from '../../../src/types/messages'
 
 const cat = (
@@ -88,5 +88,52 @@ describe('groupByCategory', () => {
     expect(counts.get('b')).toBe(2)
     expect(counts.get('uncategorized')).toBe(1)
     expect(out.reduce((n, g) => n + g.items.length, 0)).toBe(items.length)
+  })
+})
+
+// ── v3.0 第四版:分类由"分区"改为"顶部导航筛选",这里锁导航的纯逻辑 ──────────
+// 最要紧的一条:**计数与筛选同源**。两边各自实现一份"这条属于哪一类",
+// 迟早出现"导航上写着 3 条、点进去一条都没有" —— 那是最难自查的一类 bug。
+describe('navBucketOf / categoryNavItems', () => {
+  const CATS = [cat('size', '尺码', 1), cat('logistics', '物流', 2), cat('uncategorized', '未分类', 9999, 'uncategorized')]
+
+  it('★ 类型表里没有的 categoryId 并进未分类(与 groupByCategory 同一口径)', () => {
+    expect(navBucketOf('ghost', CATS)).toBe('uncategorized')
+    expect(navBucketOf('size', CATS)).toBe('size')
+    expect(navBucketOf('uncategorized', CATS)).toBe('uncategorized')
+  })
+
+  it('★ 导航计数与「按桶筛选」逐项一致 —— 不会出现"写着 3 条、点进去 0 条"', () => {
+    const items = [
+      item('1', 'size'),
+      item('2', 'size'),
+      item('3', 'ghost'), // 类型表里没有 → 归未分类
+      item('4', 'uncategorized'),
+    ]
+    const nav = categoryNavItems(items, CATS)
+    for (const n of nav) {
+      const shown = items.filter((it) => navBucketOf(it.categoryId, CATS) === n.id)
+      expect(shown.length, `${n.name} 的计数与筛出来的条数不一致`).toBe(n.count)
+    }
+    // 各档相加 = 总数(一条都不能在两处重复计、也不能漏)
+    expect(nav.reduce((a, b) => a + b.count, 0)).toBe(items.length)
+  })
+
+  it('顺序 = categoryOrder(未分类恒最后)', () => {
+    const nav = categoryNavItems([], CATS)
+    expect(nav.map((n) => n.id)).toEqual(['size', 'logistics', 'uncategorized'])
+  })
+
+  it('★ 类型表里没有「未分类」时也给它一档(它恰恰是最容易被忽略的那一类)', () => {
+    const nav = categoryNavItems([item('1', 'ghost')], [CATS[0]])
+    const unc = nav.find((n) => n.id === 'uncategorized')
+    expect(unc, '未分类那一档没产出').toBeTruthy()
+    expect(unc!.count).toBe(1) // 幽灵类型并进来,不是 0
+  })
+
+  it('展示**全部**分类,含当前 0 条的(藏掉会让人以为类型丢了)', () => {
+    const nav = categoryNavItems([item('1', 'size')], CATS)
+    expect(nav.find((n) => n.id === 'logistics')?.count).toBe(0)
+    expect(nav).toHaveLength(3)
   })
 })

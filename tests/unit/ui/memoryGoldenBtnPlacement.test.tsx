@@ -182,3 +182,59 @@ describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () =>
     )
   })
 })
+
+// v3.0 第三版:记忆行改成**两段式**骨架(与标准回答页同一套,见 design.ts#listRow 与 DESIGN §七-G)。
+// 此前元信息被塞在"标题 + 操作列"之间的那一列里,于是同一页上元信息的右端比标题短一截、
+// 换行点还随图标列宽度漂移 —— 一屏十几条下来就是参差。现在它独占一行、通栏。
+describe('记忆行:两段式骨架(主行 + 通栏元信息行)', () => {
+  it('★ 元信息行是主行的**兄弟节点**,不缩在"标题 + 操作列"那一列里', async () => {
+    await renderWith([
+      {
+        id: 'qa-1',
+        question: '问题一',
+        questionTs: 1,
+        replyCount: 2,
+        categoryId: 'preset:size',
+        replies: [reply('r1')],
+      },
+    ])
+    const titleEl = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent === '问题一',
+    ) as HTMLElement
+    expect(titleEl, '找不到标题').toBeTruthy()
+    const mainRow = titleEl.parentElement as HTMLElement
+
+    // 主行里只有标题与操作列:时间戳**不在**主行内
+    expect(mainRow.textContent).not.toContain('条回复')
+    // 操作列在主行内(行尾)
+    expect(mainRow.contains(container.querySelector('button[title="删除该问答(需确认)"]'))).toBe(true)
+
+    // 元信息行紧跟在主行之后,且是同一层的兄弟 —— 即"通栏",不与操作列共享行
+    const metaRow = mainRow.nextElementSibling as HTMLElement
+    expect(metaRow, '主行下应有元信息行').toBeTruthy()
+    expect(metaRow.textContent).toContain('条回复')
+    expect(metaRow.style.fontSize).toBe('10.5px')
+  })
+
+  it('元信息行整行可点(拆行不该把点击面积变小)', async () => {
+    await renderWith([
+      {
+        id: 'qa-1',
+        question: '问题一',
+        questionTs: 1,
+        replyCount: 1,
+        categoryId: 'preset:size',
+        replies: [reply('r1')],
+      },
+    ])
+    const titleEl = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent === '问题一',
+    ) as HTMLElement
+    const metaRow = (titleEl.parentElement as HTMLElement).nextElementSibling as HTMLElement
+    expect(metaRow.style.cursor).toBe('pointer')
+    // 初始展开 → 点它应收起(回复消失)
+    expect(container.textContent).toContain('回复r1')
+    await click(metaRow)
+    expect(container.textContent).not.toContain('回复r1')
+  })
+})

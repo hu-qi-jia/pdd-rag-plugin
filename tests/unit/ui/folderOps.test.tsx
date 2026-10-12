@@ -167,8 +167,8 @@ describe('FoldersTab:标准回答删除', () => {
   })
 })
 
-// ── 第四十四轮(v2.6.31):操作组默认可见 + 图标左缘与正文左缘对齐 ──────────────
-describe('FoldersTab:标准回答行操作组(常驻 + 左缘对齐)', () => {
+// ── 第四十四轮(v2.6.31)立"常驻可见";v3.0 第二版改对齐档为**靠右** ──────────
+describe('FoldersTab:标准回答行操作组(常驻 + 靠右)', () => {
   it('四个图标钮默认可见:全树无 .pddcs-row-ops,且从钮到根节点没有 opacity:0', async () => {
     panelData.goldens = [golden('g1')]
     await render()
@@ -183,18 +183,78 @@ describe('FoldersTab:标准回答行操作组(常驻 + 左缘对齐)', () => {
     }
   })
 
-  it('操作组左缘 = 正文左缘:负 margin 抵消图标钮盒内的图标留白 (24−13)/2', async () => {
+  it('★ 行尾操作列与标题同处**主行**(不再是标题底下的第三条行)', async () => {
+    // v3.0 第三版的核心改动。此前这一行是三段:标题(挤着至多四枚右对齐徽标)/
+    // 答复预览 / 独占一行的四个图标钮 —— 元素各自漂浮,是"看起来乱"的根。
+    // 现在两个列表页共用同一个骨架(design.ts#listRow、DESIGN §七-G):
+    //   主行 = 标题 + 行尾操作列;元信息行 = 所有标记与计数;内容 = 答复预览。
+    panelData.goldens = [golden('g1', { question: '物流问题', answer: '物流答复' })]
+    await render()
+    const move = btns('移到其他类型')[0]
+    expect(move, '操作钮应存在').toBeTruthy()
+
+    // 主行 = 标题所在的 flex 行;操作钮必须是它的后代
+    const titleEl = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent === '物流问题',
+    ) as HTMLElement
+    expect(titleEl).toBeTruthy()
+    const mainRow = titleEl.parentElement as HTMLElement
+    expect(mainRow.contains(move), '操作钮应在主行内').toBe(true)
+    // 四枚图标同主行
+    for (const label of ['移到其他类型', '复制', '编辑', '删除(历史记录不受影响)']) {
+      expect(mainRow.contains(btns(label)[0]), `${label} 应在主行内`).toBe(true)
+    }
+    // 主行之外不该再有一行操作:答复预览的**后面**不再跟图标钮
+    const answerEl = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent === '物流答复',
+    ) as HTMLElement
+    const after = answerEl.compareDocumentPosition(move)
+    expect(after & Node.DOCUMENT_POSITION_FOLLOWING, '操作钮不应排在答复之后').toBe(0)
+  })
+
+  it('★ 标记与计数合并成**一条元信息行**,不再挤在标题行右侧', async () => {
+    panelData.goldens = [
+      golden('g1', {
+        question: '物流问题',
+        answer: '物流答复',
+        categorySource: 'manual',
+        hasEmbedding: 0,
+      }),
+      golden('g2', { question: '物流问题', answer: '另一条答复' }),
+    ]
+    await render()
+    const titleEl = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent === '物流问题',
+    ) as HTMLElement
+    // 标题行里除了标题本身,只有行尾操作列 —— 没有徽标、没有计数
+    const mainRow = titleEl.parentElement as HTMLElement
+    expect(mainRow.textContent).not.toContain('已指定')
+    expect(mainRow.textContent).not.toContain('同问题')
+    expect(mainRow.textContent).not.toContain('向量生成中')
+
+    // 它们被合并到标题**下面**的一行里,` · ` 分隔,同一档字号
+    const metaEl = mainRow.nextElementSibling as HTMLElement
+    expect(metaEl, '标题下应有元信息行').toBeTruthy()
+    expect(metaEl.textContent).toContain('已指定')
+    expect(metaEl.textContent).toContain('同问题 2 条')
+    expect(metaEl.textContent).toContain('向量生成中')
+    expect(metaEl.textContent).toContain(' · ')
+    expect(metaEl.style.fontSize).toBe('10.5px')
+  })
+
+  it('操作组**靠右**顶到行尾(marginLeft: auto),不再靠左吊在答复左下角', async () => {
+    // v3.0 第二版按用户「标准回答页面看起来怪怪的」改档:一行正文的左下角单独吊着四个图标,
+    // 读起来像"每条后面跟了一条工具栏";靠右后它与问题行的右端元信息同处一条右缘。
+    // 随之退役的是 v2.6.31 那条"图标左缘对齐正文"的负 margin 补偿 —— 它只对靠左排列有意义。
     panelData.goldens = [golden('g1')]
     await render()
     const group = btns('移到其他类型')[0].parentElement as HTMLElement
-    expect(group.style.marginLeft).toBe(`${-(controlH.inline - ICON_SIZE) / 2}px`)
-    expect(group.style.marginLeft).toBe('-5.5px')
-    // 同排图标 13px:留白算式的输入,写死在断言里防止悄悄漂移
+    expect(group.style.marginLeft).toBe('auto')
+    expect(group.style.marginLeft).not.toBe('-5.5px')
+    // 图标仍是 13px(尺寸与对齐是两件事,改对齐不该动尺寸)
     expect(btns('移到其他类型')[0].querySelector('svg')?.getAttribute('width')).toBe(
       String(ICON_SIZE),
     )
-    // 正文(问题)与操作组同处一个左内边距容器:组不再被 marginLeft:auto 顶到右边
-    expect(group.style.marginLeft).not.toBe('auto')
   })
 
   it('确认删除态是文字钮:靠左但 marginLeft 归 0(钮盒贴正文左缘,不再补偿图标留白)', async () => {

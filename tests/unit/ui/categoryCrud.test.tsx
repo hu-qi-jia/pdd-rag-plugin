@@ -165,19 +165,38 @@ describe('FoldersTab:新建类型', () => {
   })
 })
 
-describe('FoldersTab:分区头的类型操作钮', () => {
-  it('只有自定义类型有改名/删除钮;预置与未分类没有', async () => {
+describe('FoldersTab:类型改名 / 删除(入口在顶部导航行)', () => {
+  // v3.0 第四版:入口从"每个分区的标题行"搬到导航行 —— 类型分区一没,入口就得有个新家。
+  // 于是它跟着**当前选中的类型**走:选中的是自定义类型才有这两个钮。
+  const navBtn = (id: string): HTMLButtonElement | null =>
+    container.querySelector<HTMLButtonElement>(`[data-category-id="${id}"]`)
+
+  it('默认停在「全部」:没有任何改名/删除钮(「全部」不属于任何一个类型)', async () => {
     await render()
-    // 预置分区(尺码推荐)有 1 条标答 → 会渲染;两个自定义分区(发票有标答、催件为空)也渲染
-    expect(btns('重命名类型')).toHaveLength(2)
-    expect(btns('删除类型')).toHaveLength(2)
-    // 种类徽标在:预置分区显示「预置」,自定义分区显示「自定义」
-    expect(noticeText()).toContain('预置')
-    expect(noticeText()).toContain('自定义')
+    expect(btns('重命名类型')).toHaveLength(0)
+    expect(btns('删除类型')).toHaveLength(0)
+  })
+
+  it('只有自定义类型有改名/删除钮;预置与未分类没有', async () => {
+    // 旧版靠分区标题上的一枚「预置 / 自定义」徽标解释"为什么这里没有按钮";
+    // 现在按钮本身的**有无**就是那个信号 —— 挂一个再禁用,还得额外解释为什么不能点
+    await render()
+    await click(navBtn('preset:size')!)
+    expect(btns('重命名类型')).toHaveLength(0)
+    expect(btns('删除类型')).toHaveLength(0)
+
+    await click(navBtn('uncategorized')!)
+    expect(btns('重命名类型')).toHaveLength(0)
+    expect(btns('删除类型')).toHaveLength(0)
+
+    await click(navBtn('cat-1')!)
+    expect(btns('重命名类型')).toHaveLength(1)
+    expect(btns('删除类型')).toHaveLength(1)
   })
 
   it('改名:点钮出内联输入(预填原名),保存发出 RENAME_CATEGORY', async () => {
     await render()
+    await click(navBtn('cat-1')!)
     await click(btns('重命名类型')[0])
     const input = container.querySelector<HTMLInputElement>('input.pddcs-input')!
     expect(input.value).toBe('发票')
@@ -191,6 +210,7 @@ describe('FoldersTab:分区头的类型操作钮', () => {
   it('删除:二次确认后发出 DELETE_CATEGORY,并提示标答落回未分类', async () => {
     respOverrides.DELETE_CATEGORY = { success: true, movedGoldens: 2 }
     await render()
+    await click(navBtn('cat-1')!)
     await click(btns('删除类型')[0])
     // 未确认前不发消息
     expect(sent.filter((m) => m.type === 'DELETE_CATEGORY')).toHaveLength(0)
@@ -202,6 +222,7 @@ describe('FoldersTab:分区头的类型操作钮', () => {
 
   it('删除确认可取消:取消不发 DELETE_CATEGORY', async () => {
     await render()
+    await click(navBtn('cat-1')!)
     await click(btns('删除类型')[0])
     await click(textBtn('取消')!)
     expect(sent.filter((m) => m.type === 'DELETE_CATEGORY')).toHaveLength(0)

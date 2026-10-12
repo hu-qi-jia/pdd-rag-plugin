@@ -75,7 +75,11 @@ describe('ConfirmRow:警示文案 + 确认/取消', () => {
     const [ok, cancel] = btns
     const span = container.querySelector('span')!
     expect(span.style.color).toBe(lightTheme.errorText)
-    expect(ok.style.backgroundColor).toBe(lightTheme.errorBg)
+    // 底色令牌是 rgba(...) —— jsdom 会把它归一化成带空格的 `rgba(r, g, b, a)`,
+    // 与令牌里写的 `rgba(r,g,b,a)` 逐字不等。比较前先去掉空白,
+    // 否则这条断言红的是"字符串里少了个空格",而不是颜色错了
+    const noSpace = (s: string) => s.replace(/\s+/g, '')
+    expect(noSpace(ok.style.backgroundColor)).toBe(noSpace(lightTheme.errorBg))
     expect(ok.style.color).toBe(lightTheme.errorText)
     expect(cancel.style.backgroundColor).toBe('transparent')
     expect(cancel.style.color).toBe(lightTheme.textMuted)

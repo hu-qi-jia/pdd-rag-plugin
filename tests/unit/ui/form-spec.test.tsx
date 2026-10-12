@@ -96,7 +96,7 @@ describe('设置页字号规范:标题 > 配置项字段 > 说明文字(formType
     expect(formType.desc.weight).toBe(400)
   })
 
-  it('Card 标题走分组标题档(13.5 semibold),不再是小号灰字', () => {
+  it('Card 标题走分组标题档(13.5 semibold + textMuted),不再是小号灰字', () => {
     act(() => {
       root.render(
         <Card tk={lightTheme} title="检索与填充">
@@ -104,23 +104,32 @@ describe('设置页字号规范:标题 > 配置项字段 > 说明文字(formType
         </Card>,
       )
     })
-    // 取最内层元素(外层卡片容器的 textContent 也含标题,按 children 为空筛掉)
-    const title = Array.from(container.querySelectorAll('div')).find(
+    // 取最内层元素(外层容器与分区标题行的 textContent 也含标题,按 children 为空筛掉)。
+    // v3.0 起标题是 SectionHeader 里的一个 <span>(旧版是 Card 直接渲染的 div)
+    const title = Array.from(container.querySelectorAll('span')).find(
       (el) => el.children.length === 0 && el.textContent === '检索与填充',
     ) as HTMLElement
     expect(title.style.fontSize).toBe('13.5px')
     expect(title.style.fontWeight).toBe('600')
-    expect(colorIs(title.style.color, lightTheme.text)).toBe(true)
+    // 颜色:v3.0 第二版按用户「标题与词条颜色也做一下区分」由 `text` 改 `textMuted` ——
+    // 标题与词条此前同为纯黑,只靠 1px 字号与分区线区分,在满屏条目里读起来像"又一条内容"。
+    // 层级仍由**字号 + 字重 + 分区线**承担,颜色这一维改去承担"角色"(标签 vs 内容)。
+    // 反面:它不能再等于 `text`,否则这次改动等于没做
+    expect(colorIs(title.style.color, lightTheme.textMuted)).toBe(true)
+    expect(colorIs(title.style.color, lightTheme.text)).toBe(false)
   })
 })
 
 // ── ② 间距统一 ────────────────────────────────────────────────────────────────
 
 describe('设置页行距规范:配置项之间增大并统一(formGap)', () => {
-  it('配置项之间 16px(原 10px)、卡片之间同值、标签→说明 4px、标签→滑杆轨道 8px', () => {
-    expect(formGap.row).toBe(16)
+  it('配置项之间 12px、分区之间同值、标签→说明 4px、标签→滑杆轨道 8px', () => {
+    // v3.0 由 16 收到 12:复古极简要的是高信息密度,而分区现在由**一根横线**分隔而非卡片盒子 ——
+    // 线已经承担了"这里是另一件事"的提示,行距不必再替它留白
+    expect(formGap.row).toBe(12)
     expect(formGap.labelDesc).toBe(4)
     expect(formGap.labelControl).toBe(8)
+    // 三档的**次序**才是这条规范的要害(大 > 中 > 小),具体数字可以随设计语言调
     expect(formGap.row).toBeGreaterThan(formGap.labelControl)
     expect(formGap.labelControl).toBeGreaterThan(formGap.labelDesc)
   })
@@ -171,11 +180,25 @@ describe('设置页行距规范:配置项之间增大并统一(formGap)', () => 
 // ── ③ 开关 / 滑杆:灰白配色 ──────────────────────────────────────────────────
 
 describe('开关与滑杆改用灰白:激活色浅色深灰 / 深色白,柄与轨道反相', () => {
-  it('两主题激活色:浅色中性深灰 #45484d,深色纯白;均不再是 accent 蓝', () => {
-    expect(lightTheme.controlActive).toBe('#45484d')
-    expect(darkTheme.controlActive).toBe('#ffffff')
-    expect(norm(lightTheme.accent)).not.toBe(norm(lightTheme.controlActive))
-    expect(norm(darkTheme.accent)).not.toBe(norm(darkTheme.controlActive))
+  it('两主题激活色:浅色近黑、深色近白,且**两色都无彩度**(v3.0 取消品牌色)', () => {
+    // v3.0 前这条断的是"激活色不是 accent 蓝"(accent 当时是 Figma 蓝 #0D99FF)。
+    // 现在 accent 与 controlActive **同值** —— 整站只剩一种墨色,焦点环与控件激活态
+    // 共用它,不再有"品牌色 vs 控件色"这组对立。于是真正该守的不变量换成了
+    // **无彩度**:强调不靠色相,靠墨的浓淡与反白(见 tests/unit/ui/overlay-css.test)
+    const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+    for (const [name, tk] of [
+      ['浅色', lightTheme],
+      ['深色', darkTheme],
+    ] as const) {
+      const [r, g, b] = channels(tk.controlActive)
+      expect(new Set([r, g, b]).size, `${name} 激活色有彩度`).toBe(1)
+      const [ar, ag, ab] = channels(tk.accent)
+      expect(new Set([ar, ag, ab]).size, `${name} 焦点环有彩度`).toBe(1)
+    }
+    // 浅色近黑、深色近白:激活色必须与它所在的面拉开足够距离
+    expect(luminance(lightTheme.controlActive)).toBeLessThan(0.05)
+    expect(luminance(darkTheme.controlActive)).toBeGreaterThan(0.7)
+    expect(lightTheme.controlActive).toBe(lightTheme.accent)
   })
 
   it('柄色与激活色不同(反相),且两主题方向相反:浅色柄更亮、深色柄更暗', () => {
@@ -211,7 +234,7 @@ describe('开关与滑杆改用灰白:激活色浅色深灰 / 深色白,柄与�
     expect(colorIs(render(false, darkTheme).style.backgroundColor, darkTheme.switchTrack)).toBe(true)
   })
 
-  it('Slider 填充色取激活色(不再是 accent 蓝)', () => {
+  it('Slider 填充色取激活色,且填充是**无彩色**(强调不靠色相)', () => {
     act(() => {
       root.render(
         <Slider
@@ -228,6 +251,15 @@ describe('开关与滑杆改用灰白:激活色浅色深灰 / 深色白,柄与�
     })
     const input = container.querySelector('input[type="range"]') as HTMLInputElement
     expect(input.style.backgroundImage).toContain(lightTheme.controlActive)
-    expect(input.style.backgroundImage).not.toContain(lightTheme.accent)
+    // 已填充段与未填充段是两个**色标同位置**的平涂色块(不是过渡渐变)——
+    // 顺带确认这里没有混进第三个颜色
+    const stops = input.style.backgroundImage.match(/#[0-9a-f]{6}/gi) ?? []
+    expect(new Set(stops.map((s) => s.toLowerCase()))).toEqual(
+      new Set([lightTheme.controlActive, lightTheme.inputBorder].map((s) => s.toLowerCase())),
+    )
+    for (const s of stops) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16))
+      expect(new Set([r, g, b]).size, `${s} 有彩度`).toBe(1)
+    }
   })
 })

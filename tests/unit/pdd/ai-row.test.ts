@@ -118,7 +118,10 @@ describe('aiRowHint:行内第二行(v2.6.34 重设计)', () => {
   })
 
   it('每句都短到一行放得下(第二块字号 = 生成结果的 13.5px,放不下就会把行撑高)', () => {
-    // 面板可用宽度:360 − PANEL_PAD_X×2 − BADGE_PAD_X = 311px;13.5px 中文字 ≈ 13.5px/字
+    // 面板可用宽度(v3.0):POPUP_W 380 − 面板框 2 − ROW_PAD_X×2 = 354px;
+    // 13.5px 中文字 ≈ 13.5px/字 ⇒ 约 26 字。阈值仍守在 22 —— 等宽字下**拉丁与数字**的进宽
+    // 比汉字窄但整行仍是等宽排布,且中英混排时会取较宽的那个;留四字余量比卡着算出来的
+    // 上限写文案更稳(这条是**文案长度约束**,不是几何断言,宁可保守)
     const MAX_CHARS = 22
     for (const count of [1, 3, 12]) {
       for (const phase of [{ phase: 'idle' as const }, { phase: 'working' as const }]) {

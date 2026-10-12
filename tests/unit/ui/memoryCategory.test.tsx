@@ -1,5 +1,9 @@
-// 记忆列表按问题类型分区(第五十七轮 Task 5)的渲染单测。
-// 只读设计(spec D8):分区容器 + 顶部只读说明行;未分类组默认折叠,其余组默认展开。
+// 记忆列表的**分类筛选**(v3.0 第四版:由"按类型分区"改为"顶部导航筛选")。
+//
+// 旧版是「每组一个分区容器 + 可折叠标题」;用户「不要按照文件夹的样式设计了…在顶部增加导航栏,
+// 导航栏中展示全部分类」之后,分类只由顶部那条导航表达,列表**平铺不分组**。
+// 本文件锁的就是这条新契约 —— 尤其是"计数与筛选同源"那条:两边各自实现一份
+// "这条属于哪一类",迟早出现"导航写着 3 条、点进去一条都没有"。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -48,15 +52,15 @@ function page(items: MemoryListItem[]): GetMemoryListResponse {
 let container: HTMLDivElement
 let root: Root
 
-const groupHeader = (name: string): HTMLButtonElement | null =>
-  (Array.from(container.querySelectorAll('button')).find((el) =>
-    el.textContent?.includes(`${name} ·`),
-  ) as HTMLButtonElement | undefined) ?? null
+/** 按 data-category-id 取导航项(不按文字找:文字里还拼着计数) */
+const navBtn = (id: string): HTMLButtonElement | null =>
+  container.querySelector<HTMLButtonElement>(`[data-category-id="${id}"]`)
 
 async function click(btn: HTMLElement) {
   await act(async () => {
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+  await act(async () => {})
 }
 
 async function renderWith(items: MemoryListItem[]) {
@@ -86,7 +90,7 @@ afterEach(() => {
   container.remove()
 })
 
-describe('MemoryListTab:按问题类型分区(只读)', () => {
+describe('MemoryListTab:顶部分类导航', () => {
   const ITEMS = [
     mk('qa-1', '尺码问题', 'preset:size'),
     mk('qa-2', '物流问题', 'preset:logistics'),
@@ -94,42 +98,76 @@ describe('MemoryListTab:按问题类型分区(只读)', () => {
     mk('qa-4', '幽灵类型问题', 'ghost'),
   ]
 
-  it('每组一个分区容器,标题为「名称 · 条数」', async () => {
-    await renderWith(ITEMS)
-    expect(container.textContent).toContain('尺码 · 1')
-    expect(container.textContent).toContain('物流 · 1')
-    expect(container.textContent).toContain('未分类 · 2')
+  it('★ 导航列出全部分类,第一项是「全部」;含当前 0 条的那些', async () => {
+    await renderWith([mk('qa-1', '尺码问题', 'preset:size')])
+    // 全部 + 三个分类(物流 / 未分类此时都是 0 条,照样在列 —— 藏掉会让人以为类型丢了)
+    expect(navBtn('all')?.textContent).toContain('全部')
+    expect(navBtn('preset:size')?.textContent).toContain('尺码')
+    expect(navBtn('preset:logistics')?.textContent).toContain('物流')
+    expect(navBtn('uncategorized')?.textContent).toContain('未分类')
+    // 顺序:全部恒第一
+    const ids = Array.from(container.querySelectorAll('[data-category-id]')).map((el) =>
+      el.getAttribute('data-category-id'),
+    )
+    expect(ids[0]).toBe('all')
   })
 
-  it('未分类组排在最后', async () => {
+  it('★ 默认选中「全部」:列表**平铺**,不再有分区标题', async () => {
     await renderWith(ITEMS)
-    const text = container.textContent ?? ''
-    expect(text.indexOf('尺码 ·')).toBeLessThan(text.indexOf('未分类 ·'))
-    expect(text.indexOf('物流 ·')).toBeLessThan(text.indexOf('未分类 ·'))
+    for (const q of ['尺码问题', '物流问题', '未分类问题', '幽灵类型问题']) {
+      expect(container.textContent).toContain(q)
+    }
+    expect(navBtn('all')?.getAttribute('aria-current')).toBe('true')
+    // 旧版的「名称 · 条数」分区标题不该再出现
+    expect(container.textContent).not.toContain('尺码 · 1')
+    expect(container.textContent).not.toContain('物流 · 1')
   })
 
-  it('其余组默认展开;未分类组默认折叠(条目不可见)', async () => {
+  it('★ 点一个分类 → 只显示该类;再点「全部」回来', async () => {
     await renderWith(ITEMS)
-    expect(container.textContent).toContain('尺码问题')
+    await click(navBtn('preset:logistics')!)
     expect(container.textContent).toContain('物流问题')
-    // 未分类组默认折叠:标题在,条目不在
+    expect(container.textContent).not.toContain('尺码问题')
     expect(container.textContent).not.toContain('未分类问题')
-    expect(container.textContent).not.toContain('幽灵类型问题')
-    expect(groupHeader('未分类')!.getAttribute('aria-expanded')).toBe('false')
+    expect(navBtn('preset:logistics')?.getAttribute('aria-current')).toBe('true')
+
+    await click(navBtn('all')!)
+    expect(container.textContent).toContain('尺码问题')
   })
 
-  it('展开未分类组后,未分类与未知类型的条目都出现(不丢条目)', async () => {
+  it('★ 计数与筛选同源:类型表里没有的 categoryId **并进未分类**,导航数字与点进去的条数一致', async () => {
+    // ITEMS 里 'ghost' 不在类型表 → 归到未分类,故未分类 = 未分类问题 + 幽灵类型问题 = 2
     await renderWith(ITEMS)
-    await click(groupHeader('未分类')!)
+    expect(navBtn('uncategorized')?.textContent).toContain('2')
+
+    await click(navBtn('uncategorized')!)
     expect(container.textContent).toContain('未分类问题')
     expect(container.textContent).toContain('幽灵类型问题')
-    expect(groupHeader('未分类')!.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).not.toContain('尺码问题')
+  })
+
+  it('类型表里没有「未分类」时也照样给它一个入口', async () => {
+    // 迁移中途 / 测试夹具都可能没有它,而它恰恰是最容易被忽略的那一类
+    mockedSend.mockResolvedValueOnce(page([mk('qa-1', '孤儿问题', 'ghost')]))
+    await act(async () => {
+      root.render(
+        <MemoryListTab
+          tk={lightTheme}
+          retentionDays={90}
+          categories={[CATEGORIES[0]]}
+          onDataChanged={vi.fn()}
+        />,
+      )
+    })
+    await act(async () => {})
+    expect(navBtn('uncategorized')?.textContent).toContain('未分类')
+    await click(navBtn('uncategorized')!)
+    expect(container.textContent).toContain('孤儿问题')
   })
 
   it('顶部只读说明行给出未分类条数与设置页入口,且无操作按钮', async () => {
     await renderWith(ITEMS)
     expect(container.textContent).toContain('未分类 2 条 · 在设置页点「开始分类全部历史」')
-    // 只读:该行本身没有可点的按钮(设置页入口只是文字)
     const notice = Array.from(container.querySelectorAll('div')).find(
       (d) => d.textContent === '未分类 2 条 · 在设置页点「开始分类全部历史」',
     )!

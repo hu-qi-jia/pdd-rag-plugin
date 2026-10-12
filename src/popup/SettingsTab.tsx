@@ -22,7 +22,7 @@ import type {
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, controlStyle, type NoticeMsg } from '../ui/components'
-import { controlH, fontSize, formGap, formType, spacing } from '../ui/design'
+import { controlH, fontSize, formGap, formType, radius, spacing } from '../ui/design'
 import { DownloadIcon, LoaderIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
 import {
@@ -588,7 +588,7 @@ export function SettingsTab({
         <HotkeyRow
           tk={tk}
           label="候选切换键"
-          desc="推荐面板打开时按此键在候选间循环切换(可用单键)"
+          desc="面板内循环切换候选(可用单键)"
           allowPlainKey
           hotkey={draft.panelNavHotkey}
           onChange={(hk) => void persist({ ...draft, panelNavHotkey: hk })}
@@ -649,7 +649,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="AI 整合"
-          desc="开启后,推荐面板的知识库候选上方多一行「根据知识库内容整合并回复」,点击才生成"
+          desc="开启后推荐面板多一行整合入口,点击才生成"
           checked={draft.aiIntegrateEnabled}
           onChange={(v) => void persist({ ...draft, aiIntegrateEnabled: v })}
         />
@@ -664,8 +664,8 @@ export function SettingsTab({
             lineHeight: 1.6,
           }}
         >
-          点击那一行时,本轮命中的知识库内容与买家问题会发给你配置的接口。历史回答与标准回答永不外发,
-          密钥只存本机,生成结果只填输入框、发送仍由你手动完成。
+          点击那一行时,本轮命中的知识库内容与买家问题会发给你配置的接口。
+          历史回答与标准回答永不外发;生成结果只填输入框,发送仍由你手动完成。
           {draft.directFillEnabled && ' 当前已开启「自动回复」,本功能不会生效。'}
         </div>
 
@@ -781,7 +781,7 @@ export function SettingsTab({
         <Toggle
           tk={tk}
           label="自动分类"
-          desc="开启后,新捕获的问答与手工新建的标准回答会自动归类;存量历史要在下方点一次按钮"
+          desc="开启后自动归类新问答;存量历史需在下方点一次补分类"
           checked={draft.classifyEnabled}
           onChange={(v) => void persist({ ...draft, classifyEnabled: v })}
         />
@@ -797,9 +797,8 @@ export function SettingsTab({
             lineHeight: 1.6,
           }}
         >
-          开启后,买家问题、历史问答的问题、标准回答的问题会发给 jev 判类型,
-          连同每个类型的名称与说明,以及请求本身携带的模型名等参数。
-          回复正文与标准回答正文永不外发,密钥只存本机。
+          开启后,买家问题与各类型的名称、说明会发给 jev 判类型。
+          回复正文与标准回答正文永不外发。
         </div>
 
         {/* 滑杆读秒、设置存毫秒 —— 与 AI 区同一条单位换算坑(第五十二轮修):
@@ -1107,7 +1106,7 @@ export function SettingsTab({
               lineHeight: 1.6,
             }}
           >
-            还没有使用记录。在聊天页点「AI回复」或按快捷键检索,这里就会开始计数。
+            还没有记录。在聊天页检索一次,这里就开始计数。
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
@@ -1184,11 +1183,9 @@ export function SettingsTab({
             lineHeight: 1.7,
           }}
         >
-          本工具仅读取聊天页内容并填充官方输入框,发送始终由人工完成;
-          全部数据仅存本机 IndexedDB;嵌入模型已内置,离线可用,无任何远程下载。
-          默认全程不联网 —— 只有你亲手填了接口与密钥、打开「AI 整合」、再点击面板里那一行,
-          才会把当轮面板展示的知识库内容与买家问题发给你配置的接口;
-          历史回答与标准回答永不外发,整合结果也只填进输入框,发送仍由你点。
+          发送始终由你点击,工具不自动发送。数据仅存本机,嵌入模型已内置、离线可用。
+          只有你填了接口与密钥、打开「AI 整合」并点击面板那一行,才会把当轮面板的知识库内容
+          与买家问题发给你配置的接口;历史回答与标准回答永不外发。
           请勿用于自动群发等违反平台规则的场景。
         </div>
       </Card>
@@ -1314,12 +1311,14 @@ function HotkeyRow({
             display: 'inline-flex',
             alignItems: 'center',
             padding: '0 10px',
-            borderRadius: 6,
+            borderRadius: radius.sm,
             border: `1px solid ${tk.border}`,
             backgroundColor: tk.bgSecondary,
             color: tk.text,
             fontSize: fontSize.caption,
-            fontFamily: 'ui-monospace, Consolas, monospace',
+            // 字体由全站等宽字体栈统一给出,这里不再自写一份 ——
+            // 键帽本来就该是等宽字,写死一个栈等于在等宽字体栈之外又留了一个口径
+            fontFamily: 'inherit',
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
@@ -1337,12 +1336,15 @@ function HotkeyRow({
         )}
       </div>
       {recording ? (
-        // 录入提示是"当前状态"而非普通说明:保留 accent 色以示激活(字号仍走 formType.desc)
+        // 录入提示是"当前状态"而非普通说明:取**知识库语义色**(暗墨绿)以示激活。
+        // v3.0 前这里用 accent(当时是 Figma 蓝);accent 现在 = 纯黑,而"正在录入"
+        // 需要和满屏灰字区分开 —— 语义色里最合适的是这个"进行中"的绿,
+        // 它在本版面已经是"有动作在跑"的通用记号(AI 整合行同款)
         <span
           style={{
             fontSize: formType.desc.size,
             fontWeight: formType.desc.weight,
-            color: tk.accent,
+            color: tk.knowledgeText,
             lineHeight: 1.5,
           }}
         >

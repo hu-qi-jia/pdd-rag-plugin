@@ -13,11 +13,11 @@ import type {
   MemoryReplyItem,
   PanelCategory,
 } from '../types/messages'
-import { filterQaRecords, groupByCategory, remainingDays } from './logic'
+import { categoryNavItems, filterQaRecords, groupByCategory, navBucketOf, remainingDays } from './logic'
 import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
 import {
+  Badge,
   Btn,
-  Card,
   ConfirmRow,
   EmptyState,
   Notice,
@@ -25,7 +25,8 @@ import {
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, formType, fontWeight, motion, radius, semantic, spacing } from '../ui/design'
+import { ALL_CATEGORIES, CategoryNav } from '../ui/CategoryNav'
+import { controlH, fontSize, fontWeight, listRow, motion, radius, spacing } from '../ui/design'
 import { ChevronDownIcon, StarIcon, TrashIcon } from '../ui/icons'
 
 export function MemoryListTab({
@@ -53,10 +54,14 @@ export function MemoryListTab({
   const [loading, setLoading] = useState(true)
   // 「设置标准回答」的行内即时反馈:请求中
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
-  // 分区折叠态(第五十七轮 Task 5):未分类组默认折叠,其余组默认展开(不在集合里)
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    () => new Set([UNCATEGORIZED_CATEGORY_ID]),
-  )
+  /**
+   * 当前选中的分类(`ALL_CATEGORIES` = 全部)。
+   *
+   * v3.0 第四版:**分类改由顶部导航表达,列表不再分组**(用户:「不要按照文件夹的样式设计了…
+   * 在顶部增加导航栏,导航栏中展示全部分类」)。此前是按类型分组、每组一个可折叠标题 ——
+   * 一屏里既有列表又有层层标题,用户的原话是「卡片还是很混乱」。现在只有一条导航 + 一张平铺列表。
+   */
+  const [activeCat, setActiveCat] = useState<string>(ALL_CATEGORIES)
 
   const applyPage = useCallback(
     (p: GetMemoryListResponse['payload'], append: boolean) => {
@@ -106,11 +111,26 @@ export function MemoryListTab({
     void load()
   }, [load])
 
-  const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
   const now = Date.now()
 
-  // 分区(第五十七轮 Task 5):按问题类型分桶,未分类恒最后;类型表来自 GET_STATS,本页签不自拉
-  const groups = useMemo(() => groupByCategory(shown, categories), [shown, categories])
+  /** 导航条目 = 全部 + 各分类(含 0 条的)。计数与下面的筛选同源(logic#navBucketOf) */
+  const navItems = useMemo(
+    () => [{ id: ALL_CATEGORIES, name: '全部', count: items.length }, ...categoryNavItems(items, categories)],
+    [items, categories],
+  )
+
+  /**
+   * 列表 = 关键词筛选 ∩ 分类筛选,**平铺不分组**。
+   *
+   * 一处已知边界(不是这次引入的,分组那版同样如此):筛选只作用于**已加载**的页 ——
+   * 更早的记录要点「加载更早」拉上来才会参与筛选。空态文案因此要把这件事说出来,
+   * 否则用户会以为"这一类真的没有记录"。
+   */
+  const shown = useMemo(() => {
+    const kw = filterQaRecords(items, keyword)
+    if (activeCat === ALL_CATEGORIES) return kw
+    return kw.filter((it) => navBucketOf(it.categoryId, categories) === activeCat)
+  }, [items, keyword, activeCat, categories])
   // 只读说明行取**已加载全量**口径(不随关键词筛选变动):它描述的是库内状态,不是当前筛选
   const uncategorizedCount = useMemo(
     () =>
@@ -119,13 +139,7 @@ export function MemoryListTab({
       )?.items.length ?? 0,
     [items, categories],
   )
-  const toggleGroup = (id: string) =>
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+
 
   // 持久金标徽标(2026-09-15 PM1):从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId
   // 回带 goldenId),不再是会话级 state —— 重开 popup、于文件夹页取消后都如实反映库内状态
@@ -213,27 +227,30 @@ export function MemoryListTab({
    */
   const goldenControl = (item: MemoryListItem, r: MemoryReplyItem) =>
     goldenReplyIds.has(r.id) ? (
+      // 已设态 = 方括号金标(与全站徽标同一种形态)。
+      // 外层那圈 24px 高的壳**不是装饰**:它让"按钮 ↔ 徽标"两种状态等高,
+      // 点下去时行高不跳(纯文字徽标只有 ~15px,少了这层高度,列表会抖一下)
       <span
         title="该回复已设为标准回答;可在文件夹页取消"
         style={{
           height: controlH.inline,
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 3,
           flexShrink: 0,
-          padding: `0 ${spacing.md}px`,
-          borderRadius: radius.sm,
-          backgroundColor: semantic.goldenBg,
-          color: semantic.golden,
-          fontSize: fontSize.caption,
-          fontWeight: fontWeight.medium,
-          whiteSpace: 'nowrap',
         }}
       >
-        <StarIcon size={11} strokeWidth={2} style={{ fill: 'currentColor' }} />
-        标准回答
+        <Badge tk={tk} tone="golden">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            <StarIcon size={11} strokeWidth={2} style={{ fill: 'currentColor' }} />
+            标准回答
+          </span>
+        </Badge>
       </span>
     ) : (
+      // 未设态 = **文字指令钮**(第六十四轮降噪):旧版是描边幽灵钮,而它坐在
+      // 回复方框里面 —— 盒子里再套一只描边盒子,一屏下来全是嵌套矩形。
+      // 现在是 `+ 设为标准` 一条指令,悬浮时**反白**(黑底白字):与导航选中、
+      // 面板选中行同一套"高权重 = 反白"语言,也符合终端命令按钮的心智。
       <button
         type="button"
         title="将此问题与回复设为标准回答"
@@ -245,34 +262,37 @@ export function MemoryListTab({
           alignItems: 'center',
           gap: 3,
           flexShrink: 0,
-          padding: `0 ${spacing.md}px`,
+          padding: `0 ${spacing.sm}px`,
+          border: 'none',
           borderRadius: radius.sm,
-          border: `1px solid ${tk.inputBorder}`,
           backgroundColor: 'transparent',
           color: tk.textMuted,
           fontSize: fontSize.caption,
           whiteSpace: 'nowrap',
           cursor: 'pointer',
-          transition: `color ${motion.fast}, border-color ${motion.fast}, background-color ${motion.fast}`,
+          transition: `color ${motion.fast}, background-color ${motion.fast}`,
         }}
         onMouseEnter={(e) => {
           if (busyReplyId === r.id) return
-          e.currentTarget.style.color = tk.accent
-          e.currentTarget.style.borderColor = tk.accent
+          e.currentTarget.style.backgroundColor = tk.text
+          e.currentTarget.style.color = tk.bg
         }}
         onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'transparent'
           e.currentTarget.style.color = tk.textMuted
-          e.currentTarget.style.borderColor = tk.inputBorder
         }}
       >
-        <StarIcon size={11} strokeWidth={2} />
-        {busyReplyId === r.id ? '设置中…' : '设为标准'}
+        {busyReplyId === r.id ? '设置中…' : '+ 设为标准'}
       </button>
     )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
+
+      {/* 分类导航在**搜索框下方**(用户:「放在搜索框下方,抽离为独立组件」)。
+          它取代了原来的分区标题 —— 分类从此只有这一个表达处,不再在列表里重复一遍 */}
+      <CategoryNav tk={tk} items={navItems} active={activeCat} onSelect={setActiveCat} />
 
       <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
 
@@ -285,8 +305,14 @@ export function MemoryListTab({
               <br />
               在聊天页与买家对话后将自动捕获
             </>
+          ) : hasMore ? (
+            <>
+              当前已加载的记录里没有匹配项
+              <br />
+              更早的记录要点下方「加载更早」拉上来才会参与筛选
+            </>
           ) : (
-            '没有匹配的问题'
+            '没有匹配的记录'
           )}
         </EmptyState>
       )}
@@ -299,51 +325,8 @@ export function MemoryListTab({
         </div>
       )}
 
-      {groups.map((group) => {
-        const collapsed = collapsedGroups.has(group.category.id)
-        return (
-          <Card
-            key={group.category.id}
-            tk={tk}
-            style={{ padding: `${spacing.lg}px ${spacing.lg}px`, gap: spacing.md }}
-          >
-            {/* 分区标题:可折叠(未分类默认折叠)。承载「名称 · 条数」 */}
-            <button
-              type="button"
-              aria-expanded={!collapsed}
-              onClick={() => toggleGroup(group.category.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: spacing.sm,
-                width: '100%',
-                padding: 0,
-                border: 'none',
-                background: 'transparent',
-                color: tk.text,
-                fontSize: formType.groupTitle.size,
-                fontWeight: formType.groupTitle.weight,
-                fontFamily: 'inherit',
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <span>{`${group.category.name} · ${group.items.length}`}</span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  color: tk.textTertiary,
-                  transform: collapsed ? 'rotate(-90deg)' : 'none',
-                  transition: `transform ${motion.fast}`,
-                }}
-              >
-                <ChevronDownIcon size={13} strokeWidth={2.2} />
-              </span>
-            </button>
-
-            {!collapsed &&
-              group.items.map((item) => {
+      {/* 列表:**平铺**一行一条 —— 分类已由顶部导航表达,这里不再有分区标题与折叠箭头 */}
+      {shown.map((item) => {
         const days = remainingDays(item.questionTs, now, retentionDays)
         const expanded = !collapsedIds.has(item.id)
         const toggle = () =>
@@ -353,32 +336,68 @@ export function MemoryListTab({
             else next.add(item.id)
             return next
           })
+        // 行容器(第六十四轮):不再借用 Card(row 形态)而是自带**悬浮(选中)态** ——
+        // 浅底 + 左缘 2px 墨条(boxShadow inset,不引起布局位移),与标准回答页同一套
+        // "指针在哪一行"的表达;两页由此共用同一行骨架与同一行状态语言
         return (
-          <Card key={item.id} tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: 0 }}>
-            {/* 问题行:问题与元信息居左,折叠按钮移到行尾(2026-09-15 用户要求);整行可点 */}
+          <div
+            key={item.id}
+            style={{
+              borderTop: `1px solid ${tk.borderLight}`,
+              padding: `${spacing.md}px 0 ${spacing.sm + 2}px`,
+              transition: `background-color ${motion.fast}, box-shadow ${motion.fast}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = tk.bgSecondary
+              e.currentTarget.style.boxShadow = `inset 2px 0 0 0 ${tk.text}`
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          >
+            {/* ── 主行:标题 + 行尾操作列 ─────────────────────────────────────
+                两段式骨架(见 design.ts#listRow 与 DESIGN §七-G):
+                **主行只放"这条是什么"与行尾动作,元信息单独成行**。
+                此前元信息被塞在"标题"下面、同一个 flex 列里,而操作钮浮在这一列之外 ——
+                于是元信息的右端比标题短一截、换行点还随图标列宽度漂移。
+                操作列靠 `flex-start` + `listRow.opsOffsetY` 光学居中到**第一行**文字上:
+                标题占 1 行还是 2 行,动作列都落在同一个 y,跨行才成得了一列 */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.sm }}>
-              <div onClick={toggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                <div
-                  style={{
-                    fontSize: fontSize.body,
-                    fontWeight: fontWeight.semibold,
-                    lineHeight: 1.45,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {item.question}
-                </div>
-                <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                  {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
-                  <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
-                </div>
+              <div
+                onClick={toggle}
+                style={{
+                  // 问题 = 这条词条的**标题**,取 semibold。
+                  // (第五十九~六十轮一度改成 regular,理由是"600 只给用来扫的" —— 那条口径没错,
+                  //  但**问题正是"用来扫的"那一行**:翻列表时人扫的就是问题,回复才是内容。
+                  //  用户这一轮的反馈把边界说清楚了:「问题与回复区分不明显」+「标题与词条颜色区分」。)
+                  flex: 1,
+                  minWidth: 0,
+                  cursor: 'pointer',
+                  fontSize: fontSize.body,
+                  fontWeight: fontWeight.semibold,
+                  lineHeight: listRow.titleLineHeight,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {item.question}
               </div>
 
-              {/* 删除入口(第十八轮):折叠钮左侧的垃圾桶图标钮;确认条在问题行下方 */}
+              {/* 行尾操作列(删除入口 v2.6.18:在折叠钮左侧;确认条在主行下方)。
+                  整列常驻可见 —— 悬浮才显在本项目里被明确否决过("隐蔽入口不可发现"踩过两次坑) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  flexShrink: 0,
+                  marginTop: listRow.opsOffsetY,
+                }}
+              >
               <button
                 type="button"
                 title="删除该问答(需确认)"
@@ -387,7 +406,6 @@ export function MemoryListTab({
                   flexShrink: 0,
                   width: controlH.inline,
                   height: controlH.inline,
-                  marginTop: 1,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -423,7 +441,6 @@ export function MemoryListTab({
                   flexShrink: 0,
                   width: controlH.inline,
                   height: controlH.inline,
-                  marginTop: 1,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -454,6 +471,27 @@ export function MemoryListTab({
                   <ChevronDownIcon size={13} strokeWidth={2.2} />
                 </span>
               </button>
+              </div>
+            </div>
+
+            {/* ── 元信息行:**通栏**、`·` 分隔、统一字号与颜色 ────────────────
+                用户「10-12 02:12 · 1 条回复 · 剩 30 天紧凑一点」——
+                收紧的是它与标题之间的空白(marginTop 2、行高 1.35),
+                而不是把三项并进标题那一行:那会把标题挤到十几个字就得截断。
+                整行可点(与标题同一动作:展开 / 收起),点击面积不因为拆行而变小 */}
+            <div
+              onClick={toggle}
+              style={{
+                fontSize: fontSize.caption,
+                color: tk.textTertiary,
+                marginTop: 2,
+                lineHeight: listRow.metaLineHeight,
+                fontVariantNumeric: 'tabular-nums',
+                cursor: 'pointer',
+              }}
+            >
+              {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
+              <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
             </div>
 
             {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现。
@@ -470,14 +508,28 @@ export function MemoryListTab({
               </div>
             )}
 
-            {/* 展开区:回复列表(与问题文字同左基线,不再给折叠钮留缩进) */}
+            {/* 展开区:回复列表 —— **向里缩一级**,并挂一条 1px 左色条。
+                用户:「记忆中的问题与回复区分也不明显」。
+                此前回复只是"问题下方另起一段灰字",字号差 1px、颜色淡一档 ——
+                在一屏十几条里,那点差别不足以让人看出"这是那条问题的答复"。
+                现在四重区分一起说:缩进(12px)+ 左色条(结构上是引文块)+ 字号(11.5 vs 12.5)
+                + 颜色(灰 vs 纯黑)+ 字重(400 vs 600)。
+                左色条取 `borderLight`(行分隔线那一档)而不是结构线:它是**层级**提示,
+                不该抢过分区标题那根线。 */}
             {expanded && (
               <div
                 style={{
-                  marginTop: spacing.md,
+                  marginTop: spacing.sm,
+                  // 回复 = **一只方框**(v3.0 第四版,照用户给的参考图)——
+                  // 上一版是一条左竖线的引文块,在一屏十几条里仍然偏弱;
+                  // 四边合围之后"哪段是答复、答复到哪儿结束"一眼可见,这正是用户反复提的
+                  // 「问题与回复区分不明显」。描边取 `tk.border`(控件/容器那一档)而不是
+                  // `borderLight`(行分隔线那一档):它是一只盒子,不是又一根分隔线。
+                  border: `1px solid ${tk.border}`,
+                  padding: `${spacing.sm}px ${spacing.sm}px`,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: spacing.md,
+                  gap: spacing.sm,
                 }}
               >
                 {item.replies.length === 0 && (
@@ -487,10 +539,8 @@ export function MemoryListTab({
                   <div
                     key={r.id}
                     style={{
-                      borderTop: `1px solid ${tk.separator}`,
-                      paddingTop: spacing.md,
                       display: 'flex',
-                      gap: spacing.md,
+                      gap: spacing.sm,
                       alignItems: 'flex-start',
                     }}
                   >
@@ -498,7 +548,7 @@ export function MemoryListTab({
                       style={{
                         flex: 1,
                         fontSize: fontSize.secondary,
-                        lineHeight: 1.55,
+                        lineHeight: 1.5,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                         color: tk.textMuted,
@@ -513,10 +563,7 @@ export function MemoryListTab({
                 ))}
               </div>
             )}
-          </Card>
-                )
-              })}
-          </Card>
+          </div>
         )
       })}
 

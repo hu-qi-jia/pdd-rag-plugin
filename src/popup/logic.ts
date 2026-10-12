@@ -20,33 +20,24 @@ import {
 } from '../shared/constants'
 import type { PanelCategory, PanelFolder, PanelGolden, PanelKnowledge } from '../types/messages'
 
-/**
- * 文档分块 id → 块序号。
+/*
+ * 这里原有 `chunkOrdinal` 与 `firstChunkIds` 两个纯函数,随 v3.0 第二版**整体删除**。
  *
- * `importKbDocument` 造的 id 形如 `${rootId}-c${i}`(rootId 是随机 id);
- * 只有一块时 id 就是 rootId、**不带** `-c<n>` 后缀 —— 视为第 0 块。
- * 不能写成 `id === docId + '-c0'`:那是把文档名误当作了 id 前缀。
- */
-export function chunkOrdinal(id: string): number {
-  const m = /-c(\d+)$/.exec(id)
-  return m ? Number(m[1]) : 0
-}
-
-/**
- * 每篇文档的**第一块** id 集合。
+ * 它们唯一的用途是回答"该在哪一块上渲染那个尺码表开关" —— 尺码表是**文档级**标记
+ * (落在 `kbDocs.isSizeTable`,不随块存),而一篇文档会被切成很多块、每块一条记录,
+ * 开关只能在第一块上渲染一次,否则一篇 20 块的文档会冒出 20 个开关。
  *
- * 「是不是尺码表」是**文档级**的(落在 kbDocs,不随块存),而面板一篇文档一篇文档地
- * 切成许多块、每块一条记录 —— 开关只能在该文档的第一块上渲染一次,否则一篇 20 块的
- * 文档会冒出 20 个开关,点哪个都改同一篇文档,用户无从判断自己改的是什么。
+ * 用户把那个开关本身要求掉了(「不用将每条都增加尺码表的开关,在顶部上传按钮右侧
+ * 增加一个上传尺码表就好」),列表里不再有任何逐条开关,于是"第一块是哪一块"这个问题
+ * 在界面上不再存在,两个函数一并退场。
+ *
+ * 块序号的语义**仍有出处**,别在这里重新发明:`src/background/aiMaterials.ts#chunkOrdinal`
+ * (尺码材料按块序号收集续块时在用)。要点照录:`importKbDocument` 造的 id 形如
+ * `${rootId}-c${i}`(rootId 是随机 id),只有一块时 id 就是 rootId、**不带** `-c<n>` 后缀,
+ * 视为第 0 块 —— 不能写成 `id === docId + '-c0'`,那是把文档名误当作了 id 前缀。
+ *
+ * 若将来要把逐条开关加回来,需要同时补回这两个函数与它们的用例,别只挂界面。
  */
-export function firstChunkIds(items: PanelKnowledge[]): Set<string> {
-  const out = new Set<string>()
-  for (const k of items) {
-    if (k.source !== 'doc' || !k.docId) continue
-    if (chunkOrdinal(k.id) === 0) out.add(k.id)
-  }
-  return out
-}
 
 export type { PanelCategory, PanelFolder, PanelGolden }
 
@@ -205,6 +196,48 @@ export interface CategoryBucket<T> {
 export function categoryOrder(categories: PanelCategory[]): PanelCategory[] {
   const isUnc = (c: PanelCategory): number => (c.id === UNCATEGORIZED_CATEGORY_ID ? 1 : 0)
   return [...categories].sort((a, b) => isUnc(a) - isUnc(b) || a.position - b.position)
+}
+
+/**
+ * 一条记录在**分类导航**上归到哪一档。
+ *
+ * 口径与 `groupByCategory` 逐字一致:**类型表里没有的 categoryId 并进未分类**。
+ * 这条必须两边同源 —— 导航上的数字相加要等于总数,点进去也不能是空的;
+ * 各自实现一份"归到哪一类"的规则,迟早出现"导航写着 3 条、点进去 0 条"。
+ */
+export function navBucketOf(categoryId: string, categories: PanelCategory[]): string {
+  return categories.some((c) => c.id === categoryId) ? categoryId : UNCATEGORIZED_CATEGORY_ID
+}
+
+/**
+ * 分类导航的条目(**不含「全部」那一档**,它由页面自己拼在最前 —— `all` 是个 UI 字面量,
+ * 不该混进这一层纯逻辑)。
+ *
+ * 顺序 = `categoryOrder`(未分类恒最后);并且:
+ *  - **保证「未分类」在列**。类型表本身不保证含它(测试夹具、迁移中途都可能没有),
+ *    而它恰恰是"最容易被忽略的那一类",导航漏掉它 = 那批记录没有入口;
+ *  - **展示全部分类,含 0 条的**。用户要的是"一眼看到有哪些分类";藏掉空分类
+ *    反而会让人以为类型丢了(标准回答页还要在导航上改名 / 删除自定义类型)。
+ */
+export function categoryNavItems(
+  items: { categoryId: string }[],
+  categories: PanelCategory[],
+): { id: string; name: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const it of items) {
+    const bucket = navBucketOf(it.categoryId, categories)
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
+  }
+  const ordered = categoryOrder(categories)
+  const out = ordered.map((c) => ({ id: c.id, name: c.name, count: counts.get(c.id) ?? 0 }))
+  if (!ordered.some((c) => c.id === UNCATEGORIZED_CATEGORY_ID)) {
+    out.push({
+      id: UNCATEGORIZED_CATEGORY_ID,
+      name: UNCATEGORIZED_CATEGORY_NAME,
+      count: counts.get(UNCATEGORIZED_CATEGORY_ID) ?? 0,
+    })
+  }
+  return out
 }
 
 /**

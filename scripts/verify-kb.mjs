@@ -6,9 +6,13 @@
  * 用法:node scripts/verify-kb.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
-import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
+import { launchExtContext, findExtensionId, openPopup, freshProfile, sleep } from './lib.mjs'
 
-const PROFILE = persistentProfile('fresh-profile')
+// 一次性 temp profile —— 文件头写的"一次性 profile"此前与代码不符(用的是持久目录)。
+// 复用同一个目录有两重坏处:① 上轮留下的知识库让"全新上传"类断言变成脏状态
+// (verify-kb-doc / verify-p3 都为此改过一次);② Chrome 会接着跑该 profile 缓存的
+// **旧 service worker**,后台是新代码、SW 是旧代码,现场极难判断。
+const PROFILE = freshProfile()
 
 const ctx = await launchExtContext(PROFILE)
 // 离线证明(第四十七轮):封锁 hf-mirror —— 模型内置后检索链路必须在不触网的前提下工作

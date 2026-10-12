@@ -232,8 +232,12 @@ const rows = () =>
         bg: cs.backgroundColor,
         borderW: cs.borderTopWidth,
         borderColor: cs.borderTopColor,
+        // v3.0 整合行多了一条**左色条**(3px),候选行没有 —— 内容左缘必须把左边框算进去。
+        // 旧版这里加的是 borderTopWidth(当时两行都没边框,加哪个都是 0);现在加错这一项,
+        // 量出来的整合行内容左缘会少 3px,看着像"没对齐",其实是被测错了
+        borderL: cs.borderLeftWidth,
         cursor: cs.cursor,
-        contentLeft: Math.round(box.left + padLeft + parseFloat(cs.borderTopWidth)),
+        contentLeft: Math.round(box.left + padLeft + parseFloat(cs.borderLeftWidth)),
         labelFont: labelEl ? getComputedStyle(labelEl).fontSize : '',
         hintFont: hintEl ? getComputedStyle(hintEl).fontSize : '',
         draftFont: draftEl ? getComputedStyle(draftEl).fontSize : '',
@@ -243,6 +247,10 @@ const rows = () =>
     }),
   )
 const textarea = () => page.evaluate(() => document.querySelector('#replyTextarea').value)
+
+/** 浅色主题的知识库动作面(:src/ui/theme.ts 的 knowledgeSurface)。
+ *  v3.0 由荧光绿 rgba(20,174,92,…) 改成印刷油墨级的暗墨绿 rgba(47,107,60,…) */
+const lightKnowledge = 'rgba(47, 107, 60, 0.09)'
 const setTextarea = (v) => page.evaluate((t) => { document.querySelector('#replyTextarea').value = t }, v)
 const lastPort = () =>
   page.evaluate(() => {
@@ -298,11 +306,11 @@ let idleAiRowH = 0
   // "有底的只有这一块"就已经足够把它读成动作。断言随之从"底色 + 描边两层叠加"
   // 改成"有底 / 没底"这一条真正在承担区分作用的差别
   check(
-    '⑩ 视觉:全面板只有整合行有底(常驻知识库绿软底),候选行静止时完全无底无框',
-    ai.bg.includes('20, 174, 92') &&
-      ai.borderW === '0px' &&
-      cands.every((x) => x.borderW === '0px' && x.bg === 'rgba(0, 0, 0, 0)'),
-    `ai=${ai.bg}/border=${ai.borderW} 候选=${cands.map((x) => x.bg).join(' ')}`,
+    '⑩ 视觉:全面板只有整合行有底 + 左色条(常驻知识库色软底),候选行静止时完全无底无框',
+    ai.bg === lightKnowledge &&
+      ai.borderL === '3px' &&
+      cands.every((x) => x.borderW === '0px' && x.borderL === '0px' && x.bg === 'rgba(0, 0, 0, 0)'),
+    `ai=${ai.bg}/左色条=${ai.borderL} 候选=${cands.map((x) => `${x.bg}|${x.borderL}`).join(' ')}`,
   )
   check(
     '⑩ 对齐:整合行内容左缘 = 候选行内容左缘(同类盒子同一个横向内边距)',
@@ -328,7 +336,13 @@ let idleAiRowH = 0
 }
 
 // ── ④ 点它才发请求,且只带面板上展示过的知识库候选 ──
-const sentBefore = await page.evaluate(() => window.__sent.length)
+// 只数**问答类**消息:TRACK_EVENT 是旁路统计(设计上"即发即忘,绝不能挡住填充或弹面板"),
+// 本条要验的是"整合过程不经过一问一答",统计上报与它无关。
+// 注:不过滤的话这条在**改成 v3.0 之前就已经是红的** —— `fill.ai` 逐条用量是随统计功能一起
+// 加进来的,而这条断言没跟着更新(它漏掉了"填成功本身也要记一笔")
+const sentBefore = await page.evaluate(
+  () => window.__sent.filter((m) => m.type !== 'TRACK_EVENT').length,
+)
 await page.locator('.pddcs-ai-row').click()
 await sleep(400)
 const port = await lastPort()
@@ -387,7 +401,9 @@ check(
 )
 check(
   '整合全程零 sendMessage(流式内容只在 Port 上走,不经过一问一答)',
-  (await page.evaluate(() => window.__sent.length)) === sentBefore,
+  (await page.evaluate(
+    () => window.__sent.filter((m) => m.type !== 'TRACK_EVENT').length,
+  )) === sentBefore,
   JSON.stringify(await page.evaluate(() => window.__sent.map((m) => m.type))),
 )
 check('终态后主动断端口(面板没了也不留着连接不放手)',
@@ -443,9 +459,11 @@ check('⑪ 终态后退出 busy 态', done[1]?.busy === false)
     `done=${ai.h} idle=${idleAiRowH} 候选=${rowsNow.filter((x) => !x.ai).map((x) => x.h).join('/')}`,
   )
   check(
-    '⑪ 生成结果:整行仍是知识库绿底(出结果不换成中性面色,也不因为"结果来了"就退成普通词条)',
-    ai.bg.includes('20, 174, 92') && ai.borderW === '0px',
-    `${ai.bg} / border=${ai.borderW}`,
+    '⑪ 生成结果:整行仍是知识库色软底(出结果不换成中性面色,也不因为"结果来了"就退成普通词条)',
+    // 只认色相(47,107,60 = 印刷油墨级的暗墨绿),不认 alpha —— 鼠标停在行上时是悬浮那一档,
+    // 那是**正确**的悬浮回执,不该被这条"底色还在不在"的断言判红
+    ai.bg.includes('47, 107, 60') && ai.borderL === '3px',
+    `${ai.bg} / 左色条=${ai.borderL}`,
   )
   await page.locator('.pddcs-popup').screenshot({ path: path.join(ROOT, 'logs', 'ui-0917-ai-row-done.png') })
 
@@ -597,7 +615,7 @@ const aiHoverProbe = await page.evaluate(() => {
 })
 check(
   '⑮ 悬浮整合行:选中不动(仍在候选行上),绿底不加深(还是静止那一档)',
-  aiHoverProbe.selected === 1 && !aiHoverProbe.rowSelCls && aiHoverProbe.bg === 'rgba(20, 174, 92, 0.09)',
+  aiHoverProbe.selected === 1 && !aiHoverProbe.rowSelCls && aiHoverProbe.bg === lightKnowledge,
   `selected=${aiHoverProbe.selected} 悬浮行带选中类=${aiHoverProbe.rowSelCls} bg=${aiHoverProbe.bg}`,
 )
 await page.keyboard.press('Enter')

@@ -52,7 +52,18 @@ export function assertModelBundled() {
 export async function launchExtContext(profile, options = {}) {
   // 唯一入口,所有验收脚本都从这里过 —— 缺模型的包在这里拦下,别等到检索那一步才炸
   assertModelBundled()
-  const headless = options.headless ?? process.env.PDD_E2E_HEADLESS === '1'
+  /**
+   * **默认无头**。
+   *
+   * 这里此前默认"有头"(要显式设 `PDD_E2E_HEADLESS=1` 才无头),后果是随手跑一个验收脚本
+   * 就弹出一整个 Chrome 窗口 —— 连着跑几个脚本就是连着弹几个。用户明确要求不要弹窗。
+   * 现在反过来:**默认无头**,要看窗口得显式设 `PDD_E2E_HEADED=1`。
+   *
+   * 优先级:`options.headless`(显式传参)> 环境变量 > 默认无头。
+   * 保留 `PDD_E2E_HEADLESS=0` 这条老写法(等价于要窗口),免得已有的本地命令失效。
+   */
+  const wantsHeaded = process.env.PDD_E2E_HEADED === '1' || process.env.PDD_E2E_HEADLESS === '0'
+  const headless = options.headless ?? !wantsHeaded
   const { timeout = 60000 } = options
   return chromium.launchPersistentContext(profile, {
     // 指定 PDD_E2E_CHROME 用之;否则 channel: 'chromium'(完整 chromium,新无头模式,

@@ -131,7 +131,8 @@ for (const r of rows) {
   )
   console.log(`         computed: ${JSON.stringify(r.style)} label=${JSON.stringify(r.label)}`)
   check(`按钮高 26px(controlH.form)`, Math.abs(r.btn.h - 26) < 0.6, `${r.btn.h.toFixed(2)}px`)
-  check(`按钮圆角 6px`, r.style.radius === '6px', r.style.radius)
+  // v3.0 全线直角(radius 令牌一律 0):按钮不再是 6px 圆角控件
+  check(`按钮直角(圆角 0,与全站同一套硬朗几何)`, r.style.radius === '0px', r.style.radius)
   check(`按钮字号 12.5px / border-box`, r.style.fontSize === '12.5px' && r.style.boxSizing === 'border-box', `${r.style.fontSize} / ${r.style.boxSizing}`)
   check(
     `与气泡可视外缘间距 12px(拆包前按文本内缘只剩 ~2px)`,

@@ -261,7 +261,8 @@ const mousePanelHoverBg = await page.evaluate(
 )
 check(
   '鼠标面板:悬浮仍给软灰底(守卫不越过面板类型)',
-  mousePanelHoverBg === 'rgba(0, 0, 0, 0.06)',
+  // v3.0 的 selectedBg 取自纯黑(aligned with 主文本色 #0a0a0a @ 8%);选中态另走整行反白
+  mousePanelHoverBg === 'rgba(10, 10, 10, 0.08)',
   `hover bg=${mousePanelHoverBg}`,
 )
 
@@ -370,7 +371,13 @@ const visual = await page.evaluate(() => {
   const popup = document.querySelector('.pddcs-popup')
   const sel = document.querySelector('.pddcs-cand-selected')
   const cand = document.querySelector('.pddcs-cand')
-  const badge = document.querySelector('.pddcs-badge')
+  // 徽标取样必须**避开选中行**:v3.0 选中是整行反白,行内一切前景色都继承成面板底色
+  // (浅色下就是白色),拿选中行的徽标去断"是不是琥珀色"只会得到 rgb(255,255,255)
+  // 取**金色**那枚:徽标三态里只有它带语义色(暗琥珀),中性态的"历史"取 textMuted,
+  // 拿它去断"是不是油墨色"只会拿到灰 —— 断不到真正想守的东西
+  const badge =
+    document.querySelector('.pddcs-cand:not(.pddcs-cand-selected) .pddcs-badge.golden') ??
+    document.querySelector('.pddcs-badge.golden')
   const cs = popup ? getComputedStyle(popup) : null
   const ss = sel ? getComputedStyle(sel) : null
   const hasRule = (needle) =>
@@ -381,6 +388,22 @@ const visual = await page.evaluate(() => {
         return false
       }
     })
+  // 直接读某条规则的**声明色**。
+  // 徽标的语义色必须这样量:v3.0 选中是整行反白,行内一切前景色都继承成面板底色,
+  // 若被取样的那枚徽标恰好长在选中行上,getComputedStyle 只会给出 rgb(255,255,255) ——
+  // 量到的是"反白生效了",而不是"油墨色对不对"
+  const declaredColor = (selector) => {
+    for (const sheet of document.styleSheets) {
+      try {
+        for (const r of sheet.cssRules) {
+          if (r.selectorText === selector) return r.style.color
+        }
+      } catch {
+        /* 跨源样式表读不到,跳过 */
+      }
+    }
+    return ''
+  }
   return {
     bg: cs?.backgroundColor ?? '',
     opacity: cs?.opacity ?? '',
@@ -421,6 +444,8 @@ const visual = await page.evaluate(() => {
     panelShadow: cs?.boxShadow ?? '',
     badgeBg: badge ? getComputedStyle(badge).backgroundColor : '',
     badgeColor: badge ? getComputedStyle(badge).color : '',
+    badgeInk: declaredColor('.pddcs-badge.golden'),
+    badgeKnowledgeInk: declaredColor('.pddcs-badge.knowledge'),
     popupRadius: cs?.borderRadius ?? '',
     popupBorder: cs?.borderTopWidth ?? '',
     backdropFilter: cs?.backdropFilter ?? cs?.webkitBackdropFilter ?? '',
@@ -455,70 +480,64 @@ const visual = await page.evaluate(() => {
     footKbd: !!document.querySelector('.pddcs-popup-foot kbd'),
   }
 })
-// v2.7.0:面板从"不透明实心底 + 1px 描边"改成毛玻璃材料。断言随之改成**材料的两条硬约束**,
-// 而不是简单地放宽成"半透明就行" —— 那样会把用户当年反馈过的"面板怎么是半透明的"放回来:
-//   ① 引擎真的在模糊背景(backdrop-filter 生效),否则半透明就只是"看得见后面";
-//   ② 材料本身的不透明度 ≥ 0.75,不做成虚面板。
-// 引擎不支持模糊时另走不透明兜底(那条路径由 overlay-css 单测的 panelSurface 用例覆盖)
-const bgAlpha = (() => {
-  const m = visual.bg.match(/rgba?\([^)]*?([\d.]+)\)$/)
-  if (!visual.bg.startsWith('rgba')) return 1
-  return m ? Number(m[1]) : NaN
-})()
-const glassy = visual.backdropFilter.includes('blur(20px)')
+// v3.0:面板由"毛玻璃材料"改回**一块带框的直角纸/屏**(复古极简 + 极客工具风)。
+// 这三条要一起看 —— 它们共同构成"面板与页面之间靠**实线**分开"这一条口径:
+//   ① 不透明面色(不再有 backdrop-filter);
+//   ② 1px 结构线描边;
+//   ③ 没有任何 box-shadow。
+// 拆开只查一条会漏掉最坏的那种改法:描边撤了、阴影也没了,面板边界直接消失。
 check(
-  '面板是毛玻璃材料:背景模糊生效 + 材料不透明度 ≥0.75(不做成"看得见后面"的虚面板)',
-  glassy && bgAlpha >= 0.75 && bgAlpha < 1 && visual.opacity === '1',
-  `bg=${visual.bg} alpha=${bgAlpha} backdrop=${visual.backdropFilter} opacity=${visual.opacity}`,
+  '面板是不透明面色(不再有毛玻璃材料:整站不许出现背景模糊)',
+  visual.bg === 'rgb(255, 255, 255)' && visual.backdropFilter === 'none' && visual.opacity === '1',
+  `bg=${visual.bg} backdrop=${visual.backdropFilter} opacity=${visual.opacity}`,
 )
 check(
-  '面板不挂描边:与页面之间的硬边改由阴影里的 0.5px 亮环承担',
-  visual.popupBorder === '0px' && visual.panelShadow.includes('0px 0px 0px 0.5px'),
-  `border=${visual.popupBorder} shadow=${visual.panelShadow.slice(0, 40)}…`,
+  '面板挂 1px 结构线描边、且不挂阴影(硬边由实线给出,不靠投影)',
+  visual.popupBorder === '1px' && visual.panelShadow === 'none',
+  `border=${visual.popupBorder} shadow=${visual.panelShadow}`,
 )
 check(
-  '选中态为中性灰软填充(去 3px 左描边,非 accent 蓝)',
-  visual.selBg === 'rgba(0, 0, 0, 0.06)' && visual.selShadow === 'none' && !visual.selBg.includes('13, 153, 255'),
+  '选中 = 真反白(整行底取主文本色 rgb(10,10,10))',
+  visual.selBg === 'rgb(10, 10, 10)' && visual.selShadow === 'none',
   `bg=${visual.selBg} shadow=${visual.selShadow}`,
 )
 check('面板滚动条为 6px 细轨(公共规格,挂滚动中段 body)', visual.thinRule, `thinRule=${visual.thinRule}`)
 check(
-  '候选行无分隔线(border-bottom-width=0,留白分组)',
-  visual.candBorder === '0px',
+  '行与行靠 1px 发丝线分隔(满幅表格的读法,不再靠留白分组)',
+  visual.candBorder === '1px',
   `candBorder=${visual.candBorder}`,
 )
 check(
-  '浮层阴影"近影 + 大范围环境影"两段托浮(撤掉描边后,这是唯一的托起感)',
-  visual.panelShadow.includes('0px 2px 8px') && visual.panelShadow.includes('0px 12px 40px'),
-  `panelShadow=${visual.panelShadow}`,
+  '徽标 = 方括号标签:无填充 + 走印刷油墨色(暗琥珀 / 暗墨绿),不再是彩色软底 chip',
+  visual.badgeBg === 'rgba(0, 0, 0, 0)' &&
+    visual.badgeInk === 'rgb(138, 106, 22)' &&
+    visual.badgeKnowledgeInk === 'rgb(47, 107, 60)',
+  `badgeBg=${visual.badgeBg} golden=${visual.badgeInk} knowledge=${visual.badgeKnowledgeInk}`,
 )
+check('全线直角:面板圆角 0(radius 令牌一律 0)', visual.popupRadius === '0px', `popupRadius=${visual.popupRadius}`)
 check(
-  '徽标软底 chip 化(琥珀软底金字,圆点已移除)',
-  visual.badgeBg.includes('184, 134, 11') && visual.badgeColor === 'rgb(184, 134, 11)',
-  `badgeBg=${visual.badgeBg} badgeColor=${visual.badgeColor}`,
-)
-check('面板圆角 20px(radius.xl)', visual.popupRadius === '20px', `popupRadius=${visual.popupRadius}`)
-check(
-  '面板名升到标题档(15px/600),不再是 12.5px 灰字注释',
+  '面板名升到标题档(15px/600)',
   visual.titleFont === '15px' && visual.headWeight === '600',
   `titleFont=${visual.titleFont} headWeight=${visual.headWeight}`,
 )
 check('页脚键位提示键帽化(foot 含 kbd 键帽)', visual.footKbd, `footKbd=${visual.footKbd}`)
 check(
-  '关闭钮静止是裸 ×(第五十一轮:撤掉常驻圆底,用户"仅保留 × 图标即可")、命中区仍是全圆端',
-  visual.closeRadius === '9999px' && visual.closeBg === 'rgba(0, 0, 0, 0)',
+  '关闭钮静止是裸 ×、直角、命中区不缩水(视觉小,可点范围仍是 26px)',
+  visual.closeRadius === '0px' && visual.closeBg === 'rgba(0, 0, 0, 0)',
   `radius=${visual.closeRadius} bg=${visual.closeBg}`,
 )
 {
-  // 静止没底 → 指上去得有底:点得动这件事改由悬浮回执交代
+  // 静止没底 → 指上去得有底:点得动这件事改由悬浮回执交代。
+  // 关闭钮现在长在**反白条**上,旧版那层"黑软底"压在黑底上等于没画 ——
+  // 改用一层中性灰(半透明白/黑底上都看得见),这也是它唯一的第三种颜色
   await page.locator('.pddcs-popup-close').hover()
   await sleep(180)
   const hoverBg = await page.evaluate(() =>
     getComputedStyle(document.querySelector('.pddcs-popup-close')).backgroundColor,
   )
   check(
-    '关闭钮悬浮时安静软底回来(静止没底不等于没反馈)',
-    /^rgba\(0, 0, 0, 0\.0\d+\)$/.test(hoverBg),
+    '关闭钮悬浮时中性灰回执回来(静止没底不等于没反馈)',
+    hoverBg === 'rgba(128, 128, 128, 0.35)',
     `hover bg=${hoverBg}`,
   )
   await page.mouse.move(0, 0)
@@ -532,8 +551,8 @@ check(
 )
 check('底部来源行移除(并入顶部回显)', visual.srcGone, `srcGone=${visual.srcGone}`)
 check(
-  '候选行为内缩圆角软行,且行圆角与面板圆角同心(20 − 8 = 12px)',
-  visual.candRadius === '12px',
+  '候选行是满幅直角行(不再内缩、不再有行圆角)',
+  visual.candRadius === '0px',
   `candRadius=${visual.candRadius}`,
 )
 check(
@@ -542,13 +561,12 @@ check(
   `opacity=${visual.actionsOpacity} pe=${visual.actionsPointerEvents}`,
 )
 check(
-  '分层不再用分隔线:头/脚都没有 hairline,页脚也不再自成一段(无独立底色 + 居中)',
+  '三段分层**靠线**:页脚一条 hairline 收口 + 左对齐(正文行都画了分隔线,页脚不该是唯一飘着的一段)',
   visual.bodyOverflowY === 'auto' &&
-    visual.footBorderTop === '0px' &&
-    visual.headBorderBottom === '0px' &&
+    visual.footBorderTop === '1px' &&
     visual.footBg === 'rgba(0, 0, 0, 0)' &&
-    visual.footTextAlign === 'center',
-  `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop} headBorderBottom=${visual.headBorderBottom} footBg=${visual.footBg} textAlign=${visual.footTextAlign}`,
+    visual.footTextAlign === 'left',
+  `bodyOverflowY=${visual.bodyOverflowY} footBorderTop=${visual.footBorderTop} footBg=${visual.footBg} textAlign=${visual.footTextAlign}`,
 )
 
 // ── ⑥b 图标钮 / 对齐 / 间距几何(第三十七轮 v2.6.24,用户"标签比例增大,下方内容和标签左侧对齐,
@@ -578,12 +596,21 @@ const geo = await page.evaluate(() => {
   const iconRect = btns[0]?.getBoundingClientRect()
   // 「文字左缘」= 元素 rect 左缘 + 自身左内边距(padding 在 border-box 内侧,rect 量不到文本起点)
   const inkLeft = (rect, style) => +(rect.left + parseFloat(style.paddingLeft)).toFixed(2)
+  // 徽标得单独量:v3.0 它是**方括号标签**(`[标准]`),没有内边距,`[` 是一个真实字符 ——
+  // rect.left 落在 `[` 上,而正文要对齐的是括号**里面**那个字。用 Range 取文本节点的真实起点,
+  // 是这里唯一不依赖"一个等宽字符有多宽"的量法(字体栈一换,写死的 px 立刻错)
+  const textStart = (el) => {
+    const r = document.createRange()
+    r.selectNodeContents(el)
+    return +r.getBoundingClientRect().left.toFixed(2)
+  }
   return {
     badgeFont: bs.fontSize,
     badgePadX: bs.paddingLeft,
     badgeRadius: bs.borderRadius,
+    badgeBracket: getComputedStyle(badge, '::before').content,
     badgeLeft: +bRect.left.toFixed(2),
-    badgeInkLeft: inkLeft(bRect, bs),
+    badgeInkLeft: textStart(badge),
     qInkLeft: inkLeft(qRect, qs),
     textInkLeft: inkLeft(textRect, ts),
     btnCount: btns.length,
@@ -604,12 +631,21 @@ const geo = await page.evaluate(() => {
   }
 })
 check(
-  '类别徽标比例增大(11.5px / 内边距 9px / 圆角 6px)',
-  geo.badgeFont === '11.5px' && geo.badgePadX === '9px' && geo.badgeRadius === '6px',
-  JSON.stringify({ font: geo.badgeFont, padX: geo.badgePadX, radius: geo.badgeRadius }),
+  '类别徽标 = 方括号标签(11.5px / 无内边距 / 直角 / 伪元素给出左括号)',
+  geo.badgeFont === '11.5px' &&
+    geo.badgePadX === '0px' &&
+    geo.badgeRadius === '0px' &&
+    geo.badgeBracket.includes('['),
+  JSON.stringify({
+    font: geo.badgeFont,
+    padX: geo.badgePadX,
+    radius: geo.badgeRadius,
+    bracket: geo.badgeBracket,
+  }),
 )
-// v2.6.26 用户口径改定:对齐的是徽标**内文字**左缘,而非徽标外框
-// (徽标外框 left=442、内文字 left=451;正文须落在 451 这一条上)
+// 对齐的仍是徽标**内文字**左缘(而非徽标外框),只是 v3.0 起"内文字"被 `[` 顶开了一个字符格:
+// 徽标外框 = `[` 的位置,徽标文字 = 外框 + 一个等宽字符。正文缩进一个字符格(`1ch`)正是为此,
+// 于是三处**文字**仍落在同一条竖线上 —— 这条断言量的是文字,不是外框,所以跨版本成立
 check(
   '原问题/回答文字左缘 = 标签文字左缘(三处文字同一条左基线)',
   Math.abs(geo.badgeInkLeft - geo.qInkLeft) <= 0.5 &&
@@ -626,11 +662,12 @@ check(
   Math.abs(geo.rowRight - geo.actionsRight - 6) <= 1,
   `rowRight=${geo.rowRight} actionsRight=${geo.actionsRight}`,
 )
-// v2.7.0:行距与行内节奏**取同一个值**(ROW_GAP_Y = 6px)—— 列表的疏与内文的疏是一套,
-// 旧版是"行距 2px、内文间距 4px"两个各自拍的数字
+// v3.0:列表的"疏"从**行间留白**改交给**发丝线** —— 行挨着行(rowGap = 0),
+// 行内节奏仍是 ROW_GAP_Y = 6px。两者不再是同一个数,但仍同出一套栅格:
+// 行内要留白(6px),行间要分界(1px 线 + 上下各 10px 行内边距)
 check(
-  '行距 = 行内节奏 = 6px(列表的疏与内文的疏同一套,按 rect 量实得)',
-  Math.abs(geo.rowGap - 6) <= 0.5 &&
+  '行距 0(行挨着行,靠 1px 分隔线)+ 行内节奏 6px',
+  Math.abs(geo.rowGap) <= 0.5 &&
     Math.abs(geo.gapBadgeQ - 6) <= 0.5 &&
     Math.abs(geo.gapQText - 6) <= 0.5,
   `行距=${geo.rowGap} 标签→原问题=${geo.gapBadgeQ} 原问题→回答=${geo.gapQText}`,
@@ -640,10 +677,12 @@ check(
   geo.rowPadTop === '10px' && geo.rowPadBottom === '10px',
   `pad=${geo.rowPadTop}/${geo.rowPadBottom} 行高=${geo.rowH}`,
 )
+// 差值恰好是面板那 **1px 外框**:行满幅到内容盒边缘,而面板的边框在外框内侧 1px 处。
+// 这个 1 不是留白,是框线本身的宽度 —— 量到 0 说明边框没渲染,量到 8 说明行又内缩回去了
 check(
-  '行左右缘由滚动中段统一内缩 8px(行自身不再带左右外边距,改一处即整体对齐)',
-  Math.abs(geo.rowLeft - geo.panelLeft - 8) <= 0.5 &&
-    Math.abs(geo.panelRight - geo.rowRight - 8) <= 0.5,
+  '行满幅:行的左右缘只比面板外缘内缩一个框宽(1px),分隔线因此横贯整块面板',
+  Math.abs(geo.rowLeft - geo.panelLeft - 1) <= 0.5 &&
+    Math.abs(geo.panelRight - geo.rowRight - 1) <= 0.5,
   `panel=${geo.panelLeft}/${geo.panelRight} row=${geo.rowLeft}/${geo.rowRight}`,
 )
 check(

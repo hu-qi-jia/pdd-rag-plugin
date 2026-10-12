@@ -1,7 +1,7 @@
 /**
  * 设置页口径验收(2026-09-16 第四十一轮,用户三条要求)——
  *  ① 文字字号规范:分组标题 13.5 / 配置项字段 12.5 / 说明文字 11.5
- *  ② 配置项之间间距增大并统一:全页 16px 栅格(标签→说明 4px,标签→滑杆轨道 8px)
+ *  ② 配置项之间间距统一:全页 12px 栅格(标签→说明 4px,标签→滑杆轨道 8px;16→12 见 v3.0)
  *  ③ 开关与滑杆改灰白:激活色浅色深灰 / 深色白,柄色与轨道反相
  *
  * 全部按真实渲染的 rect / computedStyle 量,不 grep 源码字面值。
@@ -40,17 +40,20 @@ const normColor = (c) => {
 
 /** 每主题的期望值(令牌真源在 src/ui/theme.ts) */
 const EXPECT = {
+  // v3.0 改的是**色值**,不是机制:两主题仍是"激活色 + 反相柄"这套同构映射,
+  // 只是激活色由中性深灰/纯白改成纯黑/近白(整站无品牌色,强调靠墨的浓淡与反白),
+  // 未选中轨道也由半透明白改成不透明灰阶
   light: {
-    // controlActive: #45484d(与主按钮同值),controlKnobBg: #ffffff,switchTrack: #c6c8cc
-    active: 'rgb(69,72,77)',
+    // controlActive: #0a0a0a(与主文本色、主按钮同值),controlKnobBg: #ffffff,switchTrack: #c9c9c9
+    active: 'rgb(10,10,10)',
     knob: 'rgb(255,255,255)',
-    offTrack: 'rgb(198,200,204)',
+    offTrack: 'rgb(201,201,201)',
   },
   dark: {
-    // controlActive: #ffffff,controlKnobBg: #2c2c2c,switchTrack: rgba(255,255,255,0.16)
-    active: 'rgb(255,255,255)',
-    knob: 'rgb(44,44,44)',
-    offTrack: 'rgba(255,255,255,0.16)',
+    // controlActive: #ededed,controlKnobBg: #0a0a0a,switchTrack: #3a3a3a(不透明)
+    active: 'rgb(237,237,237)',
+    knob: 'rgb(10,10,10)',
+    offTrack: 'rgb(58,58,58)',
   },
 }
 
@@ -103,8 +106,11 @@ for (const theme of ['light', 'dark']) {
     const px = (v) => Math.round(parseFloat(v) * 100) / 100
     const sw0 = card.querySelector('[role="switch"]')
 
-    // ── 字号:卡片标题 / 配置项字段 / 说明文字 ──
-    const titleEl = [...card.querySelectorAll('div')].find(
+    // ── 字号:分区标题 / 配置项字段 / 说明文字 ──
+    // 按文本找,不按位置找 —— Card 的标题由 SectionHeader 渲染,而 SectionHeader 的
+    // 内部结构(竖标记、延伸线)改过两轮,任何"第几层子节点"的写法都会在下一次改版时失配。
+    // 文本是最稳的锚:标题的文字就是分区名本身
+    const titleEl = [...card.querySelectorAll('span')].find(
       (el) => el.children.length === 0 && el.textContent === '检索与填充',
     )
     const ts = getComputedStyle(titleEl)
@@ -193,13 +199,13 @@ for (const theme of ['light', 'dark']) {
 
   // ② 间距统一
   check(
-    name('配置项之间 16px 且全部一致'),
-    m.rowGaps.length >= 7 && m.rowGaps.every((g) => Math.abs(g - 16) <= 0.5),
+    name('配置项之间 12px 且全部一致'),
+    m.rowGaps.length >= 7 && m.rowGaps.every((g) => Math.abs(g - 12) <= 0.5),
     `gaps=${JSON.stringify(m.rowGaps)}`,
   )
   check(
-    name('卡片之间同为 16px'),
-    m.cardGaps.length >= 3 && m.cardGaps.every((g) => Math.abs(g - 16) <= 0.5),
+    name('分区之间同为 12px'),
+    m.cardGaps.length >= 3 && m.cardGaps.every((g) => Math.abs(g - 12) <= 0.5),
     `gaps=${JSON.stringify(m.cardGaps)}`,
   )
   check(name('标签 → 说明 4px'), Math.abs(m.labelDescGap - 4) <= 0.5, `${m.labelDescGap}`)
@@ -242,14 +248,14 @@ for (const theme of ['light', 'dark']) {
     `vars=${m.thumbUsesVars} blueThumb=${m.thumbHasBlue} | ${m.thumbRule.trim()}`,
   )
   check(
-    name('焦点环保留品牌蓝(刻意:控件本体改灰白,焦点是状态色)'),
+    name('焦点环走 --pddcs-accent 令牌(该令牌 v3.0 由 Figma 蓝改成纯黑:整站不再有品牌色)'),
     m.focusRingBlue,
     `focusRingBlue=${m.focusRingBlue}`,
   )
 
   await pop.screenshot({
     path: path.join(ROOT, 'logs', `ui-0916-settings-${theme}.png`),
-    clip: { x: 0, y: 0, width: 420, height: 560 },
+    clip: { x: 0, y: 0, width: 460, height: 580 },
   })
   await pop.evaluate(() => {
     const el = document.querySelector('.pddcs-scroll')
@@ -258,7 +264,7 @@ for (const theme of ['light', 'dark']) {
   await sleep(400)
   await pop.screenshot({
     path: path.join(ROOT, 'logs', `ui-0916-settings-${theme}-bottom.png`),
-    clip: { x: 0, y: 0, width: 420, height: 560 },
+    clip: { x: 0, y: 0, width: 460, height: 580 },
   })
 }
 
@@ -336,10 +342,15 @@ for (const theme of ['light', 'dark']) {
   const AI = { url: 'https://mms.pinduoduo.com/v1/', key: 'sk-verify-1234', model: 'verify-model' }
   const URL_SAVED = 'https://mms.pinduoduo.com/v1' // 后台夹取去尾斜杠后的样子
 
+  // 定位一把**锁在「AI 整合」分区内**。整页查 placeholder 会撞车:
+  // 「问题分类」卡也有一枚 sk-… 的密钥框(两个都 type=password、placeholder 一模一样),
+  // 不限定范围时 Playwright 的严格模式会直接报 "resolved to 2 elements"。
+  // 用 Card 自动挂的 `data-card-title` 锚点,而不是靠 DOM 顺序取 `.first()`
+  const AI_CARD = '[data-card-title="AI 整合"]'
   const PH = {
-    url: 'input[placeholder="https://api.deepseek.com/v1"]',
-    key: 'input[placeholder="sk-…"]',
-    model: 'input[placeholder="deepseek-chat"]',
+    url: `${AI_CARD} input[placeholder="https://api.deepseek.com/v1"]`,
+    key: `${AI_CARD} input[placeholder="sk-…"]`,
+    model: `${AI_CARD} input[placeholder="deepseek-chat"]`,
   }
   /**
    * 读当前表单与库里的状态。
@@ -347,8 +358,11 @@ for (const theme of ['light', 'dark']) {
    */
   const readState = async () => {
     const st = await pop.evaluate(async () => {
+      // 同样锁在「AI 整合」分区内(问题分类卡有一枚 placeholder 完全相同的密钥框,
+      // 不限定范围时 find 取到的是文档里第一个,一旦两卡顺序调整就会静默读错对象)
+      const aiCard = document.querySelector('[data-card-title="AI 整合"]') ?? document
       const byPh = (p) =>
-        [...document.querySelectorAll('input.pddcs-input')].find((el) => el.placeholder === p)
+        [...aiCard.querySelectorAll('input.pddcs-input')].find((el) => el.placeholder === p)
       const store = (k) => chrome.storage.local.get([k]).then((o) => o[k])
       const s = await store('pddcs:settings')
       return {
@@ -363,7 +377,8 @@ for (const theme of ['light', 'dark']) {
         btnDisabled: Object.fromEntries(
           ['保存', '测试连接'].map((label) => [
             label,
-            [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
+            // 同样锁在「AI 整合」分区内:两卡各有一对「保存 / 测试连接」
+            [...aiCard.querySelectorAll('button')].find((b) => b.textContent.trim() === label)
               ?.disabled,
           ]),
         ),
@@ -381,7 +396,9 @@ for (const theme of ['light', 'dark']) {
   // 先等过草稿防抖(300ms)再点保存 —— 真实用户也是这个节奏,
   // 这样"保存前确实有一次挂起的草稿落盘"才是被验到的那条路径
   await sleep(450)
-  await pop.locator('button:text-is("保存")').click()
+  // 限定在「AI 整合」分区内点保存:整页查会撞上「问题分类」卡的同名按钮
+  // (严格模式下 Playwright 直接报 resolved to 2 elements)
+  await pop.locator(`${AI_CARD} button:text-is("保存")`).click()
   await sleep(1500)
 
   const saved = await readState()

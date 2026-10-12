@@ -104,8 +104,13 @@ check('取消的那条已不在库中,新条入列', !after.some((g) => g.id ===
 const order2 = await panelOrder()
 check('取消+新设后,最新设置的排最前(5 → 3 → 1)', order2.join(',') === '5,3,1', `order=${order2.join(',')}`)
 
-// ── ⑥ 结构:按问题类型分区(第五十七轮 Task 6 起,顶层由文件夹树改为类型分区)──
-// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认它落在该类型的分区里。
+// ── ⑥ 结构:顶部分类导航筛选(v3.0 第四版;替代原先的"按问题类型分区")──
+// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认两件事:
+//   ① 「全部」视图里能看到它(列表平铺,不再有分区标题);
+//   ② 点导航上的「订单物流」之后,列表只剩该类型的标答(另一个问题的标答被筛掉)。
+// **`data-category-id` 的落点变了**:第四版之前它挂在"分区包裹 div"上,现在挂在
+// **导航按钮**上(components#CategoryNav)—— 锚点名保留,是因为"按类型 id 找那个东西"
+// 这件事没变,变的是它长在哪儿。
 const CAT_NAME = '订单物流'
 const CAT_ID = 'preset:order'
 // 用独立问题,避免撞上上面那个问题的 3 条上限
@@ -118,27 +123,48 @@ await pop.reload({ waitUntil: 'domcontentloaded' })
 await sleep(1500)
 await pop.locator('button[title="标准回答"]').click()
 await sleep(1200)
-const rel = await pop.evaluate(({ catId, catName }) => {
-  // 分区容器带稳定锚点 data-category-id(见 FoldersTab 分的分区包裹 div)。
-  // 不再靠标题 div 的文字/DOM 形状定位 —— 那随渲染改一次就会静默失配。
-  const cards = [...document.querySelectorAll('[data-category-id]')].filter(
-    (el) => el.getAttribute('data-category-id') === catId,
-  )
-  const t = cards[0]?.innerText ?? ''
-  return {
-    headerText: t.split('\n')[0] ?? '',
-    answerIdx: t.indexOf('类型验收答复'),
-    // 失败时最想知道的是"页面上到底有没有这个分区":没分区 / 分区在但内容没进来
-    // 修法完全不同,只报 -1 等于没说
-    cards: cards.length,
-    catName,
-    box: t.replace(/\s+/g, ' ').slice(0, 200),
-  }
-}, { catId: CAT_ID, catName: CAT_NAME })
+const rel = await pop.evaluate(
+  async ({ catId, catName, otherQuestion }) => {
+    const navs = [...document.querySelectorAll('[data-category-id]')]
+    const btn = navs.find((el) => el.getAttribute('data-category-id') === catId)
+    if (!btn) {
+      // 失败时最想知道的是"导航里到底有没有这个类型":没这个类型 / 有但内容没进来,
+      // 修法完全不同 —— 只报 undefined 等于没说
+      return { error: '导航里没有这个类型', navIds: navs.map((n) => n.getAttribute('data-category-id')) }
+    }
+    const scrollText = () => document.querySelector('.pddcs-scroll')?.innerText ?? ''
+    const inAll = scrollText().includes('类型验收答复')
+    const otherInAll = scrollText().includes(otherQuestion)
+    btn.click()
+    await new Promise((r) => setTimeout(r, 250))
+    const filtered = scrollText()
+    return {
+      catName,
+      navText: (btn.textContent ?? '').trim(),
+      navCount: navs.length,
+      inAll,
+      otherInAll,
+      inFiltered: filtered.includes('类型验收答复'),
+      otherInFiltered: filtered.includes(otherQuestion),
+      box: filtered.replace(/\s+/g, ' ').slice(0, 200),
+    }
+  },
+  { catId: CAT_ID, catName: CAT_NAME, otherQuestion: Q },
+)
 check(
-  '标答落在「订单物流」类型分区内,分区标题带条数',
-  rel.cards === 1 && /·\s*\d+/.test(rel.headerText) && rel.answerIdx >= 0,
-  JSON.stringify(rel),
+  '导航里有「订单物流」这一项,且带条数',
+  !rel.error && /\d/.test(rel.navText ?? ''),
+  JSON.stringify({ navText: rel.navText, error: rel.error, navIds: rel.navIds }),
+)
+check(
+  '「全部」视图平铺显示所有标答(含这条),不再有分区标题',
+  rel.inAll === true && rel.otherInAll === true,
+  JSON.stringify({ inAll: rel.inAll, otherInAll: rel.otherInAll }),
+)
+check(
+  '★ 点「订单物流」→ 只剩该类型的标答(另一个问题的标答被筛掉)',
+  rel.inFiltered === true && rel.otherInFiltered === false,
+  JSON.stringify({ inFiltered: rel.inFiltered, otherInFiltered: rel.otherInFiltered, box: rel.box }),
 )
 
 // ── ⑦ 清理 ──

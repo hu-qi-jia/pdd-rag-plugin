@@ -7,9 +7,15 @@
  * 2026-09-16 第三十轮:设置项已由原生 checkbox 改为 Toggle(label+span,无 input),
  * 定位改按 label 文本;headless 运行,不弹窗
  */
-import { launchExtContext, findExtensionId, openPopup, persistentProfile, sleep } from './lib.mjs'
+import { launchExtContext, findExtensionId, openPopup, freshProfile, sleep } from './lib.mjs'
 
-const PROFILE = persistentProfile('fresh-profile')
+// 用**一次性** profile,不用 persistentProfile。
+// 踩过的坑:复用固定 profile 时,Chrome 会把它缓存的那份**旧 service worker** 接着跑 ——
+// 后台是新代码、SW 是旧代码,于是 GET_STATS 返回的 settings 少了后加的字段
+// (实测 classifyEnabled / jev* / classifyProbThreshold 六个键整个不见了),
+// 设置页在 `format(undefined).toFixed` 上当场抛错、整棵 React 树卸载成白屏。
+// 表现是"设置页打不开",根因却与设置页毫无关系 —— 这类假红极难自查,故直接掐掉复用的可能。
+const PROFILE = freshProfile()
 
 const ctx = await launchExtContext(PROFILE, { headless: true })
 await sleep(5000)

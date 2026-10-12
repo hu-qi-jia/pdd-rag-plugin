@@ -1,16 +1,133 @@
 /**
  * 通用组件库 — 各页签复用的视觉资产(设计规范的可执行形态)
  *
- * 清单:Btn / ConfirmRow / Notice / Card / Badge / EmptyState / Toggle / Slider / SearchInput
+ * v3.0(复古极简 + 极客工具风)对本文件的整体影响:
+ *  - 盒子退场,线登场。`Card` 不再是"白底 + 描边 + 圆角的卡片",而是**一根线加一块内容**;
+ *    分区靠 `border` 横线、列表靠 `borderLight` 上缘线,谁都不再是一个圆角盒子。
+ *  - 反白是唯一的"高权重"表达:主按钮、导航选中、面板选中行共用同一种黑底白字,
+ *    不再有第二套强调色。
+ *  - 徽标改**方括号标签** `[标准]`:旧版是彩色软底 chip(圆角 + 填充 + 图标),
+ *    在黑白灰的版面上那是最响的三个色块。现在只留油墨色的方括号,信息量不减、墨点大减。
+ *
+ * 清单:SectionHeader / Btn / ConfirmRow / CreateBtn / Notice / Card / Badge /
+ *       EmptyState / SearchInput / Toggle / Slider + 样式原语
  * 原则:颜色一律来自 ThemeTokens,几何一律来自 design.ts;页面不得自带样式实现。
  */
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import type { ThemeTokens } from './theme'
-import { controlH, fontSize, fontWeight, radius, spacing, semantic, motion, size, formType, formGap } from './design'
+import { controlH, fontSize, fontWeight, radius, spacing, motion, size, formType, formGap, stroke } from './design'
 import { PlusIcon, SearchIcon } from './icons'
 
-// ── 胶囊按钮 ─────────────────────────────────────────────────────────────────
+
+// ── 分区标题(全站唯一的分区装置)────────────────────────────────────────────
+/**
+ * `标题 ────────────────────  [右端附加物]`
+ *
+ * 这是承担"分区"职责的**唯一**装置(旧版是卡片盒子的标题行)。
+ * 一个标签 + 一条向右延伸的线:标签说明"这是什么",线说明"这段到哪儿结束"。
+ * 整屏没有盒子,层级完全由这几根线给出。
+ *
+ * **线取 `borderStrong`(结构线档)**,这是标题与列表行能被一眼分开的全部依据:
+ * 行与行之间画的是 `borderLight` 发丝线,两档深浅差得足够远。
+ *
+ * **标题前那根 3×12 的竖标记已在第二版删除**(用户:"标题前的竖线删除")——
+ * 与"盒子退场"同一条思路:能靠线说清的事就不再叠一枚符号。
+ * 标题文字左缘因此正好落在 x=0,与它管着的那些行的文字同线,不需要任何补偿量。
+ *
+ * 为什么不让调用方自己拼:分区标题一旦有两个实现,装饰量立刻分叉
+ * (旧版就是 Card 的标题行与 MemoryListTab 手搓的折叠标题各写一套)。
+ * 需要可折叠时传 `onClick` —— 同一个装置,多一种交互而已。
+ */
+export function SectionHeader({
+  tk,
+  title,
+  extra,
+  onClick,
+  expanded,
+}: {
+  tk: ThemeTokens
+  title: React.ReactNode
+  /** 右端附加物(折叠箭头、改名/删除图标钮);线在它之前收住 */
+  extra?: React.ReactNode
+  /** 传入则整行成为可折叠按钮(aria-expanded 随之声明) */
+  onClick?: () => void
+  expanded?: boolean
+}) {
+  const content = (
+    <>
+      {/* 分区标题取 `textMuted`(用户:「标题与词条颜色也做一下区分")——
+          此前标题与词条同为纯黑,只靠字号(13.5 vs 12.5)与分区线区分,在满屏条目里
+          那一行标题读起来就像"又一条内容、只是大一点"。
+          现在三样一起说:字号 + 字重 + **颜色**(灰标题 vs 纯黑条目),
+          而分区线仍是全屏最重的那根线。灰标题不是"弱化",是**角色区分** ——
+          分区名是一枚标签,它管着的那些行才是内容。
+          注:设置页的分区标题用的是同一个装置,会一起变灰(它下面的字段标签仍是纯黑)。 */}
+      <span
+        style={{
+          fontSize: formType.groupTitle.size,
+          fontWeight: formType.groupTitle.weight,
+          color: tk.textMuted,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {title}
+      </span>
+      {/* 向右延伸的分区线:**取结构线档**(`borderStrong`),不是控件描边那一档。
+          这是"分区标题"与"列表行"能被一眼分开的**全部依据** ——
+          行与行之间画的是 `borderLight` 的发丝线,两者深浅差得足够远,
+          标题那一行就永远是这张版面上最重的一根线。
+          (v3.0 首版用的是 `border`,与行线只差一档,读起来两处都是"一根灰线"。
+          线重即层级这条口径,在这里必须真的用满。)
+          flex 吃满剩余宽度;窄到一定程度就让它消失(minWidth 兜底),
+          否则标题一长线就缩成一个小点,反而更像噪点 */}
+      <span
+        aria-hidden
+        style={{
+          flex: 1,
+          minWidth: spacing.md,
+          height: stroke.hairline,
+          backgroundColor: tk.borderStrong,
+        }}
+      />
+      {extra ? <span style={{ flexShrink: 0, display: 'inline-flex' }}>{extra}</span> : null}
+    </>
+  )
+  if (!onClick) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+        {content}
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing.sm,
+        width: '100%',
+        padding: 0,
+        border: 'none',
+        background: 'transparent',
+        color: tk.text,
+        fontFamily: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      {content}
+    </button>
+  )
+}
+
+// ── 按钮 ─────────────────────────────────────────────────────────────────────
 
 export function Btn({
   tk,
@@ -44,8 +161,7 @@ export function Btn({
       : isGhost
         ? 'transparent'
         : tk.btnBg
-  // 悬浮底色(2026-09-15 设计6:四种变体全部有悬浮反馈):
-  // primary 再亮一档、danger 红底加深一档、ghost/default 面色提亮一档
+  // 悬浮底色:primary 再亮/再暗一档、danger 红底加深一档、ghost/default 面色提亮一档
   const hoverBg = isPrimary
     ? tk.btnPrimaryHover
     : isDanger
@@ -59,6 +175,7 @@ export function Btn({
       onClick={onClick}
       title={title}
       style={{
+        // ghost 与 danger 不描边(danger 靠红字红底自证);其余取控件描边
         borderColor: isGhost || isDanger ? 'transparent' : tk.btnBorder,
         backgroundColor: bg,
         color,
@@ -79,13 +196,10 @@ export function Btn({
 // ── 内联二次确认行 ────────────────────────────────────────────────────────────
 
 /**
- * 删除类操作的**原位**二次确认行:警示文案 + 确认/取消(第五十一轮单点化)。
+ * 删除类操作的**原位**二次确认行:警示文案 + 确认/取消。
  *
- * 此前这套行有两份实现:文件夹页手搓一对 `<button>`、记忆页直接用通用 `Btn` ——
- * 于是同一个交互在两页里字号不同(10.5 / 11.0)、按钮档位也不同(24 内联档 / 26 表单档),
- * 记忆页那份还写着 `fontSize.caption + 0.5`,正是 design.ts 明令禁止的临时值。
- * 统一取**内联档**(`controlH.inline` + `fontSize.caption`):确认行长在行内、不占表单位,
- * 与被确认的那一行同档才是对的。
+ * 取**内联档**(`controlH.inline` + `fontSize.caption`):确认行长在行内、不占表单位,
+ * 与被确认的那一行同档才是对的。文件夹页与记忆页共用本实现,不允许各写一套。
  */
 export function ConfirmRow({
   tk,
@@ -119,7 +233,7 @@ export function ConfirmRow({
       <button
         type="button"
         onClick={onCancel}
-        style={{ ...btn, border: `1px solid ${tk.btnBorder}`, backgroundColor: 'transparent', color: tk.textMuted }}
+        style={{ ...btn, border: `${stroke.hairline}px solid ${tk.btnBorder}`, backgroundColor: 'transparent', color: tk.textMuted }}
       >
         取消
       </button>
@@ -158,7 +272,7 @@ export function CreateBtn({
 
 export type NoticeMsg = { ok: boolean; text: string } | null
 
-/** 成功提示自动消失时长(2026-09-15 PM6:拖滑杆连弹"已保存"永不消失、推挤布局);失败提示常驻 */
+/** 成功提示自动消失时长;失败提示常驻供读错因 */
 export const NOTICE_OK_AUTO_DISMISS_MS = 4000
 
 export function Notice({
@@ -178,8 +292,9 @@ export function Notice({
   }, [msg, onDismiss])
   if (!msg) return null
   return (
-    // 吸附在滚动区顶部:列表很长时提示不再被顶出视口(2026-09-15 用户反馈
-    // 「点击设置标准回答无反应」的真实原因之一 —— 操作成功但提示在视口外)。
+    // 吸附在滚动区顶部:列表很长时提示不再被顶出视口。
+    // v3.0 由"圆角软底条"改**左侧硬色条 + 方角平底**:一条 3px 的实色竖线声明
+    // "这一行是一条状态",比整块淡色底更省墨,也不会在一屏黑白灰里糊成一片。
     <div
       style={{
         position: 'sticky',
@@ -191,11 +306,14 @@ export function Notice({
     >
       <div
         style={{
-          padding: `${spacing.sm + 2}px ${spacing.xl}px`,
-          borderRadius: radius.md,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: spacing.md,
+          padding: `${spacing.sm}px ${spacing.md}px`,
+          borderLeft: `3px solid ${msg.ok ? tk.successText : tk.errorText}`,
+          backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
           fontSize: fontSize.secondary,
           lineHeight: 1.55,
-          backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
           color: msg.ok ? tk.successText : tk.errorText,
           wordBreak: 'break-all',
         }}
@@ -206,7 +324,23 @@ export function Notice({
   )
 }
 
-// ── 卡片 ─────────────────────────────────────────────────────────────────────
+// ── 容器(四种形态,各自编码一种结构含义)────────────────────────────────────
+
+/**
+ * `variant` 是本设计语言里"这块内容在结构上是什么"的声明,**不是样式选项**:
+ *
+ * | variant | 形态 | 用在哪儿 |
+ * |---|---|---|
+ * | `section` | 顶上一行分区标题(`SectionHeader`),无框无底 | 设置页各分区、文件夹页各类型分区 |
+ * | `box` | 1px 方框包住,无圆角无底 | 内联的"新建/编辑"表单(临时面板,要和外层内容明确分开) |
+ * | `row` | 上缘一条细线分隔,无框 | 列表条目(记忆问答、知识条目) |
+ * | `plain` | 什么都不加,纯容器 | 需要自己给孩子排版的场合(如记忆页的分组容器) |
+ *
+ * 默认值由 `title` 是否存在推出(有标题 = 分区,没标题 = 列表行)—— 这是最常用的两种,
+ * 让绝大多数调用点不必声明。但**含义不同就必须显式写明**,比如"没有标题的临时表单"
+ * 应当写 `box` 而不是默认落到 `row`。
+ */
+export type CardVariant = 'section' | 'box' | 'row' | 'plain'
 
 export function Card({
   tk,
@@ -215,91 +349,90 @@ export function Card({
   children,
   style,
   className,
+  variant,
 }: {
   tk: ThemeTokens
-  /** 标题:字符串或节点(第五十七轮 Task 7:类型分区标题要并一枚种类徽标) */
+  /** 分区标题:字符串或节点 */
   title?: React.ReactNode
-  /** 标题行右端附加物(如分区标题旁的改名/删除图标钮);提供时标题行变 flex 一行 */
+  /** 标题行右端附加物(分区旁的改名/删除图标钮) */
   titleExtra?: React.ReactNode
   children: React.ReactNode
   style?: React.CSSProperties
-  /** 附加 CSS 类(容器透传;原 pddcs-row 悬浮显隐钩子已随 v2.6.31 退役) */
+  /** 附加 CSS 类(容器透传) */
   className?: string
+  variant?: CardVariant
 }) {
-  // 分组标题(第四十一轮起走 formType 规范):13.5 semibold + 主文本色 ——
-  // 旧版是 11.5 + textMuted,比卡内 12.5 的字段标签还小还灰(层级倒挂)
-  const titleStyle: React.CSSProperties = {
-    fontSize: formType.groupTitle.size,
-    fontWeight: formType.groupTitle.weight,
-    color: tk.text,
+  const v: CardVariant = variant ?? (title ? 'section' : 'row')
+  const base: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.lg,
+  }
+  // box:整圈描边,无底 —— "临时面板"与周围内容的分界
+  if (v === 'box') {
+    base.border = `${stroke.hairline}px solid ${tk.border}`
+    base.padding = `${spacing.xl}px`
+  }
+  // row:只画上缘一条细线;**左右不留内边距** —— 行的文字、上方的分区标题、
+  // 那条细线三者因此共用同一条左缘(内容区的 16px 内边距是它们共同的页边距)。
+  // 上下留 spacing.md(8px):线贴在字上会把行压扁,而 10px 又太散 ——
+  // 一屏要装下多少条,靠的就是这几个像素(用户:「紧凑一点」)。
+  if (v === 'row') {
+    base.borderTop = `${stroke.hairline}px solid ${tk.borderLight}`
+    base.padding = `${spacing.md}px 0`
   }
   return (
+    // `data-card-title` 是**稳定的分区锚点**(标题为字符串时自动挂上):
+    // 验收脚本与单测按它找"这一块",而不是靠"标题元素是第几层子节点 / textContent 恰等于什么"——
+    // 后者随渲染改一次就会静默失配(FoldersTab 的 `data-category-id` 就是为此立的,
+    // 见 docs/DESIGN.md「文件夹模块布局」;Task 6 移除 data-folder-id 后脚本静默失配的教训)
     <div
       className={className}
-      style={{
-        border: `1px solid ${tk.border}`,
-        borderRadius: radius.lg,
-        backgroundColor: tk.bgCard,
-        padding: `${spacing.xl + 2}px ${spacing.xxl - 2}px`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: spacing.lg,
-        ...style,
-      }}
+      data-card-title={typeof title === 'string' ? title : undefined}
+      style={{ ...base, ...style }}
     >
-      {title &&
-        (titleExtra ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-            <div style={{ ...titleStyle, flex: 1, minWidth: 0 }}>{title}</div>
-            {titleExtra}
-          </div>
-        ) : (
-          <div style={titleStyle}>{title}</div>
-        ))}
+      {title ? <SectionHeader tk={tk} title={title} extra={titleExtra} /> : null}
       {children}
     </div>
   )
 }
 
-// ── 徽标(golden / knowledge / neutral)──────────────────────────────────────
+// ── 徽标(方括号标签)───────────────────────────────────────────────────────
 
+/**
+ * `[标准回答]` / `[文档]` / `[预置]`
+ *
+ * v3.0 由"彩色软底圆角 chip"改为**方括号 + 油墨色文字**,去掉填充、圆角与图标。
+ * 方括号是终端与代码注释里的原生标记法,"这是一个标签"这件事不需要靠一块底色来说;
+ * 去掉填充后,同一屏里多挂几个徽标也不会把版面染成彩色。
+ *
+ * 三种 tone 的颜色取自 ThemeTokens(golden / knowledge / neutral),
+ * 是**功能信号**不是装饰:读的人靠它区分标准回答、知识库文档块与普通的种类标签。
+ */
 export function Badge({
   tk,
   tone,
-  icon,
   children,
 }: {
   tk: ThemeTokens
   tone: 'golden' | 'knowledge' | 'neutral'
-  icon?: React.ReactNode
   children: React.ReactNode
 }) {
-  const bg =
-    tone === 'golden'
-      ? semantic.goldenBg
-      : tone === 'knowledge'
-        ? semantic.knowledgeBg
-        : tk.bgSecondary
   const color =
-    tone === 'golden' ? semantic.golden : tone === 'knowledge' ? semantic.knowledge : tk.textMuted
+    tone === 'golden' ? tk.goldenText : tone === 'knowledge' ? tk.knowledgeText : tk.textMuted
   return (
     <span
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 3,
-        backgroundColor: bg,
         color,
-        border: tone === 'neutral' ? `1px solid ${tk.border}` : '1px solid transparent',
-        borderRadius: radius.sm,
         fontSize: fontSize.caption,
-        padding: `1px ${spacing.md - 1}px`,
         fontWeight: fontWeight.semibold,
         whiteSpace: 'nowrap',
+        letterSpacing: 0,
       }}
     >
-      {icon}
-      {children}
+      [{children}]
     </span>
   )
 }
@@ -346,7 +479,7 @@ export function SearchInput({
       <span
         style={{
           position: 'absolute',
-          left: 11,
+          left: 9,
           top: '50%',
           transform: 'translateY(-50%)',
           color: tk.textTertiary,
@@ -361,14 +494,23 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="pddcs-input"
-        style={inputStyle(tk, { paddingLeft: 30 })}
+        style={inputStyle(tk, { paddingLeft: 26 })}
       />
     </div>
   )
 }
 
-// ── 拨杆开关(胶囊式;文字居左、开关居右,2026-09-15 v2.6.7 用户要求)────────
+// ── 拨杆开关(直角方块滑块;文字居左、开关居右)──────────────────────────────
 
+/**
+ * v3.0 重设计:旧版是 36×20 胶囊轨道 + 16 圆滑块(精致控件语言)。
+ * 现在是一块**方形双态开关**:方角轨道 + 方形滑块,与输入框、按钮共用同一套直角描边语言。
+ *
+ * 选中态 = 轨道填充 `controlActive`(浅色纯黑 / 深色纯白),即"反白";
+ * 滑块底色 `controlKnobBg` 与轨道**反相**(硬约束,同色则滑块消失)。
+ * 位移与按压拉伸全由 popup RESET_CSS 按 `aria-checked`/`:active` 驱动,
+ * React 只声明结构(knob 无内联 left,内联会压过 :active)。
+ */
 export function Toggle({
   label,
   desc,
@@ -383,9 +525,6 @@ export function Toggle({
   tk: ThemeTokens
 }) {
   const [hover, setHover] = useState(false)
-  // 选中态 = 控件激活色(2026-09-16 第四十一轮用户"开关…颜色修改为灰色和白色"):
-  // 浅色中性深灰 / 深色白,原 accent 蓝退出开关;
-  // 未选中轨道仍走专用令牌(比 inputBorder 深一档,悬浮再深一档给出"可点"暗示)。
   const track = checked
     ? hover
       ? tk.controlActiveHover
@@ -394,10 +533,8 @@ export function Toggle({
       ? tk.switchTrackHover
       : tk.switchTrack
   return (
-    // 容器是 div 而非 label(第四十八轮用户"只有在点击开关时才开启/关闭,
-    // 目前点击对应配置文字就会触发"):原先整行是带 onClick 的 <label>,
-    // 点标签文字也会翻转 —— 而标签旁边就挨着说明文字,想选一句话复制都做不到。
-    // 现在**只有开关本体**可点;键盘可达性不受影响(开关自带 tabIndex + onKeyDown)。
+    // 容器是 div 而非 label:只有开关本体可点,点标签文字不翻转
+    //(标签旁边就挨着说明文字,整行可点会让"选一句话复制"做不到)。
     <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span
@@ -409,8 +546,6 @@ export function Toggle({
         >
           {label}
         </span>
-        {/* 说明文字:formType.desc 档(11.5 regular)+ textMuted;
-            与标签的间距统一取 formGap.labelDesc(第四十一轮"间距统一") */}
         <span
           style={{
             display: 'block',
@@ -435,7 +570,7 @@ export function Toggle({
         onMouseLeave={() => setHover(false)}
         onClick={() => onChange(!checked)}
         onKeyDown={(e) => {
-          // 键盘可达(2026-09-15 设计6):Enter/Space 切换,Space 阻断页面滚动
+          // 键盘可达:Enter/Space 切换,Space 阻断页面滚动
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             e.stopPropagation()
@@ -446,22 +581,20 @@ export function Toggle({
           width: size.toggleWidth,
           height: size.toggleHeight,
           flexShrink: 0,
-          borderRadius: radius.pill,
+          borderRadius: radius.sm,
           position: 'relative',
           transition: `background-color ${motion.normal}`,
           cursor: 'pointer',
           backgroundColor: track,
         }}
       >
-        {/* 滑块位置/按压拉伸全由 popup RESET_CSS 的 [aria-checked] / :active 规则驱动
-            (内联 left 会压过 :active 拉伸;React 只声明结构) */}
         <span className="pddcs-switch-knob" />
       </span>
     </div>
   )
 }
 
-// ── 滑杆(自定义填充轨道;拇指钮样式见 popup RESET_CSS .pddcs-slider)─────────
+// ── 滑杆(自定义填充轨道;拇指样式见 popup RESET_CSS .pddcs-slider)───────────
 
 export function Slider({
   tk,
@@ -482,17 +615,18 @@ export function Slider({
   onChange: (v: number) => void
   format: (v: number) => string
 }) {
-  // 填充进度硬切:激活色到当前值,其后是轨道色(inputBorder)
+  // 填充进度硬切:激活色到当前值,其后是轨道色。
+  // 这里的 linear-gradient **没有过渡带**(两个色标同位置),渲染出来是两段平涂 ——
+  // 它不是"渐变效果",而是用一条 background 画两段色最省 DOM 的写法。
   const pct = Math.round(((value - min) / (max - min)) * 100)
   return (
     <div>
-      {/* 标签走 formType.label(12.5 semibold),当前值同档但 regular + 灰 + 等宽数字 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: formType.label.size }}>
         <span style={{ fontWeight: formType.label.weight }}>{label}</span>
         <span
           style={{
             color: tk.textMuted,
-            fontFamily: 'ui-monospace, Consolas, monospace',
+            fontFamily: 'inherit',
             fontVariantNumeric: 'tabular-nums',
           }}
         >
@@ -508,7 +642,6 @@ export function Slider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
-          // 第四十一轮:已填充段由 accent 蓝改控件激活色(浅色深灰 / 深色白),与开关同一令牌
           backgroundImage: `linear-gradient(to right, ${tk.controlActive} ${pct}%, ${tk.inputBorder} ${pct}%)`,
         }}
       />
@@ -523,7 +656,7 @@ export function inputStyle(tk: ThemeTokens, extra?: React.CSSProperties): React.
     width: '100%',
     padding: `7px ${spacing.xl}px`,
     borderRadius: radius.md,
-    border: `1px solid ${tk.inputBorder}`,
+    border: `${stroke.hairline}px solid ${tk.inputBorder}`,
     backgroundColor: tk.inputBg,
     color: tk.text,
     fontSize: fontSize.body,
@@ -537,8 +670,7 @@ export function inputStyle(tk: ThemeTokens, extra?: React.CSSProperties): React.
 
 /**
  * 与按钮同排的输入框样式:显式 height 取 controlH 档位,与同排按钮严格等高。
- * (2026-09-15 用户反馈:新建子文件夹的输入框靠 padding+line-height 撑到 35px,
- *  同排「创建/取消」为 28px,相差 7px。)
+ * (曾经的事故:输入框靠 padding+line-height 撑到 35px,同排「创建/取消」为 28px,相差 7px。)
  */
 export function controlStyle(
   tk: ThemeTokens,

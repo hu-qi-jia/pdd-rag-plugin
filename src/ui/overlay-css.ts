@@ -259,18 +259,19 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-cand.pddcs-ai-row.is-idle { cursor: pointer; }
 .pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand.pddcs-ai-row:not(.pddcs-cand-selected):hover {
   background: ${tk.knowledgeSurfaceHover}; }
-/* 失败态:整行转错误红软底 + 左色条转红(文字转红见下)——
-   "这行出错了"由"底色 + 色条 + 文字"三处同时说,不靠文案里的"失败"二字表意 */
-.pddcs-cand.pddcs-ai-row.is-error { background: ${tk.errorBg}; border-left-color: ${tk.errorText}; }
+/* 失败态(v3.1 去掉了红色):底色转中性浅底、左色条转**墨**、文字转**墨 + 加粗** ——
+   "这行出错了"由"底色 + 色条 + 字重"三处同时说,不靠文案里的"失败"二字,也不靠颜色。
+   多一种颜色就多一个需要解释的信号,而它并不比加粗更准。 */
+.pddcs-cand.pddcs-ai-row.is-error { background: ${tk.noticeBg}; border-left-color: ${tk.text}; }
 .pddcs-popup:not(.pddcs-popup-keyboard) .pddcs-cand.pddcs-ai-row.is-error:not(.pddcs-cand-selected):hover {
-  background: ${tk.errorHoverBg}; }
+  background: ${tk.knowledgeSurfaceHover}; }
 /* 主行:动作名 + 右侧「重试/重新生成」钮。min-height 取行内控件档,
    使操作钮显隐不改变主行高度(等高铁律) */
 .pddcs-ai-main { display: flex; align-items: center; gap: ${spacing.sm}px;
   min-height: ${controlH.inline}px; }
 .pddcs-ai-label { color: ${tk.knowledgeText}; font-size: ${panelType.action.size}px;
   font-weight: ${panelType.action.weight}; line-height: 1.6; }
-.pddcs-ai-row.is-error .pddcs-ai-label { color: ${tk.errorText}; }
+.pddcs-ai-row.is-error .pddcs-ai-label { color: ${tk.text}; font-weight: 600; }
 /* 第二块:说明行与生成结果**同档同排版**(13.5 / 1.6),两者只是同一个槽位在不同状态下的
    内容,换状态时行内不该跳字号。区分靠**颜色**:说明是元信息(textMuted),
    生成结果是要发出去的正文(tk.text)。

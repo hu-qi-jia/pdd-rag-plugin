@@ -18,7 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ThemeTokens } from './theme'
-import { categoryNav, controlH, fontSize, fontWeight, motion, radius } from './design'
+import { categoryNav, fontSize, fontWeight, motion, radius } from './design'
 
 /** 分类导航里"全部"这一档的 id(不是一个真的类型 id,故用一个不可能冲突的字面量) */
 export const ALL_CATEGORIES = 'all'
@@ -127,37 +127,44 @@ export function CategoryNav({
             onClick={() => onSelect(it.id)}
             style={{
               display: 'inline-flex',
-              alignItems: 'baseline',
+              // **不写 height,也不用 baseline**(见 §六:固定 height 与 baseline 混用
+              // 会让整排贴容器顶部不居中)。盒高由 lineHeight + 对称 padY 撑出来:
+              // 14 + 5×2 = 24,与行内控件同档。
+              alignItems: 'center',
               gap: 4,
               flexShrink: 0,
-              height: controlH.inline,
-              padding: `0 ${categoryNav.padX}px`,
-              border: `${categoryNav.borderWidth}px solid ${on ? 'transparent' : tk.borderStrong}`,
+              padding: `${categoryNav.padY}px ${categoryNav.padX}px`,
+              border: 'none',
               borderRadius: radius.sm,
               cursor: 'pointer',
               fontFamily: 'inherit',
               whiteSpace: 'nowrap',
-              backgroundColor: on ? tk.controlActive : 'transparent',
-              color: on ? tk.controlKnobBg : tk.textMuted,
+              // 两态 = 实心黑 vs 灰字(§二)。未选中**不用描边块** ——
+              // 一排描边方块会把这条导航变成一列盒子,而它只承担"现在在哪"一个信息
+              backgroundColor: on ? tk.text : 'transparent',
+              color: on ? tk.bg : tk.textTertiary,
               fontSize: fontSize.secondary,
+              lineHeight: `${categoryNav.lineHeight}px`,
               fontWeight: on ? fontWeight.semibold : fontWeight.regular,
-              transition: `background-color ${motion.fast}, color ${motion.fast}, border-color ${motion.fast}`,
+              transition: `background-color ${motion.fast}, color ${motion.fast}`,
             }}
             onMouseEnter={(e) => {
               if (on) return
               e.currentTarget.style.backgroundColor = tk.fillQuiet
+              e.currentTarget.style.color = tk.text
             }}
             onMouseLeave={(e) => {
               if (on) return
               e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.color = tk.textTertiary
             }}
           >
             {it.name}
             {/* 计数与分类名同档、降一档透明度:它们是同一个标签的两部分,不该抢成两个层级 */}
             <span
               style={{
-                fontSize: fontSize.caption,
-                opacity: 0.65,
+                fontSize: fontSize.count,
+                opacity: 0.55,
                 fontVariantNumeric: 'tabular-nums',
               }}
             >

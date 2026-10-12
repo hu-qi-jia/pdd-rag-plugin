@@ -16,7 +16,7 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import type { ThemeTokens } from './theme'
-import { controlH, fontSize, fontWeight, radius, spacing, motion, size, formType, formGap, stroke } from './design'
+import { controlH, fontSize, fontWeight, radius, spacing, motion, size, formType, formGap, stroke, rowHover } from './design'
 import { PlusIcon, SearchIcon } from './icons'
 
 
@@ -76,12 +76,10 @@ export function SectionHeader({
       >
         {title}
       </span>
-      {/* 向右延伸的分区线:**取结构线档**(`borderStrong`),不是控件描边那一档。
-          这是"分区标题"与"列表行"能被一眼分开的**全部依据** ——
-          行与行之间画的是 `borderLight` 的发丝线,两者深浅差得足够远,
-          标题那一行就永远是这张版面上最重的一根线。
-          (v3.0 首版用的是 `border`,与行线只差一档,读起来两处都是"一根灰线"。
-          线重即层级这条口径,在这里必须真的用满。)
+      {/* 向右延伸的分区线:**取分区线档**(`border`,#e5e5e5)。
+          v3.1 §四把线分成了三档且**都是 1px**,靠深浅分档:
+            外框 `borderStrong`(#111)> 分区线 `border`(#e5e5e5)> 行分隔 `borderLight`(#f0f0f0)。
+          所以这里**不是**结构线 —— 结构线只留给窗口外框与页头那种"版面的边"。
           flex 吃满剩余宽度;窄到一定程度就让它消失(minWidth 兜底),
           否则标题一长线就缩成一个小点,反而更像噪点 */}
       <span
@@ -90,7 +88,7 @@ export function SectionHeader({
           flex: 1,
           minWidth: spacing.md,
           height: stroke.hairline,
-          backgroundColor: tk.borderStrong,
+          backgroundColor: tk.border,
         }}
       />
       {extra ? <span style={{ flexShrink: 0, display: 'inline-flex' }}>{extra}</span> : null}
@@ -147,26 +145,12 @@ export function Btn({
   const isPrimary = variant === 'primary'
   const isDanger = variant === 'danger'
   const isGhost = variant === 'ghost'
-  const color = isPrimary
-    ? tk.btnPrimaryText
-    : isDanger
-      ? tk.errorText
-      : isGhost
-        ? tk.textMuted
-        : tk.text
-  const bg = isPrimary
-    ? tk.btnPrimaryBg
-    : isDanger
-      ? tk.errorBg
-      : isGhost
-        ? 'transparent'
-        : tk.btnBg
-  // 悬浮底色:primary 再亮/再暗一档、danger 红底加深一档、ghost/default 面色提亮一档
-  const hoverBg = isPrimary
-    ? tk.btnPrimaryHover
-    : isDanger
-      ? tk.errorHoverBg
-      : tk.btnHoverBg
+  const color = isPrimary ? tk.btnPrimaryText : isGhost ? tk.textMuted : tk.text
+  const bg = isPrimary ? tk.btnPrimaryBg : isGhost ? 'transparent' : tk.btnBg
+  // 悬浮:primary 走 opacity(§五.5「hover 用 opacity 变化」,不改色);
+  // danger 由墨框**转实心墨底**(v3.1 没有红色,危险动作靠反白表达最高权重)
+  const hoverBg = isPrimary ? tk.btnPrimaryHover : isDanger ? tk.borderStrong : tk.btnHoverBg
+  const hoverColor = isDanger ? tk.bg : color
   return (
     <button
       type="button"
@@ -175,17 +159,23 @@ export function Btn({
       onClick={onClick}
       title={title}
       style={{
-        // ghost 与 danger 不描边(danger 靠红字红底自证);其余取控件描边
-        borderColor: isGhost || isDanger ? 'transparent' : tk.btnBorder,
+        // ghost 不描边;danger 取**1px 墨框**(§五.6 的"文字指令钮升级为墨框描边钮")
+        borderColor: isGhost ? 'transparent' : isDanger ? tk.dangerBorder : tk.btnBorder,
         backgroundColor: bg,
         color,
+        opacity: 1,
       }}
       onMouseEnter={(e) => {
         if (disabled) return
         e.currentTarget.style.backgroundColor = hoverBg
+        e.currentTarget.style.color = hoverColor
+        // primary 额外走 opacity:一页至多一枚主钮,悬浮时"亮一点"即可,不换色
+        if (isPrimary) e.currentTarget.style.opacity = '0.82'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = bg
+        e.currentTarget.style.color = color
+        e.currentTarget.style.opacity = '1'
       }}
     >
       {children}
@@ -222,11 +212,20 @@ export function ConfirmRow({
   }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-      <span style={{ flex: 1, fontSize: fontSize.caption, color: tk.errorText }}>{text}</span>
+      {/* v3.1 去掉红色:警示靠**墨色 + 加粗 + `!` 前缀** —— 不靠颜色表意 */}
+      <span style={{ flex: 1, fontSize: fontSize.caption, color: tk.text, fontWeight: fontWeight.semibold }}>
+        ! {text}
+      </span>
       <button
         type="button"
         onClick={onOk}
-        style={{ ...btn, border: 'none', backgroundColor: tk.errorBg, color: tk.errorText, fontWeight: fontWeight.semibold }}
+        style={{
+          ...btn,
+          border: `${stroke.hairline}px solid ${tk.dangerBorder}`,
+          backgroundColor: 'transparent',
+          color: tk.text,
+          fontWeight: fontWeight.semibold,
+        }}
       >
         确认
       </button>
@@ -265,6 +264,101 @@ export function CreateBtn({
         {label}
       </span>
     </Btn>
+  )
+}
+
+// ── 字符图标 + 全站统一的图标钮(v3.1 §五.3 / §六)──────────────────────────
+
+/**
+ * **能用字符就不用 SVG**(§六)。这几个字形在 Windows 字体里都有、渲染稳定,
+ * 直接用字符;宽窄与基线由 font-size + line-height 统一约束。
+ *
+ * `⧉`(U+29C9)与 `⇢`(U+21E2)在 Windows 上常缺字或宽窄不一,故**继续用 SVG**
+ * (lucide 的 Copy / MoveRight)—— 这是"混合"口径的边界:稳的用字符,不稳的用 SVG。
+ */
+export const GLYPH = {
+  /** 设为标准(描边=未设;实心琥珀=已设,由 IconBtn 的 active 控制颜色) */
+  star: '★',
+  /** 编辑 */
+  edit: '✎',
+  /** 删除 */
+  close: '✕',
+  /** 展开区里每条回复的行首标记(以及回显引子) */
+  mark: '›',
+  /** 命令台提示符 */
+  prompt: '❯',
+} as const
+
+/**
+ * **图标钮**(v3.1 §五.3):20×20 纯图标无框,默认灰 `textFaint`;hover 黑底白;
+ * 已设/激活态**琥珀常显**。必须带 title 提示。
+ *
+ * 三条实现口径:
+ *  - **各自独立** —— 多条结果里每条回复各带自己的钮,不共享一行按钮(§五.3 末句);
+ *  - `stopPropagation` —— 这些钮长在可点的行里(点行 = 展开/填充),不拦住就会连带触发父级;
+ *  - **数量与位置不随悬浮变化** —— 常驻可见。悬浮才显在本项目里被明确否决过两次。
+ */
+export function IconBtn({
+  tk,
+  title,
+  onClick,
+  children,
+  active = false,
+  disabled = false,
+}: {
+  tk: ThemeTokens
+  /** 必须给:图标没有文字,title 是它唯一的可读名 */
+  title: string
+  onClick: () => void
+  /** 图标内容:字符(GLYPH.xxx)或一个 SVG 节点 */
+  children: React.ReactNode
+  /** 已设 / 激活态:琥珀常显 */
+  active?: boolean
+  disabled?: boolean
+}) {
+  const idle = active ? tk.goldenText : tk.textFaint
+  const hot = active ? tk.goldenBright : tk.bg
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      style={{
+        width: size.iconBtn,
+        height: size.iconBtn,
+        flexShrink: 0,
+        padding: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: 'none',
+        borderRadius: radius.sm,
+        backgroundColor: 'transparent',
+        color: idle,
+        fontSize: size.icon,
+        lineHeight: 1,
+        fontFamily: 'inherit',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        transition: `background-color ${motion.fast}, color ${motion.fast}`,
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return
+        e.currentTarget.style.backgroundColor = tk.text
+        e.currentTarget.style.color = hot
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent'
+        e.currentTarget.style.color = idle
+      }}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -310,15 +404,17 @@ export function Notice({
           alignItems: 'flex-start',
           gap: spacing.md,
           padding: `${spacing.sm}px ${spacing.md}px`,
-          borderLeft: `3px solid ${msg.ok ? tk.successText : tk.errorText}`,
-          backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
+          borderLeft: `${rowHover.barWidth}px solid ${tk.borderStrong}`,
+          backgroundColor: tk.noticeBg,
           fontSize: fontSize.secondary,
           lineHeight: 1.55,
-          color: msg.ok ? tk.successText : tk.errorText,
+          color: tk.text,
+          fontWeight: msg.ok ? fontWeight.regular : fontWeight.semibold,
           wordBreak: 'break-all',
         }}
       >
-        {msg.text}
+        {/* 失败带 `!` 前缀 —— v3.1 没有红色,失败与成功的差别只在"加粗 + 这个记号" */}
+        {msg.ok ? msg.text : `! ${msg.text}`}
       </div>
     </div>
   )
@@ -418,8 +514,9 @@ export function Badge({
   tone: 'golden' | 'knowledge' | 'neutral'
   children: React.ReactNode
 }) {
-  const color =
-    tone === 'golden' ? tk.goldenText : tone === 'knowledge' ? tk.knowledgeText : tk.textMuted
+  // v3.1:全站唯一的彩色是琥珀。[知识] 与 [历史] 都是灰,靠**文字**区分而不是靠颜色 ——
+  // 多一种颜色就多一个需要解释的信号,而它并不比那两个字更准。
+  const color = tone === 'golden' ? tk.goldenText : tk.textFaint
   return (
     <span
       style={{
@@ -494,7 +591,10 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="pddcs-input"
-        style={inputStyle(tk, { paddingLeft: 26 })}
+        // **显式取表单档高度**(26,controlH.form):同排的工具钮都是这一档,
+        // 而它又是页面上第一件东西 —— 高度漂一档,下面整列(含分类导航)就跟着漂,
+        // 两个页签的导航栏于是对不齐(用户第 2 条)
+        style={controlStyle(tk, controlH.form, { paddingLeft: 26 })}
       />
     </div>
   )

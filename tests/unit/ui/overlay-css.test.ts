@@ -35,6 +35,7 @@ import {
   fontWeight,
   panelType,
   radius,
+  size,
   spacing,
   stroke,
 } from '../../../src/ui/design'
@@ -270,8 +271,9 @@ describe('v3.0 行 = 满幅 + 发丝线(不是内缩圆角软块)', () => {
 
   it('图标钮 24px 方钮 + 直角,颜色由 currentColor 继承', () => {
     const btn = ruleOf(css, /\.pddcs-icon-btn \{[^}]*\}/)
-    expect(btn).toContain(`width: ${controlH.inline}px`)
-    expect(btn).toContain(`height: ${controlH.inline}px`)
+    // v3.1 §五.3:图标钮统一 20×20(不再是行内控件档的 24)
+    expect(btn).toContain(`width: ${size.iconBtn}px`)
+    expect(btn).toContain(`height: ${size.iconBtn}px`)
     expect(btn).toContain(`border-radius: ${radius.sm}px`)
     expect(btn).toContain('color:')
     expect(css).toContain('.pddcs-icon-btn-star:hover')
@@ -332,13 +334,15 @@ describe('v3.0 徽标 = 方括号标签(替掉彩色软底 chip)', () => {
     expect(badge).toContain(`font-weight: ${fontWeight.semibold}`)
   })
 
-  it('语义色仍在(功能信号,不是装饰):标准回答暗琥珀 / 知识库暗墨绿', () => {
+  /**
+   * v3.1 §二:**全站唯一的彩色是琥珀**,且只用于「已设标准 / 金标」这一个语义。
+   * 知识库的绿已删 —— `[知识]` 现在是灰方括号,靠**文字**区分而不是靠颜色。
+   */
+  it('全站唯一的彩色是琥珀;[知识] 已降为灰', () => {
     expect(css).toContain(`.pddcs-badge.golden { color: ${lightTheme.goldenText}; }`)
-    expect(css).toContain(`.pddcs-badge.knowledge { color: ${lightTheme.knowledgeText}; }`)
     const dark = buildOverlayCss(darkTheme)
     expect(dark).toContain(`.pddcs-badge.golden { color: ${darkTheme.goldenText}; }`)
-    expect(dark).toContain(`.pddcs-badge.knowledge { color: ${darkTheme.knowledgeText}; }`)
-    // 两枚语义色都必须是"印刷油墨"级的暗色,不能是高饱和的荧光色 ——
+    // 琥珀必须是"印刷油墨"级的暗色,不能是高饱和的荧光 ——
     // 高饱和色在白纸上是一个墨点,会把整屏黑白灰的节奏打断
     const sat = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
@@ -346,7 +350,9 @@ describe('v3.0 徽标 = 方括号标签(替掉彩色软底 chip)', () => {
     }
     expect(sat(lightTheme.goldenText)).toBeLessThan(0.9)
     expect(parseInt(lightTheme.goldenText.slice(1, 3), 16)).toBeLessThan(0xa0)
-    expect(parseInt(lightTheme.knowledgeText.slice(1, 3), 16)).toBeLessThan(0x60)
+    // 知识库色**必须是无彩度**的(它现在是灰):R=G=B
+    const rgb = [1, 3, 5].map((i) => parseInt(lightTheme.knowledgeText.slice(i, i + 2), 16))
+    expect(new Set(rgb).size, '知识库色还有彩度 —— 绿没删干净').toBe(1)
   })
 })
 
@@ -402,9 +408,10 @@ describe('v3.0 文字左缘对齐:左括号挂出去,内容一律不缩进', () 
 describe('buildOverlayCss:字号主次(面板只有三档)', () => {
   const css = buildOverlayCss(lightTheme)
 
-  it('回答正文为主层:13.5px(title 档)+ 1.6 行高', () => {
+  // v3.1 的字号阶梯取消了 13.5 那一档:面板内容层改取 `panelType.content`(12)
+  it('回答正文为主层:取 panelType.content 档 + 1.6 行高', () => {
     const text = ruleOf(css, /\.pddcs-cand-text \{[^}]*\}/)
-    expect(text).toContain('font-size: 13.5px')
+    expect(text).toContain(`font-size: ${panelType.content.size}px`)
     expect(text).toContain('line-height: 1.6')
   })
 
@@ -492,13 +499,16 @@ describe('buildOverlayCss:AI 整合行(六条结构口径,跨版本不变)', () 
     expect(ruleOf(dark, /\.pddcs-cand\.pddcs-ai-row \{[^}]*\}/)).toContain(
       `background: ${darkTheme.knowledgeSurface}`,
     )
-    expect(aiRow).not.toContain(lightTheme.selectedBg)
     const hover = ruleOf(
       css,
       /\.pddcs-popup:not\(\.pddcs-popup-keyboard\) \.pddcs-cand\.pddcs-ai-row:not\(\.pddcs-cand-selected\):hover \{[^}]*\}/,
     )
     expect(hover).toContain(lightTheme.knowledgeSurfaceHover)
     expect(hover).not.toContain(`background: ${lightTheme.selectedBg}`)
+    // v3.1 起动作面不再是"同色加深"(它已经没有色相了)—— 改为**两档中性浅底**,
+    // 深色下必须更亮一档才压得住近黑底。这条断言守的是"两主题各自取各自的值"
+    expect(darkTheme.knowledgeSurface).not.toBe(lightTheme.knowledgeSurface)
+    expect(darkTheme.knowledgeSurfaceHover).not.toBe(darkTheme.knowledgeSurface)
   })
 
   it('悬浮/选中态显式补写(双类选择器会盖过单类的 .pddcs-cand 规则)', () => {
@@ -522,17 +532,24 @@ describe('buildOverlayCss:AI 整合行(六条结构口径,跨版本不变)', () 
     )
   })
 
-  it('失败态:文案转红 + 整行转红软底 + 左色条转红(三处同时说,不靠文案里的"失败"二字)', () => {
-    expect(ruleOf(css, /\.pddcs-ai-row\.is-error \.pddcs-ai-label \{[^}]*\}/)).toContain(
-      `color: ${lightTheme.errorText}`,
-    )
+  /**
+   * v3.1 去掉了红色。失败态仍由**三处同时说**,只是三处都换成墨:
+   * 文案转**墨 + 加粗**、整行转中性浅底、左色条转**墨**。
+   * 不靠颜色 —— 多一种颜色就多一个需要解释的信号,而它并不比加粗更准。
+   */
+  it('失败态:文案转墨加粗 + 整行转浅底 + 左色条转墨(三处同时说,不靠颜色也不靠"失败"二字)', () => {
+    const label = ruleOf(css, /\.pddcs-ai-row\.is-error \.pddcs-ai-label \{[^}]*\}/)
+    expect(label).toContain(`color: ${lightTheme.text}`)
+    expect(label).toContain('font-weight: 600')
     const surface = ruleOf(css, /\.pddcs-cand\.pddcs-ai-row\.is-error \{[^}]*\}/)
-    expect(surface).toContain(`background: ${lightTheme.errorBg}`)
-    expect(surface).toContain(`border-left-color: ${lightTheme.errorText}`)
+    expect(surface).toContain(`background: ${lightTheme.noticeBg}`)
+    expect(surface).toContain(`border-left-color: ${lightTheme.text}`)
+    // 失败底必须**与常驻的动作面不是同一个色** —— 同值的话"这一行出错了"
+    // 就只剩左色条与字重两个信号,底色那一重白给(这条踩过一次:两个令牌都写成了 #f5f5f5)
+    for (const tk of [lightTheme, darkTheme]) {
+      expect(tk.noticeBg, '失败底与动作面撞色').not.toBe(tk.knowledgeSurface)
+    }
     expect(surface).not.toContain(lightTheme.knowledgeSurface)
-    // 红底比绿底更实:失败是更少见的、更需要被注意的状态
-    const alpha = (s: string) => Number(s.match(/([\d.]+)\)$/)![1])
-    expect(alpha(lightTheme.errorBg)).toBeGreaterThan(alpha(lightTheme.knowledgeSurface))
   })
 
   it('生成结果按候选正文口径排版(同字号同截断行数),流式时行高不跳', () => {

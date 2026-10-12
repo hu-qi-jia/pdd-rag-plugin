@@ -7,7 +7,7 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Card, Slider, Toggle } from '../../../src/ui/components'
 import { darkTheme, lightTheme } from '../../../src/ui/theme'
-import { formGap, formType } from '../../../src/ui/design'
+import { formGap, formType, fontSize as fontSizeScale } from '../../../src/ui/design'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -77,12 +77,16 @@ function blendOver(color: string, base: string): string {
 // ── ① 字号规范 ────────────────────────────────────────────────────────────────
 
 describe('设置页字号规范:标题 > 配置项字段 > 说明文字(formType)', () => {
-  it('三档等差 1px,且严格递减', () => {
-    expect(formType.groupTitle.size).toBe(13.5)
-    expect(formType.label.size).toBe(12.5)
-    expect(formType.desc.size).toBe(11.5)
-    expect(formType.groupTitle.size - formType.label.size).toBe(1)
-    expect(formType.label.size - formType.desc.size).toBe(1)
+  // v3.1 的字号阶梯是 13 / 12.5 / 12 / 11.5 / 10 / 9.5 —— 上半段步长 0.5。
+  // 原来那条"三档等差 1px"是 v3.0 的阶梯(13.5/12.5/11.5)带来的,阶梯一换就作废;
+  // 真正要守的是**严格递减**与"三档都落在阶梯上",不是那个 1px。
+  it('三档严格递减,且都取自 v3.1 的字号阶梯', () => {
+    const scale = Object.values(fontSizeScale)
+    for (const t of [formType.groupTitle, formType.label, formType.desc]) {
+      expect(scale, `${t.size} 不在字号阶梯上`).toContain(t.size)
+    }
+    expect(formType.groupTitle.size).toBeGreaterThan(formType.label.size)
+    expect(formType.label.size).toBeGreaterThan(formType.desc.size)
   })
 
   it('层级不倒挂:分组标题必须大于字段标签(旧版 11.5 标题 + 12.5 标签是反的)', () => {
@@ -96,7 +100,7 @@ describe('设置页字号规范:标题 > 配置项字段 > 说明文字(formType
     expect(formType.desc.weight).toBe(400)
   })
 
-  it('Card 标题走分组标题档(13.5 semibold + textMuted),不再是小号灰字', () => {
+  it('Card 标题走分组标题档(页面名那一档 / semibold + textMuted),不再是小号灰字', () => {
     act(() => {
       root.render(
         <Card tk={lightTheme} title="检索与填充">
@@ -109,7 +113,7 @@ describe('设置页字号规范:标题 > 配置项字段 > 说明文字(formType
     const title = Array.from(container.querySelectorAll('span')).find(
       (el) => el.children.length === 0 && el.textContent === '检索与填充',
     ) as HTMLElement
-    expect(title.style.fontSize).toBe('13.5px')
+    expect(title.style.fontSize).toBe(`${formType.groupTitle.size}px`)
     expect(title.style.fontWeight).toBe('600')
     // 颜色:v3.0 第二版按用户「标题与词条颜色也做一下区分」由 `text` 改 `textMuted` ——
     // 标题与词条此前同为纯黑,只靠 1px 字号与分区线区分,在满屏条目里读起来像"又一条内容"。

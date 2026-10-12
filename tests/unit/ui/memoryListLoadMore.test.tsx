@@ -1,6 +1,7 @@
-// 记忆列表"加载更早"分页单测(2026-09-15 评审 PM2):
-// 列表默认取最近 100 条,底部显式"加载更早(已显示 X/Y 条)"追加下一页,
-// 全部载入后显示"已显示全部 Y 条" —— 消除静默截断与头部统计的口径差。
+// 记忆列表"加载更早"分页单测(2026-09-15 评审 PM2;2026-10-12 断言按 v3.1 命令台重定向):
+// 列表默认取最近 100 条,底部显式"加载更早(X/Y)"追加下一页。
+// **不变量不变** —— 消除静默截断:头部统计始终如实区分「已载 / 库内总数」。
+// v3.1 起统计行是 `命中 N / M 条(库内共 T,更早的要点「加载更早」)`,旧的「已显示 X/Y 条」文案已作废。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -82,7 +83,10 @@ describe('MemoryListTab:加载更早(PM2)', () => {
 
     const moreBtn = $('加载更早')
     expect(moreBtn).not.toBeNull()
-    expect(container.textContent).toContain('已显示 2/3 条')
+    // 「命中 N / M 条」统计行已被用户删掉,于是"截断从不静默"这条不变量改由**按钮文案**承担:
+    // `加载更早(已载/共)` 两个数都在,用户一眼看得出还有多少没拉上来
+    expect(moreBtn!.textContent).toContain('2/3')
+    expect(container.textContent).not.toContain('问题qa-1')
 
     // 第二页:剩 1 条,hasMore=false;断言请求携带 offset=已加载条数
     mockedSend.mockResolvedValueOnce(page([makeItem('qa-1')], 3, false))
@@ -93,7 +97,8 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     })
 
     expect($('加载更早')).toBeNull()
-    expect(container.textContent).toContain('已显示全部 3 条')
+    // 全部载入:按钮撤走,页面上不再有任何"还有更早"的暗示
+    expect(container.textContent).not.toContain('库内共')
     expect(container.textContent).toContain('问题qa-1')
   })
 
@@ -112,6 +117,8 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     await act(async () => {})
 
     expect($('加载更早')).toBeNull()
-    expect(container.textContent).toContain('已显示全部 1 条')
+    // 全量已载:页面上**不该**再出现任何"还有更早"的暗示(统计行已删,这条只剩按钮一个出口)
+    expect(container.textContent).not.toContain('库内共')
+    expect(container.textContent).not.toContain('库内共')
   })
 })

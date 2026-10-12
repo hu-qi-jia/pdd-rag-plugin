@@ -1,5 +1,6 @@
-// 标准回答页 · 类型分区与「移到其他类型」的渲染单测(第五十七轮 Task 6)。
-// 数据来源仍是 GET_PANEL_DATA(此时已回带 categories);分区复用 logic#groupByCategory。
+// 标准回答页 · 分类导航筛选与「移动到其他类型」的渲染单测(第五十七轮 Task 6;
+// v3.1 方向 5 改为手册卡片后,断言从"分区"全面转向"导航筛选 + 卡片"）。
+// 数据来源仍是 GET_PANEL_DATA(此时已回带 categories);筛选复用 logic#navBucketOf。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -65,12 +66,17 @@ const btns = (title: string): HTMLButtonElement[] =>
 const navBtn = (id: string): HTMLButtonElement | null =>
   container.querySelector<HTMLButtonElement>(`[data-category-id="${id}"]`)
 
-/** 按问题文字定位它所在的那一行(问题 div 无子元素,取值即整行) */
-const rowOf = (question: string): HTMLElement => {
-  const q = Array.from(container.querySelectorAll('div')).find(
-    (d) => d.children.length === 0 && d.textContent === question,
+/**
+ * 按问题文字定位它所在的**手册卡片**。
+ * v3.1 起问题正文是一个叶子 `<span>`(不再是 div):span → Q 行 div → 卡片 wrapper,
+ * 卡片即"这一条标准回答"的全部内容(问题、灰标、答案、操作)。
+
+ */
+const cardOf = (question: string): HTMLElement => {
+  const q = Array.from(container.querySelectorAll('span')).find(
+    (s) => s.children.length === 0 && s.textContent === question,
   )
-  expect(q, `找不到问题行「${question}」`).toBeTruthy()
+  expect(q, `找不到问题「${question}」`).toBeTruthy()
   return q!.parentElement!.parentElement as HTMLElement
 }
 
@@ -160,14 +166,14 @@ describe('标准回答页 · 分类导航', () => {
       golden('g2', { question: '机器打的', categoryId: 'preset:size', categorySource: 'jev' }),
     ]
     await render()
-    expect(rowOf('手工摆的').textContent).toContain('已指定')
-    expect(rowOf('机器打的').textContent).not.toContain('已指定')
+    expect(cardOf('手工摆的').textContent).toContain('已指定')
+    expect(cardOf('机器打的').textContent).not.toContain('已指定')
   })
 
-  it('点类型标签旁的按钮 → 出现类型下拉,选中即发 UPDATE_GOLDEN_CATEGORY', async () => {
+  it('点卡片右下角的移动钮 → 出现类型下拉,选中即发 UPDATE_GOLDEN_CATEGORY', async () => {
     panelData.goldens = [golden('g1', { categoryId: 'preset:size' })]
     await render()
-    const move = btns('移到其他类型')
+    const move = btns('移动到其他类型')
     expect(move).toHaveLength(1)
     await click(move[0])
 
@@ -194,7 +200,7 @@ describe('标准回答页 · 分类导航', () => {
     // 类型表里没有 'ghost'(旧库删掉的自定义类型),条目仍挂在它上面
     panelData.goldens = [golden('g1', { categoryId: 'ghost' })]
     await render()
-    await click(btns('移到其他类型')[0])
+    await click(btns('移动到其他类型')[0])
 
     const values = Array.from(container.querySelectorAll('option')).map((o) => o.value)
     expect(values).toEqual(['preset:size', 'preset:logistics', 'uncategorized'])

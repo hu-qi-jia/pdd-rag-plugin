@@ -165,17 +165,33 @@ describe('MemoryListTab:顶部分类导航', () => {
     expect(container.textContent).toContain('孤儿问题')
   })
 
-  it('顶部只读说明行给出未分类条数与设置页入口,且无操作按钮', async () => {
+  // v3.1:旧版那行**独立的**「未分类 N 条 · 在设置页点…」说明行已并入顶部统计行(同一类信息不占两行)。
+  // 不变量不变 —— 未分类条数仍然如实暴露、且这一处是**只读**的(没有任何操作按钮)。
+  /**
+   * v3.1 第六版:用户要求删掉「命中 N / M 条」那一行,未分类提示因此**回到独立一行**。
+   * 不变量不变 —— 未分类条数仍然如实暴露、且这一处是**只读**的(没有操作按钮)。
+   * 位置有讲究:它在**分类导航之后**。放在前面的话,它一出现就把导航往下推,两个页签的导航栏又对不齐。
+   */
+  it('未分类条数单独成行(只读,无操作按钮),且排在分类导航**之后**', async () => {
     await renderWith(ITEMS)
     expect(container.textContent).toContain('未分类 2 条 · 在设置页点「开始分类全部历史」')
-    const notice = Array.from(container.querySelectorAll('div')).find(
-      (d) => d.textContent === '未分类 2 条 · 在设置页点「开始分类全部历史」',
+    const line = Array.from(container.querySelectorAll('div')).find(
+      (d) => d.children.length === 0 && d.textContent?.includes('在设置页点「开始分类全部历史」'),
     )!
-    expect(notice).toBeTruthy()
-    expect(notice.querySelector('button')).toBeNull()
+    expect(line, '这行应当是它自己(叶子节点),不是某个祖先容器').toBeTruthy()
+    // 只读:没有可点控件
+    expect(line.querySelector('button')).toBeNull()
+    // 位置:导航在它前面(DOM 顺序 = 视觉顺序)
+    const nav = container.querySelector('[data-category-id="all"]')!
+    expect(nav.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('无未分类条目时不显示只读说明行', async () => {
+  it('★ 「命中 N / M 条」统计行已按用户要求删除', async () => {
+    await renderWith(ITEMS)
+    expect(container.textContent).not.toContain('命中')
+  })
+
+  it('无未分类条目时不出现「开始分类全部历史」提示', async () => {
     await renderWith([mk('qa-1', '尺码问题', 'preset:size')])
     expect(container.textContent).not.toContain('开始分类全部历史')
   })

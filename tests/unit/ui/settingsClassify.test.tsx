@@ -252,12 +252,14 @@ describe('设置页 · 问题分类区', () => {
     // 按钮渲染出来了(不是"看不见所以没点"),但缺字段时禁用
     expect(textBtnIn(classifyCard(), '测试连接').disabled).toBe(true)
 
-    // 一行红字:先说"已开启,但…尚未填全"
+    // 一行需要动手的提示(v3.1 没有红字:墨色 + 加粗 + `!` 前缀)
     const hint = Array.from(container.querySelectorAll<HTMLElement>('div')).find(
       (e) => e.children.length === 0 && e.textContent?.includes('尚未填全') && e.textContent?.includes('已开启'),
     )
     expect(hint).toBeTruthy()
-    expect(colorIs(hint!, lightTheme.errorText)).toBe(true)
+    expect(colorIs(hint!, lightTheme.text)).toBe(true)
+    expect(hint!.style.fontWeight).toBe('600')
+    expect(hint!.textContent).toContain('!')
 
     // ADR-0007 零远程:渲染过程中(未点击任何测试按钮)不得发出 TEST_JEV
     expect(sent.some((m) => m.type === 'TEST_JEV')).toBe(false)

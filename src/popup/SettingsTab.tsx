@@ -22,7 +22,7 @@ import type {
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
 import { Btn, Card, Notice, Slider, Toggle, controlStyle, type NoticeMsg } from '../ui/components'
-import { controlH, fontSize, formGap, formType, radius, spacing } from '../ui/design'
+import { controlH, fontSize, fontWeight, formGap, formType, radius, spacing } from '../ui/design'
 import { DownloadIcon, LoaderIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
 import {
@@ -750,7 +750,7 @@ export function SettingsTab({
               style={{
                 fontSize: formType.desc.size,
                 fontWeight: formType.desc.weight,
-                color: test.phase === 'ok' ? tk.textMuted : llmTestFailed(test) ? tk.errorText : tk.textMuted,
+                color: test.phase === 'ok' ? tk.textMuted : llmTestFailed(test) ? tk.text : tk.textMuted,
                 lineHeight: 1.5,
               }}
             >
@@ -761,8 +761,15 @@ export function SettingsTab({
 
         {/* 两处"配了但不会生效"的自查提示:开启未配置 / 改了没保存,都是静默失效的重灾区 */}
         {draft.aiIntegrateEnabled && !llmFormReady(llmFormFromSettings(draft)) && (
-            <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
-              已开启,但接口地址 / API Key / 模型名尚未填全,推荐面板不会出现整合行。
+            <div
+              style={{
+                fontSize: formType.desc.size,
+                color: tk.text,
+                fontWeight: fontWeight.semibold,
+                lineHeight: 1.6,
+              }}
+            >
+              ! 已开启,但接口地址 / API Key / 模型名尚未填全,推荐面板不会出现整合行。
             </div>
           )}
         {llmDirty && (
@@ -902,7 +909,7 @@ export function SettingsTab({
                   jevTest.phase === 'ok'
                     ? tk.textMuted
                     : jevTestFailed(jevTest)
-                      ? tk.errorText
+                      ? tk.text
                       : tk.textMuted,
                 lineHeight: 1.5,
               }}
@@ -914,8 +921,15 @@ export function SettingsTab({
 
         {/* 两处"配了但不会生效"的自查提示(同 AI 区):开启未配置 / 改了没保存 */}
         {draft.classifyEnabled && !jevFormReady(jevFormFromSettings(draft)) && (
-          <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
-            已开启,但接口地址 / API Key / 模型名尚未填全,分类不会生效。
+          <div
+            style={{
+              fontSize: formType.desc.size,
+              color: tk.text,
+              fontWeight: fontWeight.semibold,
+              lineHeight: 1.6,
+            }}
+          >
+            ! 已开启,但接口地址 / API Key / 模型名尚未填全,分类不会生效。
           </div>
         )}
         {jevDirty && (
@@ -967,7 +981,7 @@ export function SettingsTab({
               fontWeight: formType.desc.weight,
               color:
                 !backfillReady && !backfillRunning && backfillStatus?.phase !== 'done'
-                  ? tk.errorText
+                  ? tk.text
                   : tk.textMuted,
               lineHeight: 1.6,
             }}
@@ -1071,11 +1085,11 @@ export function SettingsTab({
               <span
                 style={{
                   fontSize: formType.desc.size,
-                  fontWeight: formType.desc.weight,
-                  color: tk.errorText,
+                  fontWeight: fontWeight.semibold,
+                  color: tk.text,
                 }}
               >
-                清空全部问答与回复?标准回答/知识库/文件夹保留。
+                ! 清空全部问答与回复?标准回答/知识库/文件夹保留。
               </span>
               <Btn tk={tk} variant="danger" disabled={busy} onClick={() => void clearMemory()}>
                 确认清空

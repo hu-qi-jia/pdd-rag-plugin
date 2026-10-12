@@ -1,13 +1,35 @@
 /**
- * 记忆列表页(P3,设计文档 §7):问答记录流,展开看回复;
- * 操作:设为金标准(按回复)/ 删除单条 / 关键词筛选 / 剩余保留天数标注。
+ * 记忆页 — **命令台**(v3.1 方向 1:Raycast / fzf 式)。
+ *
+ * 结构(`UI设计稿-方向探索.html` 方向 1 定稿):
+ *
+ * ```
+ * ❯ [搜索问题或回复…]                    ← 44px,打开即聚焦,输入框即整个界面
+ * 命中 12 / 88 条 · 未分类 2 条           ← 统计行(顺带暴露一点"仪器感")
+ * 全部 88 | 售后退换 7 | …               ← 分类导航(墨块,滚轮横移)
+ * 1  退货运费谁承担?              ★ 售后退换   ← 34px 结果行
+ * 2  怎么申请退货?                    售后退换   ← 选中行反白,就地展开
+ *    › 订单页申请售后 → …          ★ ⧉
+ * ↑↓ 选择 · ↵ 填进聊天框 · 1-9 按序号快速填 · ⇥ 切分类
+ * ```
+ *
+ * 三条与旧版的根本差别:
+ *  1. **输入框是唯一主角** —— 检索优先:客服记得关键词,直接打字比翻列表快;
+ *  2. **结果行 34px 超紧凑**,一屏看 12+ 条;**选中行就地展开回复**,不跳页;
+ *  3. **分类从"入口"降级成"属性"** —— 它退到结果行的行尾灰标(以及 ⇥ 循环切换),
+ *     不再占据列表里的分区标题。
+ *
+ * 键盘是一等公民:↑↓ 选择、↵ 填充、1-9 按序号直填、⇥ 切分类。
  */
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
   AddGoldenResponse,
+  DeleteGoldenResponse,
   DeleteQaResponse,
+  FillInputResponse,
   GetMemoryListResponse,
   MemoryListItem,
   MemoryReplyItem,
@@ -15,19 +37,18 @@ import type {
 } from '../types/messages'
 import { categoryNavItems, filterQaRecords, groupByCategory, navBucketOf, remainingDays } from './logic'
 import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
-import {
-  Badge,
-  Btn,
-  ConfirmRow,
-  EmptyState,
-  Notice,
-  SearchInput,
-  formatTs,
-  type NoticeMsg,
-} from '../ui/components'
+import { ConfirmRow, EmptyState, Notice, SearchInput, GLYPH, IconBtn, type NoticeMsg } from '../ui/components'
 import { ALL_CATEGORIES, CategoryNav } from '../ui/CategoryNav'
-import { controlH, fontSize, fontWeight, listRow, motion, radius, spacing } from '../ui/design'
-import { ChevronDownIcon, StarIcon, TrashIcon } from '../ui/icons'
+import { fontSize, fontWeight, motion, radius, spacing } from '../ui/design'
+import { CopyIcon } from '../ui/icons'
+
+/**
+ * 问题文字的左缘 = 行内边距 + 序号列宽 + 两者之间的间距。
+ *
+ * 由三个已有量推出而不是写死 42:序号列一改宽、行内边距一调节,这条线自动跟上 ——
+ * 元信息行与回复块都站在它上面,三行共用同一条竖线(用户第 3 条的"回复居左,和问题左侧对齐")。
+ */
+const ROW_TEXT_X = spacing.xxl + 16 + spacing.lg
 
 export function MemoryListTab({
   tk,
@@ -37,7 +58,7 @@ export function MemoryListTab({
 }: {
   tk: ThemeTokens
   retentionDays: number
-  /** 问题类型表(来源:GET_STATS);列表据此分区。不应由本页签自行拉取 */
+  /** 问题类型表(来源:GET_STATS);导航据此列出全部分类。不应由本页签自行拉取 */
   categories: PanelCategory[]
   onDataChanged: () => Promise<void> | void
 }) {
@@ -47,20 +68,18 @@ export function MemoryListTab({
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [keyword, setKeyword] = useState('')
-  // 默认全部展开(问题+回复直接可见);记录用户手动折叠的条目
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+  /**
+   * **光标**(v3.1 方向 1):结果是一列编号行,光标停在哪一行,那一行就反白并**就地展开**。
+   * 旧版是"每行各带一个折叠箭头、各记各的展开态"—— 与命令台的心智不符:
+   * 这里同时只有**一个**位置是"当前",展开是它的属性而不是每行独立的状态。
+   */
+  const [selIdx, setSelIdx] = useState(0)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
-  // 「设置标准回答」的行内即时反馈:请求中
+  // 「设为标准回答」的行内即时反馈:请求中
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
-  /**
-   * 当前选中的分类(`ALL_CATEGORIES` = 全部)。
-   *
-   * v3.0 第四版:**分类改由顶部导航表达,列表不再分组**(用户:「不要按照文件夹的样式设计了…
-   * 在顶部增加导航栏,导航栏中展示全部分类」)。此前是按类型分组、每组一个可折叠标题 ——
-   * 一屏里既有列表又有层层标题,用户的原话是「卡片还是很混乱」。现在只有一条导航 + 一张平铺列表。
-   */
+  /** 当前选中的分类(`ALL_CATEGORIES` = 全部) */
   const [activeCat, setActiveCat] = useState<string>(ALL_CATEGORIES)
 
   const applyPage = useCallback(
@@ -119,19 +138,14 @@ export function MemoryListTab({
     [items, categories],
   )
 
-  /**
-   * 列表 = 关键词筛选 ∩ 分类筛选,**平铺不分组**。
-   *
-   * 一处已知边界(不是这次引入的,分组那版同样如此):筛选只作用于**已加载**的页 ——
-   * 更早的记录要点「加载更早」拉上来才会参与筛选。空态文案因此要把这件事说出来,
-   * 否则用户会以为"这一类真的没有记录"。
-   */
+  /** 结果 = 关键词筛选 ∩ 分类筛选。只作用于**已加载**的页(更早的要点「加载更早」才会参与) */
   const shown = useMemo(() => {
     const kw = filterQaRecords(items, keyword)
     if (activeCat === ALL_CATEGORIES) return kw
     return kw.filter((it) => navBucketOf(it.categoryId, categories) === activeCat)
   }, [items, keyword, activeCat, categories])
-  // 只读说明行取**已加载全量**口径(不随关键词筛选变动):它描述的是库内状态,不是当前筛选
+
+  // 只读说明行取**已加载全量**口径(不随筛选变动):它描述的是库内状态,不是当前筛选
   const uncategorizedCount = useMemo(
     () =>
       groupByCategory(items, categories).find(
@@ -140,24 +154,30 @@ export function MemoryListTab({
     [items, categories],
   )
 
-
-  // 持久金标徽标(2026-09-15 PM1):从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId
-  // 回带 goldenId),不再是会话级 state —— 重开 popup、于文件夹页取消后都如实反映库内状态
+  // 持久金标徽标:从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId 回带 goldenId),
+  // 重开 popup、于标准回答页取消后都如实反映库内状态
   const goldenReplyIds = useMemo(() => {
     const s = new Set<string>()
     for (const it of items) for (const r of it.replies) if (r.goldenId) s.add(r.id)
     return s
   }, [items])
 
+  /** 分类名(结果行行尾的灰标);类型表里没有的 id 归未分类,与导航同源 */
+  const catNameOf = useCallback(
+    (categoryId: string) =>
+      categories.find((c) => c.id === navBucketOf(categoryId, categories))?.name ?? '未分类',
+    [categories],
+  )
+
   /**
-   * 设为标准回答。
-   * 2026-09-15 用户反馈「点击无效、没有反应」真因:写入其实成功(goldenCount +1),
-   * 但反馈只有列表顶部一条 Notice,列表一长就在视口外;且头部统计没有刷新、
-   * 列表本身也不会变化 → 界面看上去毫无动静。现补三重可见反馈:
-   *   ① 按钮原位变「设置中…」→「已设为标准回答」(最贴近点击点的反馈);
-   *   ② 头部统计立即刷新(标准回答 N);
-   *   ③ Notice(已改为吸附在滚动区顶部)。
+   * 结果集变化时把光标夹回范围内。
+   * 不夹的话:筛到只剩 2 条而光标还停在第 7 位 —— 界面上"什么都没有选中",
+   * 而 Enter 仍会按老下标去填一条看不见的记录。
    */
+  useEffect(() => {
+    setSelIdx((i) => Math.min(i, Math.max(0, shown.length - 1)))
+  }, [shown.length])
+
   const setGolden = async (item: MemoryListItem, replyId: string, text: string) => {
     setBusyReplyId(replyId)
     try {
@@ -178,7 +198,7 @@ export function MemoryListTab({
       if (p.limitReached) {
         setMsg({
           ok: false,
-          text: `该问题已有 ${p.count} 条标准回答(上限 ${MAX_GOLDENS_PER_QUESTION} 条),请先在文件夹页取消一条`,
+          text: `该问题已有 ${p.count} 条标准回答(上限 ${MAX_GOLDENS_PER_QUESTION} 条),请先在标准回答页取消一条`,
         })
         return
       }
@@ -190,7 +210,6 @@ export function MemoryListTab({
               text: `已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''},后台将自动向量化`,
             },
       )
-      // 库内已写入 sourceReplyId → 重新拉取列表,徽标由数据派生持久生效
       await load()
       await onDataChanged()
     } catch (err) {
@@ -200,12 +219,41 @@ export function MemoryListTab({
     }
   }
 
+  /**
+   * ★ 的**开关**:未设 → 设为标准回答;已设 → **取消**(用户第 3 条「也可以取消,目前不支持取消」)。
+   *
+   * 取消走 `DELETE_GOLDEN{id: goldenId}` —— 与标准回答页上那枚 ✕ 同一条通道。
+   * 为什么不是"再 ADD 一次":那只会命中 `exists` 幂等分支,永远取消不掉。
+   * 取消**只解除身份**,历史问答记录分毫不受影响(数据库层面也是这个语义)。
+   */
+  const toggleGolden = async (item: MemoryListItem, r: MemoryReplyItem) => {
+    if (!r.goldenId) {
+      await setGolden(item, r.id, r.text)
+      return
+    }
+    setBusyReplyId(r.id)
+    try {
+      const resp = await sendMessage<DeleteGoldenResponse>({
+        type: 'DELETE_GOLDEN',
+        payload: { id: r.goldenId },
+      })
+      if (resp.payload.success) {
+        setMsg({ ok: true, text: '已取消标准回答,历史记录不受影响' })
+        await load()
+        await onDataChanged()
+      } else {
+        setMsg({ ok: false, text: `取消失败:${resp.payload.error ?? '未知错误'}` })
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `取消失败:${String(err)}` })
+    } finally {
+      setBusyReplyId(null)
+    }
+  }
+
   const deleteQa = async (id: string) => {
     try {
-      const resp = await sendMessage<DeleteQaResponse>({
-        type: 'DELETE_QA',
-        payload: { id },
-      })
+      const resp = await sendMessage<DeleteQaResponse>({ type: 'DELETE_QA', payload: { id } })
       if (resp.payload.success) {
         setMsg({ ok: true, text: '已删除该问答及其回复' })
         await load()
@@ -219,84 +267,139 @@ export function MemoryListTab({
     setConfirmDeleteId(null)
   }
 
+  const copyReply = async (r: MemoryReplyItem) => {
+    try {
+      await navigator.clipboard.writeText(r.text)
+      setMsg({ ok: true, text: '已复制到剪贴板' })
+    } catch {
+      setMsg({ ok: false, text: '复制失败' })
+    }
+  }
+
   /**
-   * 回复的金标控件(第十九轮降权重设计):已设 → 琥珀 ★ 徽标;未设 → mini 幽灵钮。
-   * 原 Btn primary(黑底白字 body 字号,~100px)逐行重复时视觉权重压过内容区;
-   * 降为 caption 字号 + 细边幽灵钮(≈74px)保留文字可发现性,占宽前后一致,
-   * 点击变徽标无布局跳动。纯图标方案否决:本项目两次踩"隐蔽入口不可发现"坑。
+   * 填充一条回复到聊天页输入框。
+   *
+   * **不带 `itemKind`** —— 逐条用量只对标准回答与知识库记账(`MetricItemKind` 里没有 history):
+   * 历史问答 90 天就被 TTL 清掉,给它逐条计数只会攒下查不到主人的孤儿键。
    */
-  const goldenControl = (item: MemoryListItem, r: MemoryReplyItem) =>
-    goldenReplyIds.has(r.id) ? (
-      // 已设态 = 方括号金标(与全站徽标同一种形态)。
-      // 外层那圈 24px 高的壳**不是装饰**:它让"按钮 ↔ 徽标"两种状态等高,
-      // 点下去时行高不跳(纯文字徽标只有 ~15px,少了这层高度,列表会抖一下)
-      <span
-        title="该回复已设为标准回答;可在文件夹页取消"
-        style={{
-          height: controlH.inline,
-          display: 'inline-flex',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <Badge tk={tk} tone="golden">
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-            <StarIcon size={11} strokeWidth={2} style={{ fill: 'currentColor' }} />
-            标准回答
-          </span>
-        </Badge>
-      </span>
-    ) : (
-      // 未设态 = **文字指令钮**(第六十四轮降噪):旧版是描边幽灵钮,而它坐在
-      // 回复方框里面 —— 盒子里再套一只描边盒子,一屏下来全是嵌套矩形。
-      // 现在是 `+ 设为标准` 一条指令,悬浮时**反白**(黑底白字):与导航选中、
-      // 面板选中行同一套"高权重 = 反白"语言,也符合终端命令按钮的心智。
-      <button
-        type="button"
-        title="将此问题与回复设为标准回答"
-        disabled={busyReplyId === r.id}
-        onClick={() => void setGolden(item, r.id, r.text)}
-        style={{
-          height: controlH.inline,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          flexShrink: 0,
-          padding: `0 ${spacing.sm}px`,
-          border: 'none',
-          borderRadius: radius.sm,
-          backgroundColor: 'transparent',
-          color: tk.textMuted,
-          fontSize: fontSize.caption,
-          whiteSpace: 'nowrap',
-          cursor: 'pointer',
-          transition: `color ${motion.fast}, background-color ${motion.fast}`,
-        }}
-        onMouseEnter={(e) => {
-          if (busyReplyId === r.id) return
-          e.currentTarget.style.backgroundColor = tk.text
-          e.currentTarget.style.color = tk.bg
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-          e.currentTarget.style.color = tk.textMuted
-        }}
-      >
-        {busyReplyId === r.id ? '设置中…' : '+ 设为标准'}
-      </button>
-    )
+  const fillReply = async (r: MemoryReplyItem) => {
+    try {
+      const resp = await sendMessage<FillInputResponse>({
+        type: 'FILL_INPUT',
+        payload: { text: r.text },
+      })
+      if (resp.payload.success) setMsg({ ok: true, text: '已填充至输入框,发送由人工完成' })
+      else setMsg({ ok: false, text: resp.payload.error ?? '填充失败' })
+    } catch (err) {
+      setMsg({ ok: false, text: `填充失败:${String(err)}` })
+    }
+  }
+
+  /** 光标移动(夹在 [0, len-1]) */
+  const move = (d: number) =>
+    setSelIdx((i) => Math.min(Math.max(i + d, 0), Math.max(0, shown.length - 1)))
+
+  /**
+   * 键盘是一等公民(方向 1 的立身之本)。
+   *
+   * 处理挂在**容器**上而不是输入框上:事件从输入框冒泡上来,于是**一边打字一边按 ↑↓ 也生效** ——
+   * 这正是 fzf / Raycast 的手感。(参考稿的 demo 里 `↑↓` 在输入框聚焦时被跳过,那是 demo 的将就,
+   * 真实工具里"打完字想改选哪一条"是最常见的下一步。)
+   *
+   * 几个键的归属:
+   *  - ↑↓ 移光标(要 `preventDefault`,否则输入框里光标会跳到首尾);
+   *  - ↵ 填充**光标那一行的第一条回复** —— 行是问题、填充单位是回复,
+   *    一条问题下有多条回复时取最新的那条;要填别的用那条自己的 ★/⧉ 所在行点它自己的填充;
+   *  - 1-9 直接把光标跳到第 N 条(不直接填,免得手滑打错数字就填错话术);
+   *  - ⇥ 循环切换分类(Shift+⇥ 反向)。
+   */
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      move(1)
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      move(-1)
+      return
+    }
+    if (e.key === 'Enter') {
+      const it = shown[selIdx]
+      const first = it?.replies[0]
+      if (!first) return
+      e.preventDefault()
+      void fillReply(first)
+      return
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const ids = navItems.map((n) => n.id)
+      const at = ids.indexOf(activeCat)
+      const next = (at + (e.shiftKey ? -1 : 1) + ids.length) % ids.length
+      setActiveCat(ids[next])
+      return
+    }
+    if (/^[1-9]$/.test(e.key)) {
+      const n = Number(e.key) - 1
+      if (n < shown.length) {
+        e.preventDefault()
+        setSelIdx(n)
+      }
+    }
+  }
+
+  const kbd: React.CSSProperties = {
+    border: `1px solid ${tk.border}`,
+    padding: '0 4px',
+    fontSize: fontSize.count,
+    color: tk.textTertiary,
+    marginRight: 3,
+    backgroundColor: tk.bg,
+    fontFamily: 'inherit',
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+    <div
+      onKeyDown={onKeyDown}
+      style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}
+    >
+      {/* 搜索框(用户:「恢复成原来的样子」)—— 回到带放大镜的普通输入框,
+          不再是命令台的 `❯` 提示行。
+          **高度取表单档**(components#SearchInput 现在显式给 controlH.form):
+          标准回答页那排的主钮也是这个高度,于是两页的**导航栏落在同一个 y 上**(用户第 2 条) */}
       <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
 
-      {/* 分类导航在**搜索框下方**(用户:「放在搜索框下方,抽离为独立组件」)。
-          它取代了原来的分区标题 —— 分类从此只有这一个表达处,不再在列表里重复一遍 */}
-      <CategoryNav tk={tk} items={navItems} active={activeCat} onSelect={setActiveCat} />
+      <div style={{ padding: `0 ${spacing.xxl}px` }}>
+        <CategoryNav tk={tk} items={navItems} active={activeCat} onSelect={setActiveCat} />
+      </div>
 
-      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+      {/* 未分类待处理:只读状态,指向设置页(没有操作按钮)。
+          「命中 N / M 条」那一行按用户要求删掉了;这一条是**库内状态**不是筛选结果,
+          单独留着 —— 它原来就独立成行,是被并进统计行的那一个。
+          位置在导航**之后**:放在前面的话,它一出现就把导航往下推,两页又对不齐了 */}
+      {uncategorizedCount > 0 && (
+        <div
+          style={{
+            padding: `0 ${spacing.xxl}px`,
+            fontSize: fontSize.caption,
+            color: tk.textFaint,
+            lineHeight: 1.5,
+          }}
+        >
+          未分类 {uncategorizedCount} 条 · 在设置页点「开始分类全部历史」
+        </div>
+      )}
 
-      {loading && <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>}
+      <div style={{ padding: `0 ${spacing.xxl}px` }}>
+        <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+      </div>
+
+      {loading && (
+        <div style={{ fontSize: fontSize.secondary, color: tk.textMuted, padding: `0 ${spacing.xxl}px` }}>
+          读取中…
+        </div>
+      )}
       {!loading && shown.length === 0 && (
         <EmptyState tk={tk}>
           {items.length === 0 ? (
@@ -317,276 +420,229 @@ export function MemoryListTab({
         </EmptyState>
       )}
 
-      {/* 只读说明行(第五十七轮 Task 5 / spec D8):历史问答 90 天过期,纠错价值低于成本 ——
-          这里只说明状态并指向设置页,不带任何操作按钮 */}
-      {!loading && uncategorizedCount > 0 && (
-        <div style={{ fontSize: fontSize.caption, color: tk.textMuted, lineHeight: 1.5 }}>
-          未分类 {uncategorizedCount} 条 · 在设置页点「开始分类全部历史」
-        </div>
-      )}
-
-      {/* 列表:**平铺**一行一条 —— 分类已由顶部导航表达,这里不再有分区标题与折叠箭头 */}
-      {shown.map((item) => {
+      {/* ── 结果列表:编号行,选中行反白并**就地展开** ───────────────────────── */}
+      {shown.map((item, i) => {
+        const on = i === selIdx
+        const hasGolden = item.replies.some((r) => goldenReplyIds.has(r.id))
         const days = remainingDays(item.questionTs, now, retentionDays)
-        const expanded = !collapsedIds.has(item.id)
-        const toggle = () =>
-          setCollapsedIds((prev) => {
-            const next = new Set(prev)
-            if (next.has(item.id)) next.delete(item.id)
-            else next.add(item.id)
-            return next
-          })
-        // 行容器(第六十四轮):不再借用 Card(row 形态)而是自带**悬浮(选中)态** ——
-        // 浅底 + 左缘 2px 墨条(boxShadow inset,不引起布局位移),与标准回答页同一套
-        // "指针在哪一行"的表达;两页由此共用同一行骨架与同一行状态语言
+        // 反白行上的次要文字:用半透明白叠出层次,而不是再开一种颜色
+        const dim = on ? 'rgba(255,255,255,0.6)' : undefined
         return (
-          <div
-            key={item.id}
-            style={{
-              borderTop: `1px solid ${tk.borderLight}`,
-              padding: `${spacing.md}px 0 ${spacing.sm + 2}px`,
-              transition: `background-color ${motion.fast}, box-shadow ${motion.fast}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = tk.bgSecondary
-              e.currentTarget.style.boxShadow = `inset 2px 0 0 0 ${tk.text}`
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            {/* ── 主行:标题 + 行尾操作列 ─────────────────────────────────────
-                两段式骨架(见 design.ts#listRow 与 DESIGN §七-G):
-                **主行只放"这条是什么"与行尾动作,元信息单独成行**。
-                此前元信息被塞在"标题"下面、同一个 flex 列里,而操作钮浮在这一列之外 ——
-                于是元信息的右端比标题短一截、换行点还随图标列宽度漂移。
-                操作列靠 `flex-start` + `listRow.opsOffsetY` 光学居中到**第一行**文字上:
-                标题占 1 行还是 2 行,动作列都落在同一个 y,跨行才成得了一列 */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.sm }}>
-              <div
-                onClick={toggle}
-                style={{
-                  // 问题 = 这条词条的**标题**,取 semibold。
-                  // (第五十九~六十轮一度改成 regular,理由是"600 只给用来扫的" —— 那条口径没错,
-                  //  但**问题正是"用来扫的"那一行**:翻列表时人扫的就是问题,回复才是内容。
-                  //  用户这一轮的反馈把边界说清楚了:「问题与回复区分不明显」+「标题与词条颜色区分」。)
-                  flex: 1,
-                  minWidth: 0,
-                  cursor: 'pointer',
-                  fontSize: fontSize.body,
-                  fontWeight: fontWeight.semibold,
-                  lineHeight: listRow.titleLineHeight,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {item.question}
-              </div>
-
-              {/* 行尾操作列(删除入口 v2.6.18:在折叠钮左侧;确认条在主行下方)。
-                  整列常驻可见 —— 悬浮才显在本项目里被明确否决过("隐蔽入口不可发现"踩过两次坑) */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  flexShrink: 0,
-                  marginTop: listRow.opsOffsetY,
-                }}
-              >
-              <button
-                type="button"
-                title="删除该问答(需确认)"
-                onClick={() => setConfirmDeleteId(item.id)}
-                style={{
-                  flexShrink: 0,
-                  width: controlH.inline,
-                  height: controlH.inline,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: radius.sm,
-                  backgroundColor: 'transparent',
-                  color: tk.textTertiary,
-                  cursor: 'pointer',
-                  transition: `background-color ${motion.fast}, color ${motion.fast}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = tk.errorBg
-                  e.currentTarget.style.color = tk.errorText
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = tk.textTertiary
-                }}
-              >
-                <TrashIcon size={13} strokeWidth={2.2} />
-              </button>
-
-              <button
-                type="button"
-                title={expanded ? '折叠该问题' : '展开该问题'}
-                aria-expanded={expanded}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  toggle()
-                }}
-                style={{
-                  flexShrink: 0,
-                  width: controlH.inline,
-                  height: controlH.inline,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: radius.sm,
-                  backgroundColor: 'transparent',
-                  color: tk.textTertiary,
-                  cursor: 'pointer',
-                  transition: `background-color ${motion.fast}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = tk.btnHoverBg
-                  e.currentTarget.style.color = tk.text
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = tk.textTertiary
-                }}
-              >
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    transform: expanded ? 'none' : 'rotate(-90deg)',
-                    transition: `transform ${motion.fast}`,
-                  }}
-                >
-                  <ChevronDownIcon size={13} strokeWidth={2.2} />
-                </span>
-              </button>
-              </div>
-            </div>
-
-            {/* ── 元信息行:**通栏**、`·` 分隔、统一字号与颜色 ────────────────
-                用户「10-12 02:12 · 1 条回复 · 剩 30 天紧凑一点」——
-                收紧的是它与标题之间的空白(marginTop 2、行高 1.35),
-                而不是把三项并进标题那一行:那会把标题挤到十几个字就得截断。
-                整行可点(与标题同一动作:展开 / 收起),点击面积不因为拆行而变小 */}
+          <div key={item.id} style={{ borderBottom: `1px solid ${tk.borderLight}` }}>
             <div
-              onClick={toggle}
+              onClick={() => setSelIdx(i)}
               style={{
-                fontSize: fontSize.caption,
-                color: tk.textTertiary,
-                marginTop: 2,
-                lineHeight: listRow.metaLineHeight,
-                fontVariantNumeric: 'tabular-nums',
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacing.lg,
+                height: 34,
+                padding: `0 ${spacing.xxl}px`,
                 cursor: 'pointer',
+                fontSize: fontSize.body,
+                backgroundColor: on ? tk.text : 'transparent',
+                color: on ? tk.bg : tk.textMuted,
+                transition: `background-color ${motion.fast}, color ${motion.fast}`,
+              }}
+              onMouseEnter={(e) => {
+                if (on) return
+                // §四:列表行悬浮 = 浅底 + 左缘 2px 墨条(inset,零位移)
+                e.currentTarget.style.backgroundColor = tk.rowHoverBg
+                e.currentTarget.style.boxShadow = `inset 2px 0 0 0 ${tk.rowHoverBar}`
+              }}
+              onMouseLeave={(e) => {
+                if (on) return
+                e.currentTarget.style.backgroundColor = 'transparent'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
-              {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
-              <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
+              <span
+                style={{
+                  width: 16,
+                  flexShrink: 0,
+                  fontSize: fontSize.count,
+                  color: dim ?? tk.textFaint,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {i + 1}
+              </span>
+              <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.question}
+              </span>
+              {hasGolden && (
+                <span
+                  title="该问题下已有标准回答"
+                  style={{ fontSize: fontSize.count, color: on ? tk.goldenBright : tk.goldenText, flexShrink: 0 }}
+                >
+                  {GLYPH.star}
+                </span>
+              )}
+              {/* 分类退到行尾灰标(方向 1:「它从『入口』降级成『属性』」)。
+                  只有在「全部」视图下才有信息量 —— 已经按某一类筛过时,每行再写一遍类名是纯噪声 */}
+              {activeCat === ALL_CATEGORIES && (
+                <span style={{ fontSize: fontSize.caption, color: dim ?? tk.textFaint, flexShrink: 0 }}>
+                  {catNameOf(item.categoryId)}
+                </span>
+              )}
+              {/* 删除是行级动作,常驻可见(悬浮才显在本项目里被否决过两次)。
+                  **点它必须同时把光标移到这一行** —— 确认条画在"光标那行"的展开块里,
+                  不移光标的话,点非当前行的 ✕ 会 setConfirmDeleteId 而界面上什么都不出现,
+                  看起来就是"点了没反应"(实测踩到)。"对某行动手 = 先选中它"本身也更好懂 */}
+              <IconBtn
+                tk={tk}
+                title="删除该问答(需确认)"
+                onClick={() => {
+                  setSelIdx(i)
+                  setConfirmDeleteId(item.id)
+                }}
+              >
+                {GLYPH.close}
+              </IconBtn>
             </div>
 
-            {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现。
-                第五十一轮改用 ui/components#ConfirmRow —— 与文件夹页同一份实现,
-                原先这里自带一套(字号还落在 `caption + 0.5` 这个被明令禁止的临时值上) */}
-            {confirmDeleteId === item.id && (
-              <div style={{ marginTop: spacing.md }}>
-                <ConfirmRow
-                  tk={tk}
-                  text="删除该问答及其全部回复?"
-                  onOk={() => void deleteQa(item.id)}
-                  onCancel={() => setConfirmDeleteId(null)}
-                />
-              </div>
-            )}
+            {/* ── 元信息:**常驻在问题下方**(用户第 3 条「时间、回复条数、剩余时间放在问题的下方」)。
+                它原来只在展开块里出现 —— 那样"这条还剩几天过期"要选中才看得见,
+                而它恰恰是决定"要不要用这条"的信息之一。
+                左缘与问题文字同线(ROW_TEXT_X),三行(问题 / 元信息 / 回复)共用同一条竖线 */}
+            <div
+              style={{
+                padding: `0 ${spacing.xxl}px 0 ${ROW_TEXT_X}px`,
+                fontSize: fontSize.caption,
+                color: tk.textFaint,
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1.5,
+              }}
+            >
+              {formatTsLocal(item.questionTs)} · {item.replyCount} 条回复 · 剩 {days} 天
+            </div>
 
-            {/* 展开区:回复列表 —— **向里缩一级**,并挂一条 1px 左色条。
-                用户:「记忆中的问题与回复区分也不明显」。
-                此前回复只是"问题下方另起一段灰字",字号差 1px、颜色淡一档 ——
-                在一屏十几条里,那点差别不足以让人看出"这是那条问题的答复"。
-                现在四重区分一起说:缩进(12px)+ 左色条(结构上是引文块)+ 字号(11.5 vs 12.5)
-                + 颜色(灰 vs 纯黑)+ 字重(400 vs 600)。
-                左色条取 `borderLight`(行分隔线那一档)而不是结构线:它是**层级**提示,
-                不该抢过分区标题那根线。 */}
-            {expanded && (
+            {/* ── 选中行就地展开:回复 + 确认行 ────────────────────────────── */}
+            {on && (
               <div
                 style={{
-                  marginTop: spacing.sm,
-                  // 回复 = **一只方框**(v3.0 第四版,照用户给的参考图)——
-                  // 上一版是一条左竖线的引文块,在一屏十几条里仍然偏弱;
-                  // 四边合围之后"哪段是答复、答复到哪儿结束"一眼可见,这正是用户反复提的
-                  // 「问题与回复区分不明显」。描边取 `tk.border`(控件/容器那一档)而不是
-                  // `borderLight`(行分隔线那一档):它是一只盒子,不是又一根分隔线。
-                  border: `1px solid ${tk.border}`,
-                  padding: `${spacing.sm}px ${spacing.sm}px`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: spacing.sm,
+                  backgroundColor: tk.rowHoverBg,
+                  // 左内边距取 **ROW_TEXT_X**:回复的 `›` 与问题文字落在同一条左缘上
+                  //(用户第 3 条「回复居左,和问题的左侧对齐」)。原来是 40px 的魔数,
+                  // 与问题文字那条线差 2px —— 现在由"行内边距 + 序号宽 + 间距"推出来,不会再漂
+                  padding: `${spacing.sm}px ${spacing.xxl}px ${spacing.lg}px ${ROW_TEXT_X}px`,
                 }}
               >
                 {item.replies.length === 0 && (
-                  <div style={{ fontSize: fontSize.secondary, color: tk.textTertiary }}>无回复(未结段)</div>
+                  <div style={{ fontSize: fontSize.secondary, color: tk.textFaint }}>无回复(未结段)</div>
                 )}
-                {item.replies.map((r) => (
+                {item.replies.map((r, j) => (
                   <div
                     key={r.id}
                     style={{
                       display: 'flex',
-                      gap: spacing.sm,
                       alignItems: 'flex-start',
+                      gap: 7,
+                      fontSize: fontSize.secondary,
+                      lineHeight: 1.65,
+                      color: tk.textMuted,
+                      padding: `${spacing.xs}px 0`,
+                      borderTop: j > 0 ? `1px solid ${tk.borderLight}` : 'none',
                     }}
                   >
-                    <div
-                      style={{
-                        flex: 1,
-                        fontSize: fontSize.secondary,
-                        lineHeight: 1.5,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        color: tk.textMuted,
-                      }}
-                    >
+                    <span style={{ color: tk.textFaint, flexShrink: 0 }}>{GLYPH.mark}</span>
+                    <span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {r.text}
-                    </div>
-                    {/* 金标控件:每条回复行内各自携带(2026-09-15 第十八轮用户要求放回
-                        回答条目后方;单/多回复口径统一) */}
-                    {goldenControl(item, r)}
+                    </span>
+                    {/* 每条回复**各自**带两枚图标钮(§五.3 末句:不共享一行按钮) */}
+                    <span style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                      <IconBtn
+                        tk={tk}
+                        active={goldenReplyIds.has(r.id)}
+                        disabled={busyReplyId === r.id}
+                        title={
+                          goldenReplyIds.has(r.id)
+                            ? '已设为标准回答;再点一次取消'
+                            : '将此回复设为标准回答'
+                        }
+                        onClick={() => void toggleGolden(item, r)}
+                      >
+                        {GLYPH.star}
+                      </IconBtn>
+                      <IconBtn tk={tk} title="复制该条回复" onClick={() => void copyReply(r)}>
+                        <CopyIcon size={12} strokeWidth={2} />
+                      </IconBtn>
+                    </span>
                   </div>
                 ))}
+
+                {confirmDeleteId === item.id && (
+                  <div style={{ marginTop: spacing.sm }}>
+                    <ConfirmRow
+                      tk={tk}
+                      text="删除该问答及其全部回复?"
+                      onOk={() => void deleteQa(item.id)}
+                      onCancel={() => setConfirmDeleteId(null)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
         )
       })}
 
-      {/* 分页入口(PM2):显式"加载更早"取代静默截断;载完显示全量口径 */}
+      {/* 分页入口(PM2):显式"加载更早"取代静默截断 */}
       {!loading && hasMore && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: spacing.xs }}>
-          <Btn tk={tk} variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
-            {loadingMore ? '读取中…' : `加载更早(已显示 ${items.length}/${total} 条)`}
-          </Btn>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: `0 ${spacing.xxl}px` }}>
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+            style={{
+              border: `1px solid ${tk.border}`,
+              background: 'transparent',
+              color: tk.textMuted,
+              fontFamily: 'inherit',
+              fontSize: fontSize.caption,
+              padding: '4px 12px',
+              cursor: loadingMore ? 'default' : 'pointer',
+            }}
+          >
+            {loadingMore ? '读取中…' : `加载更早(${items.length}/${total})`}
+          </button>
         </div>
       )}
-      {!loading && !hasMore && items.length > 0 && (
-        <div
-          style={{
-            textAlign: 'center',
-            fontSize: fontSize.caption,
-            color: tk.textTertiary,
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          已显示全部 {total} 条
-        </div>
-      )}
+
+      {/* ── 底部快捷键条:键盘是一等公民,鼠标是备胎 ──────────────────────────
+          sticky bottom:结果一屏放不下时它仍然在 —— 提示条滚走就等于没有提示 */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          display: 'flex',
+          gap: spacing.xxl,
+          padding: `6px ${spacing.xxl}px`,
+          borderTop: `1px solid ${tk.borderStrong}`,
+          backgroundColor: tk.bg,
+          fontSize: fontSize.caption,
+          color: tk.textFaint,
+        }}
+      >
+        <span>
+          <kbd style={kbd}>↑↓</kbd>选择
+        </span>
+        <span>
+          <kbd style={kbd}>↵</kbd>填进聊天框
+        </span>
+        <span>
+          <kbd style={kbd}>1-9</kbd>跳到第 N 条
+        </span>
+        <span>
+          <kbd style={kbd}>⇥</kbd>切分类
+        </span>
+      </div>
     </div>
   )
+}
+
+/** 本地时间戳(MM-DD HH:mm):命令台的行内元信息,不引组件库那份以免多一层依赖 */
+function formatTsLocal(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }

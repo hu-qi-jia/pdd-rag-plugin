@@ -70,17 +70,21 @@ describe('ConfirmRow:警示文案 + 确认/取消', () => {
     expect(span.style.fontSize).not.toBe(`${fontSize.caption + 0.5}px`)
   })
 
-  it('警示文案走 errorText;确认是危险实底、取消是描边幽灵', () => {
+  /**
+   * v3.1 去掉了红色:**警示靠墨色 + 加粗 + `!` 前缀**,危险按钮靠"1px 墨框 → 悬浮转实心墨底"。
+   * 不靠颜色表意 —— 多一种颜色就多一个需要解释的信号,而它并不比加粗更准。
+   */
+  it('警示文案走墨色 + 加粗 + `!`;确认是墨框、取消是描边幽灵', () => {
     const { btns } = render()
     const [ok, cancel] = btns
     const span = container.querySelector('span')!
-    expect(span.style.color).toBe(lightTheme.errorText)
-    // 底色令牌是 rgba(...) —— jsdom 会把它归一化成带空格的 `rgba(r, g, b, a)`,
-    // 与令牌里写的 `rgba(r,g,b,a)` 逐字不等。比较前先去掉空白,
-    // 否则这条断言红的是"字符串里少了个空格",而不是颜色错了
-    const noSpace = (s: string) => s.replace(/\s+/g, '')
-    expect(noSpace(ok.style.backgroundColor)).toBe(noSpace(lightTheme.errorBg))
-    expect(ok.style.color).toBe(lightTheme.errorText)
+    expect(span.style.color).toBe(lightTheme.text)
+    expect(span.style.fontWeight).toBe('600')
+    expect(span.textContent).toContain('!')
+    // 确认 = 墨框描边(不是红底实心)
+    expect(ok.style.backgroundColor).toBe('transparent')
+    expect(ok.style.border).toContain(lightTheme.dangerBorder)
+    expect(ok.style.color).toBe(lightTheme.text)
     expect(cancel.style.backgroundColor).toBe('transparent')
     expect(cancel.style.color).toBe(lightTheme.textMuted)
   })

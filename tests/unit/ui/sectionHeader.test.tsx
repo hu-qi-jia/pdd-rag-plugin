@@ -4,10 +4,11 @@
 //   ①「标题前的竖线删除」—— 第一版的 SectionHeader 是 `▌标题 ────`,那根 3×12 竖标记被删掉。
 //      与"盒子退场"同一条思路:能靠线说清的事就不再叠一枚符号;删掉之后标题文字左缘正好落在
 //      x=0,与它管着的那些行的文字同线,不再需要任何补偿量。
-//   ②「问题分类和问题要区分开」—— 根因不是字号差得不够,而是**整页都是 600**。
-//      分区线随之由 `border`(控件描边档)提到 **`borderStrong`(结构线档)**:
-//      行与行之间画的是 `borderLight` 发丝线,两档深浅差得足够远,
-//      "标题那一行"与"内容行"就有了线重 + 字重两重区分。
+//   ②「问题分类和问题要分开」—— 根因不是字号差得不够,而是**整页都是 600**:
+//      分区标题、问题、标签全用同一档字重,字重就不再携带信息。
+//      现立"600 只给用来扫的、400 给用来读的"这条分工(见 DESIGN §三)。
+//   v3.1 §四把线定成三档且**都是 1px**:外框 borderStrong > 分区线 border > 行分隔 borderLight。
+//   分区标题取**分区线**那一档 —— 结构线只留给窗口外框与页头那种"版面的边"。
 //
 // 这个文件锁的就是这两条 —— 它们是判断"改回旧观感"的唯一依据。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -75,24 +76,28 @@ describe('SectionHeader:标题前不再有竖标记', () => {
 })
 
 describe('SectionHeader:分区线取结构线档(标题与行能被一眼分开)', () => {
-  it('★ 线的颜色是 `borderStrong`,不是控件描边那一档', () => {
+  // v3.1 §四:线分三档且**都是 1px**,靠深浅分档 ——
+  // 外框 borderStrong > 分区线 border > 行分隔 borderLight。分区标题取**分区线**这一档,
+  // 结构线只留给窗口外框与页头那种"版面的边"。
+  it('★ 线的颜色是**分区线档**(`border`),不是外框那一档', () => {
     render({ tk: lightTheme, title: '物流 · 3' })
-    expect(rule().style.backgroundColor).toBe(lightTheme.borderStrong)
-    expect(rule().style.backgroundColor).not.toBe(lightTheme.border)
+    expect(rule().style.backgroundColor).toBe(lightTheme.border)
+    expect(rule().style.backgroundColor).not.toBe(lightTheme.borderStrong)
   })
 
-  it('两主题各自取各自的结构线(深色下是近白,不是黑)', () => {
+  it('两主题各自取各自的分区线', () => {
     render({ tk: darkTheme, title: '物流 · 3' })
-    expect(rule().style.backgroundColor).toBe(darkTheme.borderStrong)
+    expect(rule().style.backgroundColor).toBe(darkTheme.border)
   })
 
-  it('结构线与行分隔线必须是两个色 —— 同色就等于没有层级', () => {
+  it('三档线两两不同色 —— 同色就等于没有层级', () => {
     for (const tk of [lightTheme, darkTheme]) {
-      expect(tk.borderStrong, '结构线与行分隔线撞色了').not.toBe(tk.borderLight)
+      expect(tk.borderStrong, '外框与分区线撞色').not.toBe(tk.border)
+      expect(tk.border, '分区线与行分隔线撞色').not.toBe(tk.borderLight)
     }
   })
 
-  it('标题走分组标题档(13.5 / 600),比行内容高一档', () => {
+  it('标题走分组标题档(页面名那一档 / 600),比行内容高一档', () => {
     render({ tk: lightTheme, title: '物流 · 3' })
     expect(titleSpan().style.fontSize).toBe(`${formType.groupTitle.size}px`)
     expect(titleSpan().style.fontWeight).toBe(String(formType.groupTitle.weight))

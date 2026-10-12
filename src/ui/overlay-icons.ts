@@ -14,12 +14,18 @@
  */
 import { controlH, size } from './design'
 
-/** 图标渲染边长(与 popup 行内图标钮同档;钮本身取 controlH.inline)。
- *  第五十一轮起取自 `design.size.icon` —— 与 popup 的 FoldersTab.ICON_SIZE 同源。 */
+/**
+ * 图标渲染边长(v3.1 §五.3:20px 钮 × 12px 图标)。
+ *
+ * 真源是 `design.size.icon` —— popup 侧的图标一律走 `ui/components#IconBtn`,
+ * 它读的是同一对令牌(`size.icon` / `size.iconBtn`)。两个渲染栈(React / 纯 DOM 字符串)
+ * 共用档位,但**不再各自导出一个 ICON_SIZE 常量**:FoldersTab 那个已在 v3.1 删掉,
+ * 这里保留是因为内容脚本不引 React,需要字面量拼 SVG。
+ */
 export const ICON_SIZE = size.icon
 
 /** 图标钮边长:与 popup 行悬浮图标钮严格同档(等高铁律:同行控件同档) */
-export const ICON_BTN_SIZE = controlH.inline
+export const ICON_BTN_SIZE = size.iconBtn
 
 /** lucide star —— 未设标准回答态(描边星) */
 const STAR_PATH =

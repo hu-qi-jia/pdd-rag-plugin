@@ -423,8 +423,10 @@ export function KnowledgeTab({
             borderRadius: radius.md,
             fontSize: fontSize.secondary,
             lineHeight: 1.55,
-            backgroundColor: tk.errorBg,
-            color: tk.errorText,
+            // v3.1 没有红色:需要动手的状态靠**墨色 + 加粗 + `!`**表达
+            backgroundColor: tk.noticeBg,
+            color: tk.text,
+            fontWeight: fontWeight.semibold,
             wordBreak: 'break-word',
           }}
         >
@@ -502,7 +504,9 @@ export function KnowledgeTab({
                     <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>向量生成中</span>
                   )}
                   {!disabled && k.hasEmbedding === -1 && (
-                    <span style={{ fontSize: fontSize.caption, color: tk.errorText }}>嵌入失败,后台将自动重试</span>
+                    <span style={{ fontSize: fontSize.caption, color: tk.text, fontWeight: fontWeight.semibold }}>
+                      ! 嵌入失败,后台将自动重试
+                    </span>
                   )}
                   {/* 被用次数(v0.16):文档块也能看出哪一段真被填过;0 次不显示(免得满屏灰标) */}
                   {(itemUsage[k.id] ?? 0) > 0 && (

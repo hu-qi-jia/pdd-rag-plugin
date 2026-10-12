@@ -25,6 +25,7 @@ export {
   Search as SearchIcon,
   Plus as PlusIcon,
   Copy as CopyIcon,
+  ArrowRight as MoveRightIcon,
   Check as CheckIcon,
   Pencil as PencilIcon,
   Sparkles as SparklesIcon,

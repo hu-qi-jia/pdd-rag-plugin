@@ -13,9 +13,10 @@ import {
 } from '../../../src/ui/overlay-icons'
 
 describe('overlay-icons:覆盖层 SVG 图标字面量', () => {
-  it('尺寸与 popup 图标钮同档(13px 图标 / 24px 钮)', () => {
-    expect(ICON_SIZE).toBe(13)
-    expect(ICON_BTN_SIZE).toBe(24)
+  // v3.1 §五.3:全站图标钮统一 20×20,图标 12px —— 覆盖层与 popup 同档
+  it('尺寸与 popup 图标钮同档(12px 图标 / 20px 钮)', () => {
+    expect(ICON_SIZE).toBe(12)
+    expect(ICON_BTN_SIZE).toBe(20)
     for (const icon of [STAR_ICON, STAR_FILLED_ICON, COPY_ICON, LOADER_ICON]) {
       expect(icon).toContain(`width="${ICON_SIZE}" height="${ICON_SIZE}"`)
       expect(icon).toContain('viewBox="0 0 24 24"')

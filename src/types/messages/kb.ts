@@ -58,5 +58,10 @@ export interface SetKbSizeTableRequest {
 
 export interface SetKbSizeTableResponse {
   type: 'SET_KB_SIZE_TABLE_RESPONSE'
-  payload: { success: boolean; error?: string }
+  payload: {
+    success: boolean
+    error?: string
+    /** 标记新尺码表时被顶替掉的旧尺码表 docId(v3.0:同一时刻只有一份) */
+    replaced?: string
+  }
 }

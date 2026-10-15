@@ -304,6 +304,36 @@ describe('面板回带分类', () => {
     expect(bare.categorySource).toBeUndefined()
   })
 
+  it('★ 机器打标的概率也回带 —— 缺它标准回答卡就标不出「低置信」', async () => {
+    // categoryConfidence 长期只写不读:DB 里有、DTO 里没有,UI 于是无从判断
+    // "哪条判得虚"。这条钉住它从库一路走到面板,不归一、不丢。
+    const { getPanelData, getMemoryList, db } = await freshPanel()
+    await db.goldens.add(
+      makeGolden({
+        id: 'g-low',
+        categoryId: 'preset:size',
+        categorySource: 'jev',
+        categoryConfidence: 0.23,
+      }),
+    )
+    await db.goldens.add(
+      makeGolden({ id: 'g-manual', categoryId: 'preset:size', categorySource: 'manual' }),
+    )
+    await db.addQaRecord(
+      makeQa({ id: 'qa-low', categoryId: 'preset:size', categorySource: 'jev', categoryConfidence: 0.31 }),
+    )
+
+    const panel = await getPanelData({ type: 'GET_PANEL_DATA' })
+    expect(panel.goldens.find((g) => g.id === 'g-low')!.categoryConfidence).toBe(0.23)
+    // 人工路径不写概率 → DTO 里也不该凭空空补一个值
+    expect(panel.goldens.find((g) => g.id === 'g-manual')!.categoryConfidence).toBeUndefined()
+
+    const { items } = await getMemoryList({ type: 'GET_MEMORY_LIST' })
+    const qa = items.find((i) => i.id === 'qa-low')!
+    expect(qa.categorySource).toBe('jev')
+    expect(qa.categoryConfidence).toBe(0.31)
+  })
+
   it('getPanelData 回带类型表(按 position 升序,未分类在后)', async () => {
     const { getPanelData, db } = await freshPanel()
     await db.ensurePresetCategories()

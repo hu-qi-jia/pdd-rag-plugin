@@ -4,7 +4,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toggle } from '../../../src/ui/components'
-import { lightTheme } from '../../../src/ui/theme'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -25,7 +24,7 @@ afterEach(() => {
 function renderToggle(onChange: (v: boolean) => void) {
   act(() => {
     root.render(
-      <Toggle tk={lightTheme} label="自动捕获" desc="说明文字" checked={false} onChange={onChange} />,
+      <Toggle label="自动捕获" desc="说明文字" checked={false} onChange={onChange} />,
     )
   })
 }
@@ -45,10 +44,13 @@ describe('Toggle:布局与滑块契约(2026-09-15 用户要求开关右置)', ()
     expect(knob.style.left).toBe('')
   })
 
-  it('标签加粗(semibold,2026-09-15 第十七轮用户要求)', () => {
+  it('标签是常规字重(v4.0:iOS 设置页的行标题不加粗,靠字号与颜色分层)', () => {
     renderToggle(vi.fn())
-    const label = Array.from(container.querySelectorAll('span')).find((el) => el.textContent === '自动捕获')
-    expect(label?.style.fontWeight).toBe('600')
+    const label = Array.from(container.querySelectorAll('span')).find(
+      (el) => el.textContent === '自动捕获',
+    )
+    // 不加粗:字重由 CSS/继承决定,组件不设内联 fontWeight
+    expect(label?.style.fontWeight).toBe('')
   })
 })
 

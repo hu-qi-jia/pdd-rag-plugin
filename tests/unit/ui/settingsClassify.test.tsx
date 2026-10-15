@@ -22,7 +22,7 @@ const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { SettingsTab } = await import('../../../src/popup/SettingsTab')
-const { lightTheme } = await import('../../../src/ui/theme')
+
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -168,7 +168,7 @@ async function renderSettings(settings: PddSettings) {
     return { type: 'UPDATE_SETTINGS_RESPONSE', payload: { settings: current } }
   })
   await act(async () => {
-    root.render(<SettingsTab tk={lightTheme} onDataChanged={vi.fn()} />)
+    root.render(<SettingsTab onDataChanged={vi.fn()} />)
   })
   await flush()
 }
@@ -239,6 +239,19 @@ describe('设置页 · 问题分类区', () => {
     expect(inputByPlaceholder('jev-latest').value).toBe('jev-latest')
   })
 
+  it('★ 开关的说明必须交代「每次检索也会外发」—— 不能只说打标', async () => {
+    // 这一个开关同时管两件量级差很远的事:
+    //   ① 打标 —— 每条记录一次;② 检索路由 —— **每次搜索**一次。
+    // v3.0 的"做减法"把 desc 收缩成只说①,于是在不知情下把②一起接受了。
+    // 这条断言钉住知情那一半,防止下一次"做减法"又把它删掉。
+    await renderSettings(DEFAULT_SETTINGS)
+    const text = classifySwitch().closest('.pddcs-srow')?.textContent ?? ''
+    expect(text).toContain('每次搜索')
+    expect(text).toContain('发往接口')
+    // 打标那一半也不能被挤掉 —— 两个都写全才算说清
+    expect(text).toContain('自动归类')
+  })
+
   it('★ 开着但没填全 → 一行红字说清"不会生效",且不发任何请求', async () => {
     await renderSettings({
       ...DEFAULT_SETTINGS,
@@ -254,7 +267,7 @@ describe('设置页 · 问题分类区', () => {
       (e) => e.children.length === 0 && e.textContent?.includes('尚未填全') && e.textContent?.includes('已开启'),
     )
     expect(hint).toBeTruthy()
-    expect(colorIs(hint!, lightTheme.errorText)).toBe(true)
+    expect(hint!.style.color).toBe('var(--pddcs-danger)')
 
     // ADR-0007 零远程:渲染过程中(未点击任何测试按钮)不得发出 TEST_JEV
     expect(sent.some((m) => m.type === 'TEST_JEV')).toBe(false)

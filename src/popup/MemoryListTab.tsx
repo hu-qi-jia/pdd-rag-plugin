@@ -1,42 +1,64 @@
 /**
- * 记忆列表页(P3,设计文档 §7):问答记录流,展开看回复;
- * 操作:设为金标准(按回复)/ 删除单条 / 关键词筛选 / 剩余保留天数标注。
+ * 记忆页(v4.0「Codex × iOS · 黑灰白」)
+ *
+ * 结构:搜索框 → 分类导航(pill,滚轮横移)→ 折叠问题行 → 点击展开回复列表。
+ *
+ * 四处与 v2.6 的根本差别:
+ *
+ *  ① **分类从页内分区标题改为顶部导航栏**。v2.6 每个问题类型占一个可折叠卡片分区,
+ *     一屏里"类型标题 + 卡片边距"吃掉近一半高度;"现在在看哪一类"要靠翻到分区标题才
+ *     知道。改为导航后,分类是**一行常驻、当前项反白**的状态,而列表回到纯粹的行流。
+ *
+ *  ② **问题行默认折叠**。v2.6 默认展开全部回复,一屏只能看两三个问题;而这一页的
+ *     主用途是"找到能用的那条回复",先扫问题再展开,比先展开再扫快得多。
+ *
+ *  ③ **金标可设可取消**。v2.6 已设标准的回复会变成一枚**死的琥珀徽标**,
+ *     `title` 写着「可在文件夹页取消」—— 用户必须记住"取消要去另一页"才用得了。
+ *     现在 ★ 是双向开关(实心 = 已设,再点即取消)。
+ *
+ *  ④ **行是 div[role=button] 而不是 `<button>`**(v4.1):行尾常驻着删除图标与折叠指示
+ *     两枚真的 `<button>`,而按钮套按钮是非法 HTML —— 浏览器会把内层挪出去、点击散架。
+ *     键盘可达性由 `tabIndex` + Enter/Space 补齐(见下方行的 onKeyDown)。
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
   AddGoldenResponse,
+  DeleteGoldenResponse,
   DeleteQaResponse,
   GetMemoryListResponse,
   MemoryListItem,
   MemoryReplyItem,
   PanelCategory,
 } from '../types/messages'
-import { filterQaRecords, groupByCategory, remainingDays } from './logic'
-import { MAX_GOLDENS_PER_QUESTION, UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
+import { ALL_CATEGORY_ID, catNavItems, filterByCategory, filterQaRecords } from './logic'
+import {
+  LOW_CONFIDENCE_LINE,
+  MAX_GOLDENS_PER_QUESTION,
+  UNCATEGORIZED_CATEGORY_ID,
+  isLowConfidenceCategory,
+} from '../shared/constants'
 import {
   Btn,
-  Card,
+  CatNav,
   ConfirmRow,
   EmptyState,
+  IconBtn,
+  List,
   Notice,
   SearchInput,
+  Tag,
   formatTs,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, formType, fontWeight, motion, radius, semantic, spacing } from '../ui/design'
-import { ChevronDownIcon, StarIcon, TrashIcon } from '../ui/icons'
+import { fontSize, size, spacing } from '../ui/design'
+import { ChevronDownIcon, CopyIcon, LoaderIcon, StarIcon, TrashIcon } from '../ui/icons'
 
 export function MemoryListTab({
-  tk,
-  retentionDays,
   categories,
   onDataChanged,
 }: {
-  tk: ThemeTokens
-  retentionDays: number
-  /** 问题类型表(来源:GET_STATS);列表据此分区。不应由本页签自行拉取 */
+  /** 问题类型表(来源:GET_STATS);分类导航据此产出。不应由本页签自行拉取 */
   categories: PanelCategory[]
   onDataChanged: () => Promise<void> | void
 }) {
@@ -46,17 +68,15 @@ export function MemoryListTab({
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [keyword, setKeyword] = useState('')
-  // 默认全部展开(问题+回复直接可见);记录用户手动折叠的条目
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+  /** 选中的分类;默认「全部」 */
+  const [activeCat, setActiveCat] = useState<string>(ALL_CATEGORY_ID)
+  /** 展开中的问题 id —— **单展开**(展开另一行自动收起上一行),避免一屏里到处是半开的块 */
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
-  // 「设置标准回答」的行内即时反馈:请求中
+  /** 星标请求在途的回复 id(设与取消共用:同一时刻只有一条在动) */
   const [busyReplyId, setBusyReplyId] = useState<string | null>(null)
-  // 分区折叠态(第五十七轮 Task 5):未分类组默认折叠,其余组默认展开(不在集合里)
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    () => new Set([UNCATEGORIZED_CATEGORY_ID]),
-  )
 
   const applyPage = useCallback(
     (p: GetMemoryListResponse['payload'], append: boolean) => {
@@ -106,83 +126,100 @@ export function MemoryListTab({
     void load()
   }, [load])
 
-  const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
   const now = Date.now()
-
-  // 分区(第五十七轮 Task 5):按问题类型分桶,未分类恒最后;类型表来自 GET_STATS,本页签不自拉
-  const groups = useMemo(() => groupByCategory(shown, categories), [shown, categories])
-  // 只读说明行取**已加载全量**口径(不随关键词筛选变动):它描述的是库内状态,不是当前筛选
-  const uncategorizedCount = useMemo(
-    () =>
-      groupByCategory(items, categories).find(
-        (g) => g.category.id === UNCATEGORIZED_CATEGORY_ID,
-      )?.items.length ?? 0,
-    [items, categories],
+  // 口径链:关键词筛 → 导航计数(基于筛后结果)→ 按选中分类再切一刀。
+  // 三步都是纯函数,组合关系写在明面上(search 改变分布、分类改变可见集)
+  const shown = useMemo(() => filterQaRecords(items, keyword), [items, keyword])
+  const navItems = useMemo(() => catNavItems(shown, categories), [shown, categories])
+  const visible = useMemo(
+    () => filterByCategory(shown, activeCat, categories),
+    [shown, activeCat, categories],
   )
-  const toggleGroup = (id: string) =>
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
 
-  // 持久金标徽标(2026-09-15 PM1):从数据派生(GET_MEMORY_LIST 按 goldens.sourceReplyId
-  // 回带 goldenId),不再是会话级 state —— 重开 popup、于文件夹页取消后都如实反映库内状态
-  const goldenReplyIds = useMemo(() => {
-    const s = new Set<string>()
-    for (const it of items) for (const r of it.replies) if (r.goldenId) s.add(r.id)
-    return s
-  }, [items])
+  /** 某个问题下是否已有回复被设为标准(决定行尾那枚常显的 ★) */
+  const hasGolden = useCallback(
+    (item: MemoryListItem): boolean => item.replies.some((r) => r.goldenId),
+    [],
+  )
+
+  const toggleExpand = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id))
+    setConfirmDeleteId(null)
+  }
+
+  // ─── 金标:设 / 取消(v3.0 双向)────────────────────────────────────────────
+
+  const addGolden = async (item: MemoryListItem, replyId: string, text: string) => {
+    const resp = await sendMessage<AddGoldenResponse>({
+      type: 'ADD_GOLDEN',
+      payload: {
+        question: item.question,
+        answer: text,
+        sourceRecordId: item.id,
+        sourceReplyId: replyId,
+      },
+    })
+    const p = resp.payload
+    if (p.error) return setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
+    if (p.limitReached) {
+      return setMsg({
+        ok: false,
+        text: `该问题已有 ${p.count} 条标准回答(上限 ${MAX_GOLDENS_PER_QUESTION} 条),请先取消一条`,
+      })
+    }
+    setMsg(
+      p.exists
+        ? { ok: true, text: '该回复已是该问题的标准回答,未重复创建' }
+        : {
+            ok: true,
+            text: `已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''},后台将自动向量化`,
+          },
+    )
+  }
 
   /**
-   * 设为标准回答。
-   * 2026-09-15 用户反馈「点击无效、没有反应」真因:写入其实成功(goldenCount +1),
-   * 但反馈只有列表顶部一条 Notice,列表一长就在视口外;且头部统计没有刷新、
-   * 列表本身也不会变化 → 界面看上去毫无动静。现补三重可见反馈:
-   *   ① 按钮原位变「设置中…」→「已设为标准回答」(最贴近点击点的反馈);
-   *   ② 头部统计立即刷新(标准回答 N);
-   *   ③ Notice(已改为吸附在滚动区顶部)。
+   * 取消标准回答。
+   *
+   * 这条路径 v2.6 在记忆页**不存在** —— 已设之后那枚徽标是死的,用户只能去标准回答页
+   * 找到同一条再删。后端 `DELETE_GOLDEN` 早就有了(标准回答页在用),这里接上即可。
    */
-  const setGolden = async (item: MemoryListItem, replyId: string, text: string) => {
-    setBusyReplyId(replyId)
+  const removeGolden = async (goldenId: string) => {
+    const resp = await sendMessage<DeleteGoldenResponse>({
+      type: 'DELETE_GOLDEN',
+      payload: { id: goldenId },
+    })
+    if (resp.payload.success) {
+      setMsg({ ok: true, text: '已取消该条标准回答,历史记录不受影响' })
+    } else {
+      setMsg({ ok: false, text: `取消失败:${resp.payload.error ?? '未知错误'}` })
+    }
+  }
+
+  /**
+   * ★ 的双向切换。请求在途时图标原地转圈(与聊天页面板同一套反馈语言)——
+   * 列表一长,顶部那条 Notice 会在视口外,而这一页的"点击后毫无动静"是踩过的坑。
+   */
+  const toggleGolden = async (item: MemoryListItem, r: MemoryReplyItem) => {
+    setBusyReplyId(r.id)
     try {
-      const resp = await sendMessage<AddGoldenResponse>({
-        type: 'ADD_GOLDEN',
-        payload: {
-          question: item.question,
-          answer: text,
-          sourceRecordId: item.id,
-          sourceReplyId: replyId,
-        },
-      })
-      const p = resp.payload
-      if (p.error) {
-        setMsg({ ok: false, text: `设置标准回答失败:${p.error}` })
-        return
-      }
-      if (p.limitReached) {
-        setMsg({
-          ok: false,
-          text: `该问题已有 ${p.count} 条标准回答(上限 ${MAX_GOLDENS_PER_QUESTION} 条),请先在文件夹页取消一条`,
-        })
-        return
-      }
-      setMsg(
-        p.exists
-          ? { ok: true, text: '该回复已是该问题的标准回答,未重复创建' }
-          : {
-              ok: true,
-              text: `已设为标准回答${p.count ? `(${p.count}/${MAX_GOLDENS_PER_QUESTION})` : ''},后台将自动向量化`,
-            },
-      )
-      // 库内已写入 sourceReplyId → 重新拉取列表,徽标由数据派生持久生效
+      if (r.goldenId) await removeGolden(r.goldenId)
+      else await addGolden(item, r.id, r.text)
+      // 库内已变 → 重拉列表,★ 由数据派生(不是会话级 state)
       await load()
       await onDataChanged()
     } catch (err) {
-      setMsg({ ok: false, text: `设置标准回答失败:${String(err)}` })
+      setMsg({ ok: false, text: `操作失败:${String(err)}` })
     } finally {
       setBusyReplyId(null)
+    }
+  }
+
+  const copyReply = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setMsg({ ok: true, text: '已复制到剪贴板' })
+    } catch {
+      setMsg({ ok: false, text: '复制失败' })
     }
   }
 
@@ -205,339 +242,209 @@ export function MemoryListTab({
     setConfirmDeleteId(null)
   }
 
-  /**
-   * 回复的金标控件(第十九轮降权重设计):已设 → 琥珀 ★ 徽标;未设 → mini 幽灵钮。
-   * 原 Btn primary(黑底白字 body 字号,~100px)逐行重复时视觉权重压过内容区;
-   * 降为 caption 字号 + 细边幽灵钮(≈74px)保留文字可发现性,占宽前后一致,
-   * 点击变徽标无布局跳动。纯图标方案否决:本项目两次踩"隐蔽入口不可发现"坑。
-   */
-  const goldenControl = (item: MemoryListItem, r: MemoryReplyItem) =>
-    goldenReplyIds.has(r.id) ? (
-      <span
-        title="该回复已设为标准回答;可在文件夹页取消"
-        style={{
-          height: controlH.inline,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          flexShrink: 0,
-          padding: `0 ${spacing.md}px`,
-          borderRadius: radius.sm,
-          backgroundColor: semantic.goldenBg,
-          color: semantic.golden,
-          fontSize: fontSize.caption,
-          fontWeight: fontWeight.medium,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <StarIcon size={11} strokeWidth={2} style={{ fill: 'currentColor' }} />
-        标准回答
-      </span>
-    ) : (
-      <button
-        type="button"
-        title="将此问题与回复设为标准回答"
-        disabled={busyReplyId === r.id}
-        onClick={() => void setGolden(item, r.id, r.text)}
-        style={{
-          height: controlH.inline,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          flexShrink: 0,
-          padding: `0 ${spacing.md}px`,
-          borderRadius: radius.sm,
-          border: `1px solid ${tk.inputBorder}`,
-          backgroundColor: 'transparent',
-          color: tk.textMuted,
-          fontSize: fontSize.caption,
-          whiteSpace: 'nowrap',
-          cursor: 'pointer',
-          transition: `color ${motion.fast}, border-color ${motion.fast}, background-color ${motion.fast}`,
-        }}
-        onMouseEnter={(e) => {
-          if (busyReplyId === r.id) return
-          e.currentTarget.style.color = tk.accent
-          e.currentTarget.style.borderColor = tk.accent
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = tk.textMuted
-          e.currentTarget.style.borderColor = tk.inputBorder
-        }}
-      >
-        <StarIcon size={11} strokeWidth={2} />
-        {busyReplyId === r.id ? '设置中…' : '设为标准'}
-      </button>
-    )
+  const uncategorizedCount = navItems.find((n) => n.id === UNCATEGORIZED_CATEGORY_ID)?.count ?? 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
-      <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
+    <div>
+      {/* 顶部控件区:只有控件内缩 16px,列表本身通铺到边缘 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: spacing.xl,
+          padding: `${spacing.xxl}px ${spacing.xxl}px 0`,
+        }}
+      >
+        <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索历史问题" />
+        <CatNav items={navItems} value={activeCat} onChange={setActiveCat} />
+      </div>
 
-      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+      <Notice msg={msg} onDismiss={() => setMsg(null)} />
 
-      {loading && <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>}
-      {!loading && shown.length === 0 && (
-        <EmptyState tk={tk}>
+      {loading && (
+        <div style={{ fontSize: fontSize.sub, color: 'var(--pddcs-text-tertiary)', padding: spacing.xxl }}>
+          读取中…
+        </div>
+      )}
+
+      {/* 未分类说明行:只在**选中未分类且确有存量**时出现。计数已经在导航上,
+          常驻版等于把同一个数字说两遍,还把列表往下压 */}
+      {!loading && activeCat === UNCATEGORIZED_CATEGORY_ID && uncategorizedCount > 0 && (
+        <div
+          style={{
+            fontSize: fontSize.cap,
+            color: 'var(--pddcs-text-tertiary)',
+            lineHeight: 1.5,
+            padding: `${spacing.md}px ${spacing.xxl}px`,
+          }}
+        >
+          未分类条目可在 设置 · 问题分类 · 开始分类全部历史 里批量补分类
+        </div>
+      )}
+
+      {!loading && visible.length === 0 && (
+        <EmptyState>
           {items.length === 0 ? (
             <>
               暂无记录
               <br />
               在聊天页与买家对话后将自动捕获
             </>
-          ) : (
+          ) : shown.length === 0 ? (
             '没有匹配的问题'
+          ) : (
+            '该分类下没有问题'
           )}
         </EmptyState>
       )}
 
-      {/* 只读说明行(第五十七轮 Task 5 / spec D8):历史问答 90 天过期,纠错价值低于成本 ——
-          这里只说明状态并指向设置页,不带任何操作按钮 */}
-      {!loading && uncategorizedCount > 0 && (
-        <div style={{ fontSize: fontSize.caption, color: tk.textMuted, lineHeight: 1.5 }}>
-          未分类 {uncategorizedCount} 条 · 在设置页点「开始分类全部历史」
-        </div>
-      )}
-
-      {groups.map((group) => {
-        const collapsed = collapsedGroups.has(group.category.id)
-        return (
-          <Card
-            key={group.category.id}
-            tk={tk}
-            style={{ padding: `${spacing.lg}px ${spacing.lg}px`, gap: spacing.md }}
-          >
-            {/* 分区标题:可折叠(未分类默认折叠)。承载「名称 · 条数」 */}
-            <button
-              type="button"
-              aria-expanded={!collapsed}
-              onClick={() => toggleGroup(group.category.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: spacing.sm,
-                width: '100%',
-                padding: 0,
-                border: 'none',
-                background: 'transparent',
-                color: tk.text,
-                fontSize: formType.groupTitle.size,
-                fontWeight: formType.groupTitle.weight,
-                fontFamily: 'inherit',
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <span>{`${group.category.name} · ${group.items.length}`}</span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  color: tk.textTertiary,
-                  transform: collapsed ? 'rotate(-90deg)' : 'none',
-                  transition: `transform ${motion.fast}`,
-                }}
-              >
-                <ChevronDownIcon size={13} strokeWidth={2.2} />
-              </span>
-            </button>
-
-            {!collapsed &&
-              group.items.map((item) => {
-        const days = remainingDays(item.questionTs, now, retentionDays)
-        const expanded = !collapsedIds.has(item.id)
-        const toggle = () =>
-          setCollapsedIds((prev) => {
-            const next = new Set(prev)
-            if (next.has(item.id)) next.delete(item.id)
-            else next.add(item.id)
-            return next
-          })
-        return (
-          <Card key={item.id} tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: 0 }}>
-            {/* 问题行:问题与元信息居左,折叠按钮移到行尾(2026-09-15 用户要求);整行可点 */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.sm }}>
-              <div onClick={toggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+      {!loading && visible.length > 0 && (
+        <List>
+          {visible.map((item) => {
+            const expanded = expandedId === item.id
+            return (
+              // 发丝线挂在**外层**:展开时它自然落到展开区的下缘,
+              // 收起时落到问题行的下缘 —— 一处声明,两种形态都对
+              <div key={item.id} className="pddcs-hair">
+                {/* 折叠行两行:问题在上;时间与回复条数在下,缩进到与问题文字同一条竖线 */}
+                {/* 行是 div + role="button" 而**不是** <button>:行尾有两枚真正的
+                    <button>(删除 / 折叠指示),而按钮里套按钮是非法 HTML ——
+                    浏览器会把内层那个挪出去,点击行为随之散架 */}
                 <div
-                  style={{
-                    fontSize: fontSize.body,
-                    fontWeight: fontWeight.semibold,
-                    lineHeight: 1.45,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
+                  role="button"
+                  tabIndex={0}
+                  className="pddcs-qrow"
+                  aria-expanded={expanded}
+                  title={item.question}
+                  onClick={() => toggleExpand(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleExpand(item.id)
+                    }
                   }}
                 >
-                  {item.question}
-                </div>
-                <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
-                  {formatTs(item.questionTs)} · {item.replyCount} 条回复 ·{' '}
-                  <span style={{ color: days <= 7 ? tk.errorText : undefined }}>剩 {days} 天</span>
-                </div>
-              </div>
-
-              {/* 删除入口(第十八轮):折叠钮左侧的垃圾桶图标钮;确认条在问题行下方 */}
-              <button
-                type="button"
-                title="删除该问答(需确认)"
-                onClick={() => setConfirmDeleteId(item.id)}
-                style={{
-                  flexShrink: 0,
-                  width: controlH.inline,
-                  height: controlH.inline,
-                  marginTop: 1,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: radius.sm,
-                  backgroundColor: 'transparent',
-                  color: tk.textTertiary,
-                  cursor: 'pointer',
-                  transition: `background-color ${motion.fast}, color ${motion.fast}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = tk.errorBg
-                  e.currentTarget.style.color = tk.errorText
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = tk.textTertiary
-                }}
-              >
-                <TrashIcon size={13} strokeWidth={2.2} />
-              </button>
-
-              <button
-                type="button"
-                title={expanded ? '折叠该问题' : '展开该问题'}
-                aria-expanded={expanded}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  toggle()
-                }}
-                style={{
-                  flexShrink: 0,
-                  width: controlH.inline,
-                  height: controlH.inline,
-                  marginTop: 1,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: radius.sm,
-                  backgroundColor: 'transparent',
-                  color: tk.textTertiary,
-                  cursor: 'pointer',
-                  transition: `background-color ${motion.fast}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = tk.btnHoverBg
-                  e.currentTarget.style.color = tk.text
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = tk.textTertiary
-                }}
-              >
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    transform: expanded ? 'none' : 'rotate(-90deg)',
-                    transition: `transform ${motion.fast}`,
-                  }}
-                >
-                  <ChevronDownIcon size={13} strokeWidth={2.2} />
-                </span>
-              </button>
-            </div>
-
-            {/* 删除确认条(第十八轮):点问题行垃圾桶图标后原位出现。
-                第五十一轮改用 ui/components#ConfirmRow —— 与文件夹页同一份实现,
-                原先这里自带一套(字号还落在 `caption + 0.5` 这个被明令禁止的临时值上) */}
-            {confirmDeleteId === item.id && (
-              <div style={{ marginTop: spacing.md }}>
-                <ConfirmRow
-                  tk={tk}
-                  text="删除该问答及其全部回复?"
-                  onOk={() => void deleteQa(item.id)}
-                  onCancel={() => setConfirmDeleteId(null)}
-                />
-              </div>
-            )}
-
-            {/* 展开区:回复列表(与问题文字同左基线,不再给折叠钮留缩进) */}
-            {expanded && (
-              <div
-                style={{
-                  marginTop: spacing.md,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: spacing.md,
-                }}
-              >
-                {item.replies.length === 0 && (
-                  <div style={{ fontSize: fontSize.secondary, color: tk.textTertiary }}>无回复(未结段)</div>
-                )}
-                {item.replies.map((r) => (
-                  <div
-                    key={r.id}
-                    style={{
-                      borderTop: `1px solid ${tk.separator}`,
-                      paddingTop: spacing.md,
-                      display: 'flex',
-                      gap: spacing.md,
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <div
-                      style={{
-                        flex: 1,
-                        fontSize: fontSize.secondary,
-                        lineHeight: 1.55,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        color: tk.textMuted,
+                  <span className="line1">
+                    <span className="q">{item.question}</span>
+                    {hasGolden(item) && (
+                      <span className="star" title="已设标准回答">
+                        <StarIcon size={size.icon} strokeWidth={2} style={{ fill: 'currentColor' }} />
+                      </span>
+                    )}
+                    {/* 删除入口:图标常驻在问题后方(不放在展开区里 —— 那是"要先展开才能删",
+                        多一步)。点它只出确认条,不直接删 */}
+                    <IconBtn
+                      title="删除该问答(需确认)"
+                      className="pddcs-iconbtn-danger"
+                      onClick={() => {
+                        setExpandedId(item.id)
+                        setConfirmDeleteId(item.id)
                       }}
                     >
-                      {r.text}
-                    </div>
-                    {/* 金标控件:每条回复行内各自携带(2026-09-15 第十八轮用户要求放回
-                        回答条目后方;单/多回复口径统一) */}
-                    {goldenControl(item, r)}
+                      <TrashIcon size={size.iconBtn} strokeWidth={2} />
+                    </IconBtn>
+                    {/* 折叠指示:展开时翻过来。它是"这一行能点开"的唯一提示。
+                        它是**行内的一个指示**、不在按钮里,故取 icon 档(14)而不是 iconBtn */}
+                    <span className="chev" aria-hidden>
+                      <ChevronDownIcon size={size.icon} strokeWidth={2} />
+                    </span>
+                  </span>
+                  <span className="line2">
+                    <span className="meta">
+                      {formatTs(item.questionTs)} · {item.replyCount} 条回复
+                    </span>
+                    {/* 低置信:这条被机器归到了当前这个类型,但判得没底。
+                        标出来是**信息**不是操作 —— 问答记录目前没有改类型的入口
+                        (标答页有),所以这里只提示"它可能在错的组里、按类型筛会漏"。 */}
+                    {isLowConfidenceCategory(item) && (
+                      <Tag
+                        tone="accent"
+                        title={`分类由机器判定,概率 ${(item.categoryConfidence ?? 0).toFixed(2)} —— 低于复核线 ${LOW_CONFIDENCE_LINE},可能归错了组。按类型筛选时可能漏掉它`}
+                      >
+                        低置信
+                      </Tag>
+                    )}
+                  </span>
+                </div>
+
+                {expanded && (
+                  <div className="pddcs-qopen">
+                    {item.replies.length === 0 && (
+                      <div style={{ fontSize: fontSize.sub, color: 'var(--pddcs-text-tertiary)' }}>
+                        无回复(未结段)
+                      </div>
+                    )}
+
+                    {item.replies.map((r) => (
+                      <div className="pddcs-reply" key={r.id}>
+                        <span className="rt">{r.text}</span>
+                        <span className="ric">
+                          <IconBtn
+                            title={r.goldenId ? '取消标准回答' : '设为标准回答'}
+                            on={!!r.goldenId}
+                            busy={busyReplyId === r.id}
+                            disabled={busyReplyId !== null && busyReplyId !== r.id}
+                            onClick={() => void toggleGolden(item, r)}
+                          >
+                            {busyReplyId === r.id ? (
+                              <LoaderIcon size={size.iconBtn} strokeWidth={2} />
+                            ) : (
+                              <StarIcon
+                                size={size.iconBtn}
+                                strokeWidth={2}
+                                style={r.goldenId ? { fill: 'currentColor' } : undefined}
+                              />
+                            )}
+                          </IconBtn>
+                          <IconBtn title="复制该条回复" onClick={() => void copyReply(r.text)}>
+                            <CopyIcon size={size.iconBtn} strokeWidth={2} />
+                          </IconBtn>
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* 删除的二次确认:入口在问题行(常驻图标),确认条就地出现在展开区底部 ——
+                        破坏性操作一定要二次确认,但不该把用户推到另一个页面去确认 */}
+                    {confirmDeleteId === item.id && (
+                      <div className="pddcs-qopen-foot">
+                        <ConfirmRow
+                          text="删除该问答及其全部回复?"
+                          onOk={() => void deleteQa(item.id)}
+                          onCancel={() => {
+                            setConfirmDeleteId(null)
+                            setExpandedId(null)
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </Card>
-                )
-              })}
-          </Card>
-        )
-      })}
+            )
+          })}
+        </List>
+      )}
 
       {/* 分页入口(PM2):显式"加载更早"取代静默截断;载完显示全量口径 */}
       {!loading && hasMore && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: spacing.xs }}>
-          <Btn tk={tk} variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: `${spacing.xxl}px` }}>
+          <Btn variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
             {loadingMore ? '读取中…' : `加载更早(已显示 ${items.length}/${total} 条)`}
           </Btn>
         </div>
       )}
-      {!loading && !hasMore && items.length > 0 && (
+      {!loading && !hasMore && total > 0 && (
         <div
+          // 数字走 .pddcs-num:全站唯一的等宽入口,不在各页各写一份字体栈
+          className="pddcs-num"
           style={{
             textAlign: 'center',
-            fontSize: fontSize.caption,
-            color: tk.textTertiary,
-            fontVariantNumeric: 'tabular-nums',
+            fontSize: fontSize.cap,
+            color: 'var(--pddcs-text-tertiary)',
+            padding: `${spacing.xxl}px`,
           }}
         >
-          已显示全部 {total} 条
+          … 共 {total} 条
         </div>
       )}
     </div>

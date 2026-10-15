@@ -95,6 +95,8 @@ export async function updateKnowledgeWithReembed(
 export interface SetKbSizeTableOutcome {
   success: boolean
   error?: string
+  /** 标记新尺码表时被顶替掉的旧尺码表 docId(v3.0:同一时刻只有一份) */
+  replaced?: string
 }
 
 /**
@@ -103,6 +105,10 @@ export interface SetKbSizeTableOutcome {
  * 读原文记录 → 改标记 → putKbDoc(失效检索缓存由 putKbDoc 负责,见 db.ts)。
  * 原文不存在时报错返回,**绝不**凭空写一条只有 docId+标记的空记录 —— 空记录会让
  * 重分块流出一条空文档、也让面板以为这篇文档存在。
+ *
+ * v3.0:标记新尺码表时先清掉其他文档的标记(「同一时刻只有一份」)。
+ * 这条约束必须落在这里而不是前端 —— 前端漏调一次,库里就会静默出现两份,
+ * 而症状(尺码回答开始胡说)离原因很远(见 db#clearOtherSizeTables)。
  */
 export async function setKbDocSizeTable(
   docId: string,
@@ -110,8 +116,9 @@ export async function setKbDocSizeTable(
 ): Promise<SetKbSizeTableOutcome> {
   const doc = await db.getKbDoc(docId)
   if (!doc) return { success: false, error: '文档原文不存在,无法标记尺码表' }
+  const replaced = on ? (await db.clearOtherSizeTables(docId))[0] : undefined
   await db.putKbDoc({ ...doc, isSizeTable: on, updatedAt: Date.now() })
-  return { success: true }
+  return { success: true, replaced }
 }
 
 /** 删除知识条目;删掉的是某文档最后一块时,连带清掉 kbDocs 原文(否则重分块会把它复活) */

@@ -25,7 +25,7 @@ const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { SettingsTab } = await import('../../../src/popup/SettingsTab')
-const { lightTheme } = await import('../../../src/ui/theme')
+
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -106,7 +106,7 @@ async function renderSettings(settings: PddSettings = { ...DEFAULT_SETTINGS }) {
     return { type: 'UPDATE_SETTINGS_RESPONSE', payload: { settings: current } }
   })
   await act(async () => {
-    root.render(<SettingsTab tk={lightTheme} onDataChanged={vi.fn()} />)
+    root.render(<SettingsTab onDataChanged={vi.fn()} />)
   })
   await flush()
 }

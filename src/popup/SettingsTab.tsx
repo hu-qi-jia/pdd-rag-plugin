@@ -5,7 +5,6 @@
  * 复用组件:Card / Toggle / Slider / Btn / Notice(见 ui/components.tsx)。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
   BackfillPending,
@@ -21,8 +20,16 @@ import type {
   UpdateSettingsResponse,
 } from '../types/messages'
 import type { HotkeyConfig, PddSettings } from '../types/memory'
-import { Btn, Card, Notice, Slider, Toggle, controlStyle, type NoticeMsg } from '../ui/components'
-import { controlH, fontSize, formGap, formType, spacing } from '../ui/design'
+import {
+  Btn,
+  Notice,
+  Section,
+  Slider,
+  Toggle,
+  controlStyle,
+  type NoticeMsg,
+} from '../ui/components'
+import { controlH, fontSize, formGap, formType, radius, size, spacing } from '../ui/design'
 import { DownloadIcon, LoaderIcon, PencilIcon, UploadIcon } from '../ui/icons'
 import { formatHotkey, isModifierOnly } from '../shared/hotkey'
 import {
@@ -63,13 +70,6 @@ import type { TestJevResponse, TestLlmResponse } from '../types/messages'
 import { usageIsEmpty, usageRows } from './logic'
 
 /**
- * 设置页所有卡片的统一行距(配置项之间,第四十一轮用户"各配置项之间间距增大,并做统一")——
- * Card 默认 spacing.lg(10px)偏挤,设置页统一提到 formGap.row(16px);
- * 四个卡片共用同一个常量对象,禁止逐卡微调,否则"统一"立刻失效。
- */
-const SETTINGS_CARD_STYLE: React.CSSProperties = { gap: formGap.row }
-
-/**
  * 补分类进度轮询间隔(ms)。补分类跑在 SW 里,弹窗关掉连接就没了 —— 面板靠轮询读
  * 后台单例状态,关/开弹窗都能如实反映,也不必管端口生命周期。
  */
@@ -89,13 +89,7 @@ function hostOf(baseUrl: string): string {
   }
 }
 
-export function SettingsTab({
-  tk,
-  onDataChanged,
-}: {
-  tk: ThemeTokens
-  onDataChanged: () => Promise<void> | void
-}) {
+export function SettingsTab({ onDataChanged }: { onDataChanged: () => Promise<void> | void }) {
   const [draft, setDraft] = useState<PddSettings | null>(null)
   // 存储(PM6a):各表计数 + 浏览器存储用量估算
   const [stats, setStats] = useState<GetStatsResponse['payload'] | null>(null)
@@ -543,7 +537,7 @@ export function SettingsTab({
         ok: true,
         text: `导入完成:标准回答 +${p.addedGoldens ?? 0}(跳过 ${p.skippedGoldens ?? 0}${
           (p.limitedGoldens ?? 0) > 0 ? `,超每问题上限 ${p.limitedGoldens}` : ''
-        }) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 文档原文 +${p.addedKbDocs ?? 0} · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
+        }) · 类型 +${p.addedCategories ?? 0}(跳过 ${p.skippedCategories ?? 0}) · 文件夹 +${p.addedFolders ?? 0} · 知识 +${p.addedKnowledge ?? 0}(跳过 ${p.skippedKnowledge ?? 0}) · 文档原文 +${p.addedKbDocs ?? 0} · 问答 +${p.addedQa ?? 0} · 回复 +${p.addedReplies ?? 0};向量后台重嵌`,
       })
       await onDataChanged()
     } catch {
@@ -558,35 +552,31 @@ export function SettingsTab({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
         {/* 占位文字同样走 formType.desc 档(设置页不允许出现规范外的字号) */}
-        <div style={{ fontSize: formType.desc.size, fontWeight: formType.desc.weight, color: tk.textMuted }}>
+        <div style={{ fontSize: formType.desc.size, fontWeight: formType.desc.weight, color: 'var(--pddcs-text-tertiary)' }}>
           读取中…
         </div>
-        <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+        <Notice msg={msg} onDismiss={() => setMsg(null)} />
       </div>
     )
   }
 
   return (
-    // 卡片之间与配置项之间同节奏(同取 formGap.row):全页一条 16px 栅格,
-    // 避免"卡内比卡外还松"的错位
-    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
-      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+    // 分区之间**不再额外吃 gap**:分区标题自带 26px 上间距,再叠一层 16px 会变成 42px
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <Notice msg={msg} onDismiss={() => setMsg(null)} />
 
-      <Card tk={tk} title="检索与填充" style={SETTINGS_CARD_STYLE}>
+      <Section title="检索与填充">
         <Toggle
-          tk={tk}
           label="自动回复"
           desc="开:直接填充第一条;关:弹面板人工选择"
           checked={draft.directFillEnabled}
           onChange={(v) => void persist({ ...draft, directFillEnabled: v })}
         />
         <HotkeyRow
-          tk={tk}
           hotkey={draft.autoReplyHotkey}
           onChange={(hk) => void persist({ ...draft, autoReplyHotkey: hk })}
         />
         <HotkeyRow
-          tk={tk}
           label="候选切换键"
           desc="推荐面板打开时按此键在候选间循环切换(可用单键)"
           allowPlainKey
@@ -594,14 +584,12 @@ export function SettingsTab({
           onChange={(hk) => void persist({ ...draft, panelNavHotkey: hk })}
         />
         <Toggle
-          tk={tk}
           label="标准回答优先"
           desc="标准回答命中时置顶"
           checked={draft.goldenPriorityEnabled}
           onChange={(v) => void persist({ ...draft, goldenPriorityEnabled: v })}
         />
         <Slider
-          tk={tk}
           label="历史相似度阈值"
           value={draft.simThreshold}
           min={0.3}
@@ -611,7 +599,6 @@ export function SettingsTab({
           format={(v) => v.toFixed(2)}
         />
         <Slider
-          tk={tk}
           label="标准回答阈值(放宽)"
           value={draft.goldenThreshold}
           min={0.2}
@@ -621,7 +608,6 @@ export function SettingsTab({
           format={(v) => v.toFixed(2)}
         />
         <Slider
-          tk={tk}
           label="知识库阈值(放宽)"
           value={draft.kbThreshold}
           min={0.2}
@@ -631,7 +617,6 @@ export function SettingsTab({
           format={(v) => v.toFixed(2)}
         />
         <Slider
-          tk={tk}
           label="保留期天数"
           value={draft.retentionDays}
           min={30}
@@ -640,41 +625,34 @@ export function SettingsTab({
           onChange={(v) => persistSlider({ retentionDays: v })}
           format={(v) => `${v} 天`}
         />
-      </Card>
+      </Section>
 
       {/* ⚠ 本卡与下面的「问题分类」卡是**刻意的平行实现**(不同的外发通道与门禁,故意不共用
           组件)。改这里的结构/状态时必须**同时核对那张卡**:① 主机权限申请必须是手势里的
           第一个 await;② 字段改名必须走 `*SettingsPatch`。 */}
-      <Card tk={tk} title="AI 整合" style={SETTINGS_CARD_STYLE}>
+      <Section title="AI 整合">
         <Toggle
-          tk={tk}
           label="AI 整合"
           desc="开启后,推荐面板的知识库候选上方多一行「根据知识库内容整合并回复」,点击才生成"
           checked={draft.aiIntegrateEnabled}
           onChange={(v) => void persist({ ...draft, aiIntegrateEnabled: v })}
         />
 
-        {/* 数据边界(ADR-0006):只留用户真正需要知道的三件事 —— 什么会出去、
-            什么永远不出去、谁来决定发送。不解释实现细节,不堆加粗。 */}
-        <div
-          style={{
-            fontSize: formType.desc.size,
-            fontWeight: formType.desc.weight,
-            color: tk.textMuted,
-            lineHeight: 1.6,
-          }}
-        >
-          点击那一行时,本轮命中的知识库内容与买家问题会发给你配置的接口。历史回答与标准回答永不外发,
-          密钥只存本机,生成结果只填输入框、发送仍由你手动完成。
-          {draft.directFillEnabled && ' 当前已开启「自动回复」,本功能不会生效。'}
-        </div>
+        {/* 数据边界那三句解释已删(v3.0 做减法):「什么会外发」属于全工具的统一口径,
+            写在「关于」卡一处即可 —— 每张能联网的卡各说一遍,等于哪儿都没说清。
+            这里只保留**会改变行为的自检**:与「自动回复」互斥这件事是操作性的,
+            不说用户只会以为功能坏了(ADR-0006 的外发边界原样留在 ADR 与关于卡里) */}
+        {draft.directFillEnabled && (
+          <div className="pddcs-srow pddcs-srow-blk pddcs-hair" style={{ color: 'var(--pddcs-danger)' }}>
+            当前已开启「自动回复」,AI 整合不会生效。
+          </div>
+        )}
 
         {/* 滑杆读秒、设置存毫秒 —— 这里是两者**唯一**的换算点(第五十二轮修)。
             此前 value 喂的是毫秒(8000)、min/max 却是秒(2~30):值恒大于上限,浏览器把滑块
             钉在最右端,每次拖动刚算出的新值又超上限、又被钉回去 —— 观感就是"拖不动",
             读数还写着「8000 秒」。修法是让两侧同单位,而不是把 min/max 抬到毫秒。 */}
         <Slider
-          tk={tk}
           label="整合超时"
           value={draft.llmTimeoutMs / 1000}
           min={LLM_TIMEOUT_MIN_MS / 1000}
@@ -684,10 +662,10 @@ export function SettingsTab({
           format={(v) => `${v} 秒`}
         />
 
-        <Field tk={tk} label="接口地址">
+        <Field label="接口地址">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="https://api.deepseek.com/v1"
             spellCheck={false}
             value={llm?.baseUrl ?? ''}
@@ -695,10 +673,10 @@ export function SettingsTab({
           />
         </Field>
 
-        <Field tk={tk} label="API Key">
+        <Field label="API Key">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="sk-…"
             spellCheck={false}
             autoComplete="off"
@@ -706,15 +684,15 @@ export function SettingsTab({
             value={llm?.apiKey ?? ''}
             onChange={(e) => updateLlm({ apiKey: e.target.value })}
           />
-          <Btn tk={tk} variant="ghost" onClick={() => setShowKey((v) => !v)}>
+          <Btn variant="ghost" onClick={() => setShowKey((v) => !v)}>
             {showKey ? '隐藏' : '显示'}
           </Btn>
         </Field>
 
-        <Field tk={tk} label="模型名">
+        <Field label="模型名">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="deepseek-chat"
             spellCheck={false}
             value={llm?.model ?? ''}
@@ -722,10 +700,12 @@ export function SettingsTab({
           />
         </Field>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+        <div className="pddcs-srow pddcs-srow-wrap pddcs-hair">
           <Btn
-            tk={tk}
-            variant="primary"
+            /* 主钮态绑在"有事可做"上:**主钮态绑在"有事可做"上** ——
+               没有未保存改动时它是个描边钮,有改动才变墨底白字。
+               顺带把"我改了没保存"从一句灰字变成了一眼可见 */
+            variant={llmDirty ? 'primary' : 'default'}
             disabled={busy || !llmDirty}
             title={llmDirty ? '保存接口配置' : '没有改动'}
             onClick={() => void saveLlm()}
@@ -733,14 +713,13 @@ export function SettingsTab({
             保存
           </Btn>
           <Btn
-            tk={tk}
             disabled={busy || test.phase === 'testing' || !llmFormReady(llm ?? { baseUrl: '', apiKey: '', model: '' })}
             title="用当前填写的地址与模型发一次最小请求,验证是否可用"
             onClick={() => void testLlm()}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               {/* 只在途时给转圈;成功/失败的结论交给右侧那行文字,不进按钮(免得读成"✕ 测试连接") */}
-              {test.phase === 'testing' && <LoaderIcon size={12} strokeWidth={2} />}
+              {test.phase === 'testing' && <LoaderIcon size={size.icon} strokeWidth={2} />}
               测试连接
             </span>
           </Btn>
@@ -750,7 +729,7 @@ export function SettingsTab({
               style={{
                 fontSize: formType.desc.size,
                 fontWeight: formType.desc.weight,
-                color: test.phase === 'ok' ? tk.textMuted : llmTestFailed(test) ? tk.errorText : tk.textMuted,
+                color: test.phase === 'ok' ? 'var(--pddcs-text-tertiary)' : llmTestFailed(test) ? 'var(--pddcs-danger)' : 'var(--pddcs-text-tertiary)',
                 lineHeight: 1.5,
               }}
             >
@@ -761,51 +740,42 @@ export function SettingsTab({
 
         {/* 两处"配了但不会生效"的自查提示:开启未配置 / 改了没保存,都是静默失效的重灾区 */}
         {draft.aiIntegrateEnabled && !llmFormReady(llmFormFromSettings(draft)) && (
-            <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
+            <div className="pddcs-srow pddcs-srow-blk pddcs-hair" style={{ color: 'var(--pddcs-danger)' }}>
               已开启,但接口地址 / API Key / 模型名尚未填全,推荐面板不会出现整合行。
             </div>
           )}
         {llmDirty && (
-          <div style={{ fontSize: formType.desc.size, color: tk.textMuted, lineHeight: 1.6 }}>
+          <div className="pddcs-srow pddcs-srow-blk pddcs-hair" style={{ color: 'var(--pddcs-text-tertiary)' }}>
             有未保存的修改。
           </div>
         )}
-      </Card>
+      </Section>
 
       {/* 问题分类(第五十七轮 Task 3):结构逐段对应上面的「AI 整合」——
           同一套显式保存(草稿边填边存、点保存才落库)与「测试连接」就地结论。
           ⚠ 本卡与「AI 整合」卡是**刻意的平行实现**(不同的外发通道与门禁,故意不共用组件)。
           改这里的结构/状态时必须**同时核对那张卡**:① 主机权限申请必须是手势里的第一个
           await;② 字段改名必须走 `*SettingsPatch`。 */}
-      <Card tk={tk} title="问题分类" style={SETTINGS_CARD_STYLE}>
+      <Section title="问题分类">
         <Toggle
-          tk={tk}
           label="自动分类"
-          desc="开启后,新捕获的问答与手工新建的标准回答会自动归类;存量历史要在下方点一次按钮"
+          desc="开启后,新捕获的问答与手工新建的标准回答会自动归类;但检索也会调这个接口 —— 每次搜索都会把问题文本发往接口,并按判出的类型收窄检索范围。存量历史要在下方点一次按钮"
           checked={draft.classifyEnabled}
           onChange={(v) => void persist({ ...draft, classifyEnabled: v })}
         />
 
-        {/* 数据边界(ADR-0007):外发内容仅三类 —— ①问题文本 ②类型名与判定说明
-            ③请求参数;回复与标准回答正文永不外发。与 ADR-0007「决策」段同源同义,
-            改动任一处都要同时核对另一处。 */}
-        <div
-          style={{
-            fontSize: formType.desc.size,
-            fontWeight: formType.desc.weight,
-            color: tk.textMuted,
-            lineHeight: 1.6,
-          }}
-        >
-          开启后,买家问题、历史问答的问题、标准回答的问题会发给 jev 判类型,
-          连同每个类型的名称与说明,以及请求本身携带的模型名等参数。
-          回复正文与标准回答正文永不外发,密钥只存本机。
-        </div>
+        {/* 与「AI 整合」卡同一条口径(v3.0 做减法):外发内容的**三类字段明细**留在
+            ADR-0007 与「关于」卡一处,不往设置页搬。
+
+            但**频率**必须留在开关自己身上(第六十七轮补):这个开关同时管两件量级
+            差很远的事 —— 「记录在后台被归个类」(每条记录一次)与「每次检索都过一趟
+            第三方」(每小时可能几十次)。原来的 desc 只写了前者,用户是在不知情的
+            情况下接受了后者。「关于」卡说的是"会外发问题文本",仍然没说"每次搜索都发"。
+            拆成两个开关是更彻底的解法,但那是行为变更;先把知情这一条补上 */}
 
         {/* 滑杆读秒、设置存毫秒 —— 与 AI 区同一条单位换算坑(第五十二轮修):
             Slider 的 value/min/max 必须与 format 同单位,否则值恒超上限、看起来"拖不动"。 */}
         <Slider
-          tk={tk}
           label="分类超时"
           value={draft.jevTimeoutMs / 1000}
           min={JEV_TIMEOUT_MIN_MS / 1000}
@@ -820,7 +790,6 @@ export function SettingsTab({
             这个旋钮就永远回调不了。与其它阈值滑杆同构:0~1、step 0.05、两位小数。
             0 是**合法值**(=不按阈值过滤),settings.ts 的夹取用 Number.isFinite 判、不会把 0 当假值。 */}
         <Slider
-          tk={tk}
           label="概率阈值"
           value={draft.classifyProbThreshold}
           min={0}
@@ -830,10 +799,10 @@ export function SettingsTab({
           format={(v) => v.toFixed(2)}
         />
 
-        <Field tk={tk} label="接口地址">
+        <Field label="接口地址">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="https://api.typesafe.ai"
             spellCheck={false}
             value={jev?.baseUrl ?? ''}
@@ -841,10 +810,10 @@ export function SettingsTab({
           />
         </Field>
 
-        <Field tk={tk} label="API Key">
+        <Field label="API Key">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="sk-…"
             spellCheck={false}
             autoComplete="off"
@@ -852,15 +821,15 @@ export function SettingsTab({
             value={jev?.apiKey ?? ''}
             onChange={(e) => updateJev({ apiKey: e.target.value })}
           />
-          <Btn tk={tk} variant="ghost" onClick={() => setShowJevKey((v) => !v)}>
+          <Btn variant="ghost" onClick={() => setShowJevKey((v) => !v)}>
             {showJevKey ? '隐藏' : '显示'}
           </Btn>
         </Field>
 
-        <Field tk={tk} label="模型名">
+        <Field label="模型名">
           <input
             className="pddcs-input"
-            style={{ ...controlStyle(tk, controlH.form), flex: 1, minWidth: 0 }}
+            style={{ ...controlStyle(controlH.form), flex: 1, minWidth: 0 }}
             placeholder="jev-latest"
             spellCheck={false}
             value={jev?.model ?? ''}
@@ -868,10 +837,12 @@ export function SettingsTab({
           />
         </Field>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+        {/* 与「AI 整合」卡的保存/测试行**逐字对应** —— 这一行曾经是裸 flex div,
+            比它上面那张卡的同名行少了 16px 内边距与下缘发丝线,两张"平行实现"的卡
+            在视觉上因此不对称 */}
+        <div className="pddcs-srow pddcs-srow-wrap pddcs-hair">
           <Btn
-            tk={tk}
-            variant="primary"
+            variant={jevDirty ? 'primary' : 'default'}
             disabled={busy || !jevDirty}
             title={jevDirty ? '保存分类接口配置' : '没有改动'}
             onClick={() => void saveJev()}
@@ -879,7 +850,6 @@ export function SettingsTab({
             保存
           </Btn>
           <Btn
-            tk={tk}
             disabled={
               busy ||
               jevTest.phase === 'testing' ||
@@ -889,7 +859,7 @@ export function SettingsTab({
             onClick={() => void testJev()}
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {jevTest.phase === 'testing' && <LoaderIcon size={12} strokeWidth={2} />}
+              {jevTest.phase === 'testing' && <LoaderIcon size={size.icon} strokeWidth={2} />}
               测试连接
             </span>
           </Btn>
@@ -901,10 +871,10 @@ export function SettingsTab({
                 fontWeight: formType.desc.weight,
                 color:
                   jevTest.phase === 'ok'
-                    ? tk.textMuted
+                    ? 'var(--pddcs-text-tertiary)'
                     : jevTestFailed(jevTest)
-                      ? tk.errorText
-                      : tk.textMuted,
+                      ? 'var(--pddcs-danger)'
+                      : 'var(--pddcs-text-tertiary)',
                 lineHeight: 1.5,
               }}
             >
@@ -915,23 +885,33 @@ export function SettingsTab({
 
         {/* 两处"配了但不会生效"的自查提示(同 AI 区):开启未配置 / 改了没保存 */}
         {draft.classifyEnabled && !jevFormReady(jevFormFromSettings(draft)) && (
-          <div style={{ fontSize: formType.desc.size, color: tk.errorText, lineHeight: 1.6 }}>
+          <div className="pddcs-srow pddcs-srow-blk pddcs-hair" style={{ color: 'var(--pddcs-danger)' }}>
             已开启,但接口地址 / API Key / 模型名尚未填全,分类不会生效。
           </div>
         )}
         {jevDirty && (
-          <div style={{ fontSize: formType.desc.size, color: tk.textMuted, lineHeight: 1.6 }}>
+          <div className="pddcs-srow pddcs-srow-blk pddcs-hair" style={{ color: 'var(--pddcs-text-tertiary)' }}>
             有未保存的修改。
           </div>
         )}
 
         {/* 补存量(第五十七轮 Task 4):跑在 SW 里、关弹窗也继续 —— 状态从后台轮询读回。
             待办数来自 GET_BACKFILL_STATE 的 pending(与快照同口径,manual 不计入)。 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelControl }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+        {/* 这一块同样是「一行小标题 + 行」里的一行:内边距与发丝线跟别的行一样。
+            块内两段之间的关系由下面这枚 marginBottom 给(块式行里 span 是块级,
+            相互间距见 popup-css `.pddcs-srow-blk > span + span`) */}
+        <div className="pddcs-srow pddcs-srow-blk pddcs-hair">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacing.sm,
+              flexWrap: 'wrap',
+              marginBottom: formGap.labelControl,
+            }}
+          >
             {backfillRunning ? (
               <Btn
-                tk={tk}
                 variant="danger"
                 onClick={() => void stopBackfillNow()}
                 title="中断本轮,已跑完的结果保留"
@@ -940,7 +920,6 @@ export function SettingsTab({
               </Btn>
             ) : (
               <Btn
-                tk={tk}
                 variant="primary"
                 disabled={busy || !backfillReady}
                 title={backfillReady ? '把存量历史与标准回答的问题送去做一次分类' : '先开启自动分类并填全配置'}
@@ -951,11 +930,12 @@ export function SettingsTab({
             )}
             {backfillRunning && backfillStatus && (
               <span
+                // 进度是数字读数:与页面上其它数字(计数、时间戳、滑杆读数)同走 .pddcs-num
+                className="pddcs-num"
                 style={{
                   fontSize: formType.desc.size,
                   fontWeight: formType.desc.weight,
-                  color: tk.textMuted,
-                  fontVariantNumeric: 'tabular-nums',
+                  color: 'var(--pddcs-text-tertiary)',
                 }}
               >
                 {backfillStatus.done} / {backfillStatus.total}
@@ -968,8 +948,8 @@ export function SettingsTab({
               fontWeight: formType.desc.weight,
               color:
                 !backfillReady && !backfillRunning && backfillStatus?.phase !== 'done'
-                  ? tk.errorText
-                  : tk.textMuted,
+                  ? 'var(--pddcs-danger)'
+                  : 'var(--pddcs-text-tertiary)',
               lineHeight: 1.6,
             }}
           >
@@ -994,7 +974,7 @@ export function SettingsTab({
               style={{
                 fontSize: formType.desc.size,
                 fontWeight: formType.desc.weight,
-                color: tk.textMuted,
+                color: 'var(--pddcs-text-tertiary)',
                 lineHeight: 1.6,
               }}
             >
@@ -1004,25 +984,24 @@ export function SettingsTab({
             </span>
           )}
         </div>
-      </Card>
+      </Section>
 
-      <Card tk={tk} title="导入与导出" style={SETTINGS_CARD_STYLE}>
+      <Section title="导入与导出">
         <Toggle
-          tk={tk}
           label="导出包含记忆数据"
           desc="额外导出问答记录与回复"
           checked={includeMemory}
           onChange={setIncludeMemory}
         />
-        <div style={{ display: 'flex', gap: spacing.sm }}>
-          <Btn tk={tk} variant="primary" disabled={busy} onClick={() => void exportJson()}>
+        <div className="pddcs-srow pddcs-hair">
+          <Btn variant="primary" disabled={busy} onClick={() => void exportJson()}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <DownloadIcon size={12} strokeWidth={2} />导出 JSON
+              <DownloadIcon size={size.icon} strokeWidth={2} />导出 JSON
             </span>
           </Btn>
-          <Btn tk={tk} disabled={busy} onClick={() => fileRef.current?.click()}>
+          <Btn disabled={busy} onClick={() => fileRef.current?.click()}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <UploadIcon size={12} strokeWidth={2} />导入 JSON
+              <UploadIcon size={size.icon} strokeWidth={2} />导入 JSON
             </span>
           </Btn>
           <input
@@ -1036,21 +1015,21 @@ export function SettingsTab({
             }}
           />
         </div>
-      </Card>
+      </Section>
 
-      <Card tk={tk} title="存储" style={SETTINGS_CARD_STYLE}>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            // 同一行内多项之间用 16px 列距(与配置项行距同值,横向也统一)
-            gap: `4px ${formGap.row}px`,
-            fontSize: formType.desc.size,
-            fontWeight: formType.desc.weight,
-            color: tk.textMuted,
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
+      <Section title="存储">
+        <div className="pddcs-srow pddcs-hair">
+          <span
+            // 计数一整排都是数字:等宽 + 表格数字走 .pddcs-num 单点,
+            // 不再各写一份 'ui-monospace, Consolas, monospace'
+            className="pddcs-srow-label pddcs-num"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: `4px ${formGap.row}px`,
+              color: 'var(--pddcs-text-tertiary)',
+            }}
+          >
           {stats && (
             <>
               <span>问答 {stats.qaCount}</span>
@@ -1065,101 +1044,81 @@ export function SettingsTab({
               已用 {fmtBytes(storage.usage)}(配额约 {fmtBytes(storage.quota)})
             </span>
           )}
+          </span>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
+        <div className="pddcs-srow pddcs-hair">
           {confirmClear ? (
             <>
               <span
                 style={{
                   fontSize: formType.desc.size,
                   fontWeight: formType.desc.weight,
-                  color: tk.errorText,
+                  color: 'var(--pddcs-danger)',
                 }}
               >
                 清空全部问答与回复?标准回答/知识库/文件夹保留。
               </span>
-              <Btn tk={tk} variant="danger" disabled={busy} onClick={() => void clearMemory()}>
+              <Btn variant="danger" disabled={busy} onClick={() => void clearMemory()}>
                 确认清空
               </Btn>
-              <Btn tk={tk} variant="ghost" onClick={() => setConfirmClear(false)}>
+              <Btn variant="ghost" onClick={() => setConfirmClear(false)}>
                 取消
               </Btn>
             </>
           ) : (
-            <Btn tk={tk} variant="danger" onClick={() => setConfirmClear(true)}>
+            <Btn variant="danger" onClick={() => setConfirmClear(true)}>
               清空问答数据
             </Btn>
           )}
         </div>
-      </Card>
+      </Section>
 
       {/*
         使用统计(v0.16):回答"这工具到底帮没帮上忙"。全部本地计数,不联网、不随导出外发。
         只在有数时展开 —— 新装的库给一排 0 既没信息量,又让人怀疑是不是坏了。
       */}
-      <Card tk={tk} title="使用统计" style={SETTINGS_CARD_STYLE}>
+      <Section title="使用统计">
         {usageIsEmpty(stats?.metrics) ? (
-          <div
-            style={{
-              fontSize: formType.desc.size,
-              fontWeight: formType.desc.weight,
-              color: tk.textMuted,
-              lineHeight: 1.6,
-            }}
-          >
-            还没有使用记录。在聊天页点「AI回复」或按快捷键检索,这里就会开始计数。
+          <div className="pddcs-srow pddcs-hair" style={{ color: 'var(--pddcs-text-tertiary)' }}>
+            还没有使用记录
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.row }}>
+          // 这里曾经外裹一个 gap:16px 的列容器 —— 行自带 12px 内边距与下缘发丝线,
+          // 再插一层行距会把发丝线从行底"浮"起来(线下面一段空档,像是分隔了别的东西)。
+          // 与 v4.1 修设置页时删掉的那批 gap 是同一个毛病,漏了这一处。
+          <>
             {usageRows(stats?.metrics).map((r) => (
-              <div
-                key={r.key}
-                style={{ display: 'flex', justifyContent: 'space-between', gap: spacing.md }}
-              >
-                {/* 标签走 label 档、数值走 desc 档:一列数字要能竖着扫得下去 */}
-                <span
-                  style={{
-                    fontSize: formType.label.size,
-                    fontWeight: formType.label.weight,
-                  }}
-                >
-                  {r.label}
+              // 同一套设置行:标签在左、数值在右(数值走等宽,一列数字竖着扫得下去)
+              <div className="pddcs-srow pddcs-hair" key={r.key}>
+                <span className="pddcs-srow-label">
+                  <span className="n">{r.label}</span>
                 </span>
-                <span
-                  style={{
-                    fontSize: formType.desc.size,
-                    fontWeight: formType.desc.weight,
-                    color: tk.textMuted,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
-                >
-                  {r.value}
-                </span>
+                <span className="pddcs-srow-value">{r.value}</span>
               </div>
             ))}
-          </div>
+          </>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
+        <div className="pddcs-srow pddcs-hair">
           {confirmResetUsage ? (
             <>
               <span
                 style={{
                   fontSize: formType.desc.size,
                   fontWeight: formType.desc.weight,
-                  color: tk.textMuted,
+                  color: 'var(--pddcs-text-tertiary)',
                 }}
               >
                 重置为 0?问答/标准回答/知识库都不受影响。
               </span>
-              <Btn tk={tk} variant="ghost" disabled={busy} onClick={() => void resetUsage()}>
+              <Btn variant="ghost" disabled={busy} onClick={() => void resetUsage()}>
                 确认重置
               </Btn>
-              <Btn tk={tk} variant="ghost" onClick={() => setConfirmResetUsage(false)}>
+              <Btn variant="ghost" onClick={() => setConfirmResetUsage(false)}>
                 取消
               </Btn>
             </>
           ) : (
-            <Btn tk={tk} variant="ghost" onClick={() => setConfirmResetUsage(true)}>
+            <Btn variant="ghost" onClick={() => setConfirmResetUsage(true)}>
               重置统计
             </Btn>
           )}
@@ -1167,31 +1126,32 @@ export function SettingsTab({
             style={{
               fontSize: formType.desc.size,
               fontWeight: formType.desc.weight,
-              color: tk.textMuted,
+              color: 'var(--pddcs-text-tertiary)',
             }}
           >
             只记在本机,不联网、不随导出外发。
           </span>
         </div>
-      </Card>
+      </Section>
 
-      <Card tk={tk} title="关于" style={SETTINGS_CARD_STYLE}>
+      {/*
+        关于(v3.0 精简):原来那一段 150 字,把"合规声明"与"数据边界"混在一坨里,
+        读的人要么全读要么全不读。现在压成三行 —— 一行一件事,
+        外发边界从此**只在这里讲一次**(各联网卡片不再各说一遍)。
+      */}
+      <Section title="关于">
         <div
-          style={{
-            fontSize: formType.desc.size,
-            fontWeight: formType.desc.weight,
-            color: tk.textMuted,
-            lineHeight: 1.7,
-          }}
+          className="pddcs-srow pddcs-srow-blk pddcs-hair"
+          style={{ color: 'var(--pddcs-text-tertiary)', lineHeight: 1.75 }}
         >
-          本工具仅读取聊天页内容并填充官方输入框,发送始终由人工完成;
-          全部数据仅存本机 IndexedDB;嵌入模型已内置,离线可用,无任何远程下载。
-          默认全程不联网 —— 只有你亲手填了接口与密钥、打开「AI 整合」、再点击面板里那一行,
-          才会把当轮面板展示的知识库内容与买家问题发给你配置的接口;
-          历史回答与标准回答永不外发,整合结果也只填进输入框,发送仍由你点。
-          请勿用于自动群发等违反平台规则的场景。
+          <span>只读取聊天页内容、只填官方输入框 —— 发送始终由你手动完成。</span>
+          <span>全部数据仅存本机 IndexedDB;嵌入模型已内置,离线可用,无任何远程下载。</span>
+          <span>
+            默认全程不联网。只有你亲手配置接口、打开「AI 整合」或「自动分类」,
+            才会把<strong>问题文本</strong>与你配置的接口通信;回复正文与标准回答正文永不外发。
+          </span>
         </div>
-      </Card>
+      </Section>
     </div>
   )
 }
@@ -1206,19 +1166,17 @@ export function SettingsTab({
  * 第五十二轮按用户「接口地址、apikey、模型名下方的解释文案删除」去掉 desc 一行:
  * 三行只留标签与输入框(placeholder 已在示例,「关于」卡与数据边界段仍在讲密钥去向)。
  */
-function Field({
-  tk,
-  label,
-  children,
-}: {
-  tk: ThemeTokens
-  label: string
-  children: React.ReactNode
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelControl }}>
-      <span style={{ fontSize: formType.label.size, fontWeight: formType.label.weight }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>{children}</div>
+    // 与 Toggle / Slider / HotkeyRow 共用 .pddcs-srow:同样的内边距、同样的缩进发丝线。
+    // 标签走 .n 档(15px 常规)—— 设置页不允许出现第四种行样式
+    <div className="pddcs-srow pddcs-srow-blk pddcs-hair">
+      <span className="pddcs-srow-label">
+        <span className="n">{label}</span>
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, marginTop: formGap.labelControl }}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -1251,14 +1209,12 @@ function fmtBytes(n: number): string {
 }
 
 function HotkeyRow({
-  tk,
   hotkey,
   label = '快捷键',
   desc = '在聊天页按此键唤起推荐回复',
   allowPlainKey = false,
   onChange,
 }: {
-  tk: ThemeTokens
   hotkey: HotkeyConfig
   label?: string
   desc?: string
@@ -1297,7 +1253,12 @@ function HotkeyRow({
     // kbd 显式取 controlH.form 与按钮严格等高(等高铁律);行2 = 说明/录入提示。
     // 第四十一轮:标签走 formType.label、说明走 formType.desc,两者间距取 formGap.labelDesc
     // —— 与 Toggle / Slider 三种行完全同构。
-    <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.labelDesc }}>
+    //
+    // v4.1 补:外层同样走 .pddcs-srow —— 这一行曾经是本页唯一**没**套行样式的行
+    // (裸 flex div,既没有 16px 内边距也没有下缘发丝线),于是「快捷键」比它上下
+    // 所有的行都靠左 16px、且把两行行距撑成 4px 而不是行的 12px。四种行样式
+    // (Toggle / Slider / Field / HotkeyRow)现在同源。
+    <div className="pddcs-srow pddcs-srow-blk pddcs-hair">
       <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
         <span
           style={{
@@ -1309,17 +1270,20 @@ function HotkeyRow({
           {label}
         </span>
         <kbd
+          // 键帽:等宽走 .pddcs-num(不再自带一份字体栈),圆角取控件档
+          // —— 曾经是写死的 6px,不在三档圆角里;聊天页面板的键帽写的是 5px,
+          // 同一件东西两个值,正是因为两边都不引用令牌
+          className="pddcs-num"
           style={{
             height: controlH.form,
             display: 'inline-flex',
             alignItems: 'center',
-            padding: '0 10px',
-            borderRadius: 6,
-            border: `1px solid ${tk.border}`,
-            backgroundColor: tk.bgSecondary,
-            color: tk.text,
-            fontSize: fontSize.caption,
-            fontFamily: 'ui-monospace, Consolas, monospace',
+            padding: `0 ${spacing.lg}px`,
+            borderRadius: radius.control,
+            border: `1px solid ${'var(--pddcs-separator)'}`,
+            backgroundColor: 'var(--pddcs-fill)',
+            color: 'var(--pddcs-text)',
+            fontSize: fontSize.cap,
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
@@ -1328,9 +1292,9 @@ function HotkeyRow({
         </kbd>
         {!recording && (
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <Btn tk={tk} title="按下新的组合键即可替换当前快捷键" onClick={() => setRecording(true)}>
+            <Btn title="按下新的组合键即可替换当前快捷键" onClick={() => setRecording(true)}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <PencilIcon size={12} strokeWidth={2} />修改
+                <PencilIcon size={size.icon} strokeWidth={2} />修改
               </span>
             </Btn>
           </div>
@@ -1342,7 +1306,7 @@ function HotkeyRow({
           style={{
             fontSize: formType.desc.size,
             fontWeight: formType.desc.weight,
-            color: tk.accent,
+            color: 'var(--pddcs-text)',
             lineHeight: 1.5,
           }}
         >
@@ -1353,7 +1317,7 @@ function HotkeyRow({
           style={{
             fontSize: formType.desc.size,
             fontWeight: formType.desc.weight,
-            color: tk.textMuted,
+            color: 'var(--pddcs-text-tertiary)',
             lineHeight: 1.5,
           }}
         >

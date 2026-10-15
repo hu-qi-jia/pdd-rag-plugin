@@ -28,7 +28,7 @@ function renderSlider(onChange: (v: number) => void, value = 0.5) {
   act(() => {
     root.render(
       <Slider
-        tk={lightTheme}
+       
         label="历史相似度阈值"
         value={value}
         min={0.3}
@@ -48,10 +48,10 @@ describe('Slider:自定义滑轨', () => {
     expect(container.textContent).toContain('0.50')
   })
 
-  it('标签加粗(semibold,2026-09-15 第十七轮用户要求)', () => {
+  it('标签是常规字重(v4.0:设置页行标题不加粗)', () => {
     renderSlider(vi.fn())
     const label = Array.from(container.querySelectorAll('span')).find((el) => el.textContent === '历史相似度阈值')
-    expect(label?.style.fontWeight).toBe('600')
+    expect(label?.style.fontWeight).toBe('')
   })
 
   it('轨道按值填充:背景渐变在 (value-min)/(max-min) 处硬切', () => {

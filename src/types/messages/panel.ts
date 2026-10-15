@@ -22,6 +22,14 @@ export interface MemoryListItem {
    * 面板据此分桶,不需要再做 null/undefined 判断。
    */
   categoryId: string
+  /**
+   * 谁打的标。**刻意不归一** —— `undefined` 是"从没打过标"(旧数据),
+   * 与 `'jev'` 的语义不同(后者是"机器判的,可能判错")。面板靠它决定
+   * 要不要给这条挂「低置信」标。
+   */
+  categorySource?: 'jev' | 'inherit' | 'manual'
+  /** 机器打标时的概率(0~1)。只有 jev 路径会写;复核线见 constants.LOW_CONFIDENCE_LINE */
+  categoryConfidence?: number
 }
 
 export interface GetMemoryListRequest {
@@ -82,6 +90,12 @@ export interface PanelGolden {
   categoryId: string
   /** 谁打的标。'manual' = 你手工摆的,补分类会跳过;缺省 = 机器没跑过 */
   categorySource?: string
+  /**
+   * 机器打标时的概率(0~1)。只有 jev 路径会写(继承与人工都不写)。
+   * 标准回答卡据此标「低置信」—— 低于复核线的判定值得人工看一眼
+   * (复核线见 constants.LOW_CONFIDENCE_LINE)。
+   */
+  categoryConfidence?: number
 }
 
 /** 面板用的类型条目。**不带 criteria** —— 那是喂给 jev 的,面板用不上,也不该跟着 DTO 到处传 */

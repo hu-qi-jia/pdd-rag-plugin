@@ -1,74 +1,102 @@
 /**
- * 通用组件库 — 各页签复用的视觉资产(设计规范的可执行形态)
+ * 通用组件库 — 各页签复用的视觉资产 · v5.0「暖纸」
  *
- * 清单:Btn / ConfirmRow / Notice / Card / Badge / EmptyState / Toggle / Slider / SearchInput
- * 原则:颜色一律来自 ThemeTokens,几何一律来自 design.ts;页面不得自带样式实现。
+ * 清单:Btn / IconBtn / ConfirmRow / CreateBtn / Notice / Section / Tag /
+ *      EmptyState / Toggle / Slider / SearchInput / CatNav / StatusBar / List
+ *
+ * 两条口径(自 v3.0 起,不变):
+ *
+ *  ① **组件不吃 `tk` 令牌对象**。v2.6 把 `ThemeTokens` 一路 prop-drill 到每个叶子
+ *     是为写内联样式;而核心交互全是**状态色**(悬浮、按下、选中),内联样式表达
+ *     不了 `:hover` —— 颜色必须有 CSS 层。既然 CSS 层非有不可,就不再把同一份颜色
+ *     用 props 传一遍:令牌经 `index.tsx` 桥成 `--pddcs-*` 挂到 `<html>` 上,
+ *     组件与样式表都只认这组变量。令牌仍只有一个真源(theme.ts)。
+ *
+ *  ② **组件只管结构与几何,不管状态色**。`:hover` / `[aria-current]` / `[data-*]`
+ *     规则集中在 `ui/popup-css.ts`。
+ *
+ * 类名一律带 `pddcs-` 前缀(聊天页覆盖层会注入到平台页,避免撞名)。
  */
 import type React from 'react'
-import { useEffect, useState } from 'react'
-import type { ThemeTokens } from './theme'
-import { controlH, fontSize, fontWeight, radius, spacing, semantic, motion, size, formType, formGap } from './design'
+import { useEffect, useRef } from 'react'
+import { controlH, fontSize, radius, size, spacing, formType } from './design'
 import { PlusIcon, SearchIcon } from './icons'
 
-// ── 胶囊按钮 ─────────────────────────────────────────────────────────────────
+// ── 按钮 ─────────────────────────────────────────────────────────────────────
 
+/**
+ * `primary` 墨底白字(一页只有一个)· `default` 填充式控件(IOS 的做法:用底色
+ * 而不是描边说"我能点")· `danger` 语义红软底 · `ghost` 无底无框
+ */
 export function Btn({
-  tk,
   onClick,
   children,
   variant = 'default',
   disabled,
   title,
+  small,
 }: {
-  tk: ThemeTokens
   onClick: () => void
   children: React.ReactNode
   variant?: 'default' | 'primary' | 'danger' | 'ghost'
   disabled?: boolean
   title?: string
+  /** 行内小号(28px 高,与图标钮同档) */
+  small?: boolean
 }) {
-  const isPrimary = variant === 'primary'
-  const isDanger = variant === 'danger'
-  const isGhost = variant === 'ghost'
-  const color = isPrimary
-    ? tk.btnPrimaryText
-    : isDanger
-      ? tk.errorText
-      : isGhost
-        ? tk.textMuted
-        : tk.text
-  const bg = isPrimary
-    ? tk.btnPrimaryBg
-    : isDanger
-      ? tk.errorBg
-      : isGhost
-        ? 'transparent'
-        : tk.btnBg
-  // 悬浮底色(2026-09-15 设计6:四种变体全部有悬浮反馈):
-  // primary 再亮一档、danger 红底加深一档、ghost/default 面色提亮一档
-  const hoverBg = isPrimary
-    ? tk.btnPrimaryHover
-    : isDanger
-      ? tk.errorHoverBg
-      : tk.btnHoverBg
   return (
     <button
       type="button"
-      className="pddcs-btn"
+      className={`pddcs-btn${small ? ' pddcs-btn-sm' : ''}`}
+      data-variant={variant}
       disabled={disabled}
       onClick={onClick}
       title={title}
-      style={{
-        borderColor: isGhost || isDanger ? 'transparent' : tk.btnBorder,
-        backgroundColor: bg,
-        color,
-      }}
-      onMouseEnter={(e) => {
-        if (disabled) return
-        e.currentTarget.style.backgroundColor = hoverBg
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = bg
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── 图标钮 ───────────────────────────────────────────────────────────────────
+
+/**
+ * 28×28,图标 16 居中 —— 盒内左右各留 6px。
+ * 那个 6px 不是随手定的:操作行要"图标对齐正文竖线"时,首枚钮加 `margin-left:-6px`
+ * 正好抵消它(见 popup-css `.pddcs-gops > .pddcs-iconbtn:first-child`)。
+ */
+export function IconBtn({
+  onClick,
+  children,
+  title,
+  disabled,
+  on,
+  busy,
+  className,
+}: {
+  onClick: (e: React.MouseEvent) => void
+  children: React.ReactNode
+  title?: string
+  disabled?: boolean
+  on?: boolean
+  /** 请求在途:图标原地转圈 */
+  busy?: boolean
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      className={`pddcs-iconbtn${busy ? ' pddcs-iconbtn-busy' : ''}${className ? ` ${className}` : ''}`}
+      data-on={on ? 'true' : undefined}
+      disabled={disabled}
+      title={title}
+      /* 图标钮没有文字,title 只是悬浮提示,读屏拿不到 —— 语义必须另给一份。
+         全站图标钮都靠这条:知识库页一行五个动作、记忆页的删除入口都是纯图标 */
+      aria-label={title}
+      onClick={(e) => {
+        // 图标钮几乎总长在可点/可展开的行里:不放行的话,点一下星会把所在行也一起展开
+        e.stopPropagation()
+        onClick(e)
       }}
     >
       {children}
@@ -78,76 +106,47 @@ export function Btn({
 
 // ── 内联二次确认行 ────────────────────────────────────────────────────────────
 
-/**
- * 删除类操作的**原位**二次确认行:警示文案 + 确认/取消(第五十一轮单点化)。
- *
- * 此前这套行有两份实现:文件夹页手搓一对 `<button>`、记忆页直接用通用 `Btn` ——
- * 于是同一个交互在两页里字号不同(10.5 / 11.0)、按钮档位也不同(24 内联档 / 26 表单档),
- * 记忆页那份还写着 `fontSize.caption + 0.5`,正是 design.ts 明令禁止的临时值。
- * 统一取**内联档**(`controlH.inline` + `fontSize.caption`):确认行长在行内、不占表单位,
- * 与被确认的那一行同档才是对的。
- */
 export function ConfirmRow({
-  tk,
   text,
   onOk,
   onCancel,
 }: {
-  tk: ThemeTokens
   text: string
   onOk: () => void
   onCancel: () => void
 }) {
-  const btn: React.CSSProperties = {
-    height: controlH.inline,
-    padding: '0 10px',
-    borderRadius: radius.sm,
-    fontSize: fontSize.caption,
-    cursor: 'pointer',
-    flexShrink: 0,
-  }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-      <span style={{ flex: 1, fontSize: fontSize.caption, color: tk.errorText }}>{text}</span>
-      <button
-        type="button"
-        onClick={onOk}
-        style={{ ...btn, border: 'none', backgroundColor: tk.errorBg, color: tk.errorText, fontWeight: fontWeight.semibold }}
-      >
+    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap', flex: 1 }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: fontSize.cap, color: 'var(--pddcs-danger)' }}>
+        {text}
+      </span>
+      <Btn variant="danger" small onClick={onOk}>
         确认
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        style={{ ...btn, border: `1px solid ${tk.btnBorder}`, backgroundColor: 'transparent', color: tk.textMuted }}
-      >
+      </Btn>
+      <Btn variant="ghost" small onClick={onCancel}>
         取消
-      </button>
+      </Btn>
     </div>
   )
 }
 
-// ── 工具栏「新建」主钮(公共组件)────────────────────────────────────────────
+// ── 工具栏「新建」主钮 ───────────────────────────────────────────────────────
 
-/** 加号图标 + 文字的主操作钮:知识库页「新建条目」与文件夹页「新建文件夹」共用,
- *  视觉统一走 Btn primary(.pddcs-btn,高 controlH.form),不再各自手搓 */
 export function CreateBtn({
-  tk,
   label,
   onClick,
   disabled,
   title,
 }: {
-  tk: ThemeTokens
   label: string
   onClick: () => void
   disabled?: boolean
   title?: string
 }) {
   return (
-    <Btn tk={tk} variant="primary" onClick={onClick} disabled={disabled} title={title}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <PlusIcon size={12} strokeWidth={2.2} />
+    <Btn variant="primary" onClick={onClick} disabled={disabled} title={title}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <PlusIcon size={size.icon} strokeWidth={2.2} />
         {label}
       </span>
     </Btn>
@@ -158,19 +157,10 @@ export function CreateBtn({
 
 export type NoticeMsg = { ok: boolean; text: string } | null
 
-/** 成功提示自动消失时长(2026-09-15 PM6:拖滑杆连弹"已保存"永不消失、推挤布局);失败提示常驻 */
+/** 成功提示自动消失时长;失败提示常驻 */
 export const NOTICE_OK_AUTO_DISMISS_MS = 4000
 
-export function Notice({
-  tk,
-  msg,
-  onDismiss,
-}: {
-  tk: ThemeTokens
-  msg: NoticeMsg
-  /** 传入后成功提示到时回调一次(父级清 state);失败提示不自动消失 */
-  onDismiss?: () => void
-}) {
+export function Notice({ msg, onDismiss }: { msg: NoticeMsg; onDismiss?: () => void }) {
   useEffect(() => {
     if (!msg?.ok || !onDismiss) return
     const t = window.setTimeout(onDismiss, NOTICE_OK_AUTO_DISMISS_MS)
@@ -178,127 +168,67 @@ export function Notice({
   }, [msg, onDismiss])
   if (!msg) return null
   return (
-    // 吸附在滚动区顶部:列表很长时提示不再被顶出视口(2026-09-15 用户反馈
-    // 「点击设置标准回答无反应」的真实原因之一 —— 操作成功但提示在视口外)。
-    <div
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 3,
-        backgroundColor: tk.bg,
-        paddingBottom: spacing.xs,
-      }}
-    >
-      <div
-        style={{
-          padding: `${spacing.sm + 2}px ${spacing.xl}px`,
-          borderRadius: radius.md,
-          fontSize: fontSize.secondary,
-          lineHeight: 1.55,
-          backgroundColor: msg.ok ? tk.successBg : tk.errorBg,
-          color: msg.ok ? tk.successText : tk.errorText,
-          wordBreak: 'break-all',
-        }}
-      >
+    // 吸附在滚动区顶部:列表很长时提示不再被顶出视口
+    <div className="pddcs-notice">
+      <div className="pddcs-notice-body" data-ok={msg.ok ? 'true' : 'false'}>
         {msg.text}
       </div>
     </div>
   )
 }
 
-// ── 卡片 ─────────────────────────────────────────────────────────────────────
+// ── 分区(设置页用)───────────────────────────────────────────────────────────
 
-export function Card({
-  tk,
+/**
+ * 分区:**标题在卡外,行收进一张卡**。
+ *
+ * v4.0 的分区不是盒子(标题 + 行都落在同一片面上);v5.0 按设计稿改回分组卡片,
+ * 但**标题仍留在卡外** —— 设置页一行一件事,"这一组叫什么"和"这一组有哪几行"
+ * 一眼分得开,比把标题也塞进卡里清楚。
+ *
+ * 卡片样式在 `.pddcs-section-body`(popup-css),这里只负责把 children 包进那一层。
+ */
+export function Section({
   title,
-  titleExtra,
   children,
   style,
   className,
 }: {
-  tk: ThemeTokens
-  /** 标题:字符串或节点(第五十七轮 Task 7:类型分区标题要并一枚种类徽标) */
-  title?: React.ReactNode
-  /** 标题行右端附加物(如分区标题旁的改名/删除图标钮);提供时标题行变 flex 一行 */
-  titleExtra?: React.ReactNode
+  title?: string
   children: React.ReactNode
   style?: React.CSSProperties
-  /** 附加 CSS 类(容器透传;原 pddcs-row 悬浮显隐钩子已随 v2.6.31 退役) */
   className?: string
 }) {
-  // 分组标题(第四十一轮起走 formType 规范):13.5 semibold + 主文本色 ——
-  // 旧版是 11.5 + textMuted,比卡内 12.5 的字段标签还小还灰(层级倒挂)
-  const titleStyle: React.CSSProperties = {
-    fontSize: formType.groupTitle.size,
-    fontWeight: formType.groupTitle.weight,
-    color: tk.text,
-  }
   return (
-    <div
-      className={className}
-      style={{
-        border: `1px solid ${tk.border}`,
-        borderRadius: radius.lg,
-        backgroundColor: tk.bgCard,
-        padding: `${spacing.xl + 2}px ${spacing.xxl - 2}px`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: spacing.lg,
-        ...style,
-      }}
-    >
-      {title &&
-        (titleExtra ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-            <div style={{ ...titleStyle, flex: 1, minWidth: 0 }}>{title}</div>
-            {titleExtra}
-          </div>
-        ) : (
-          <div style={titleStyle}>{title}</div>
-        ))}
-      {children}
-    </div>
+    <section className={`pddcs-section${className ? ` ${className}` : ''}`} style={style}>
+      {title && <div className="pddcs-section-title">{title}</div>}
+      <div className="pddcs-section-body">{children}</div>
+    </section>
   )
 }
 
-// ── 徽标(golden / knowledge / neutral)──────────────────────────────────────
+// ── 方括号灰标 ───────────────────────────────────────────────────────────────
 
-export function Badge({
-  tk,
-  tone,
-  icon,
+/**
+ * `[文案]` 的终端记法。零信息量的标**不要渲染**(如「被用 0 次」「向量正常」)——
+ * 该判断在调用方。
+ */
+export function Tag({
+  tone = 'neutral',
+  title,
   children,
 }: {
-  tk: ThemeTokens
-  tone: 'golden' | 'knowledge' | 'neutral'
-  icon?: React.ReactNode
+  /**
+   * `accent` 是 v5.0 新增档,给"值得你留意一眼"的标用(目前只有「低置信」)。
+   * 它不是 danger:低置信是**需要复核**,不是**出错了** —— 用红会把
+   * "需要看一眼"和"坏了"混成一件事。
+   */
+  tone?: 'neutral' | 'strong' | 'danger' | 'accent'
+  title?: string
   children: React.ReactNode
 }) {
-  const bg =
-    tone === 'golden'
-      ? semantic.goldenBg
-      : tone === 'knowledge'
-        ? semantic.knowledgeBg
-        : tk.bgSecondary
-  const color =
-    tone === 'golden' ? semantic.golden : tone === 'knowledge' ? semantic.knowledge : tk.textMuted
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        backgroundColor: bg,
-        color,
-        border: tone === 'neutral' ? `1px solid ${tk.border}` : '1px solid transparent',
-        borderRadius: radius.sm,
-        fontSize: fontSize.caption,
-        padding: `1px ${spacing.md - 1}px`,
-        fontWeight: fontWeight.semibold,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {icon}
+    <span className="pddcs-tag" data-tone={tone} title={title}>
       {children}
     </span>
   )
@@ -306,19 +236,13 @@ export function Badge({
 
 // ── 空状态 ───────────────────────────────────────────────────────────────────
 
-export function EmptyState({
-  tk,
-  children,
-}: {
-  tk: ThemeTokens
-  children: React.ReactNode
-}) {
+export function EmptyState({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        fontSize: fontSize.secondary,
-        color: tk.textTertiary,
-        padding: `${spacing.xxl + 6}px 0`,
+        fontSize: fontSize.sub,
+        color: 'var(--pddcs-text-tertiary)',
+        padding: `${spacing.xxl + 12}px ${spacing.xxl}px`,
         textAlign: 'center',
         lineHeight: 1.8,
       }}
@@ -328,101 +252,174 @@ export function EmptyState({
   )
 }
 
-// ── 搜索输入框(带放大镜)───────────────────────────────────────────────────
+// ── 搜索栏(IOS 形态:填充底、无描边)──────────────────────────────────────
 
 export function SearchInput({
-  tk,
   value,
   onChange,
   placeholder,
+  autoFocus,
 }: {
-  tk: ThemeTokens
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  autoFocus?: boolean
 }) {
   return (
-    <div style={{ position: 'relative' }}>
-      <span
-        style={{
-          position: 'absolute',
-          left: 11,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          color: tk.textTertiary,
-          display: 'flex',
-          pointerEvents: 'none',
-        }}
-      >
-        <SearchIcon size={13} strokeWidth={2} />
-      </span>
+    <div className="pddcs-search">
+      <SearchIcon size={size.iconBtn} strokeWidth={2} />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="pddcs-input"
-        style={inputStyle(tk, { paddingLeft: 30 })}
+        autoFocus={autoFocus}
       />
     </div>
   )
 }
 
-// ── 拨杆开关(胶囊式;文字居左、开关居右,2026-09-15 v2.6.7 用户要求)────────
+// ── 分类导航 ─────────────────────────────────────────────────────────────────
+
+export interface CatNavItem {
+  id: string
+  label: string
+  count: number
+}
+
+/**
+ * 横向滚动的 pill 导航。三条行为缺一不可:
+ *
+ *  ① **不换行 + 横滚** —— 类型数会随用户自建而增长,换行会让导航吃掉半屏;
+ *  ② **滚轮纵移转横移** —— 鼠标没有横向滚轮;不可滚时**放行**(接管一个滚不动的
+ *     元素等于吞掉用户的滚动);
+ *  ③ **两侧到头渐隐** —— 一行被切掉一半的分类,用户不会知道右边还有东西。
+ *
+ * 计数为 0 的类型照样显示:类别是固定位置,不能今天消失、明天跳回来。
+ */
+export function CatNav({
+  items,
+  value,
+  onChange,
+  trailing,
+}: {
+  items: CatNavItem[]
+  value: string
+  onChange: (id: string) => void
+  /** 导航右端的附加物(如自定义类型的改名/删除钮) */
+  trailing?: React.ReactNode
+}) {
+  const ref = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const nav = ref.current
+    if (!nav) return
+
+    /** 两侧渐隐:还有内容的那一侧才隐,滚到头恢复实色 */
+    const mask = () => {
+      const max = nav.scrollWidth - nav.clientWidth
+      const l = nav.scrollLeft > 1 ? 14 : 0
+      const r = max > 1 && nav.scrollLeft < max - 1 ? 14 : 0
+      const v =
+        l || r
+          ? `linear-gradient(to right, transparent 0, #000 ${l}px, #000 calc(100% - ${r}px), transparent 100%)`
+          : ''
+      nav.style.maskImage = v
+      nav.style.webkitMaskImage = v
+    }
+
+    const onWheel = (e: WheelEvent) => {
+      if (nav.scrollWidth <= nav.clientWidth) return
+      e.preventDefault()
+      nav.scrollLeft += e.deltaY
+    }
+
+    nav.addEventListener('wheel', onWheel, { passive: false })
+    nav.addEventListener('scroll', mask)
+    window.addEventListener('resize', mask)
+    mask()
+    return () => {
+      nav.removeEventListener('wheel', onWheel)
+      nav.removeEventListener('scroll', mask)
+      window.removeEventListener('resize', mask)
+    }
+  }, [items])
+
+  return (
+    <div className="pddcs-catnav-wrap">
+      <nav className="pddcs-catnav" ref={ref}>
+        {items.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            // data-cat-id 是**稳定的导航锚点**:验收脚本按类型 id 定位导航项,
+            // 而不是按文字/位置 —— 后者随渲染改一次就会静默失配
+            data-cat-id={it.id}
+            aria-current={value === it.id ? 'true' : undefined}
+            onClick={() => onChange(it.id)}
+          >
+            {it.label}
+            <span className="n">{it.count}</span>
+          </button>
+        ))}
+      </nav>
+      {trailing}
+    </div>
+  )
+}
+
+// ── 状态条 ───────────────────────────────────────────────────────────────────
+
+/**
+ * 页面名(17/600)+ 本页计数(12/等宽灰)。
+ *
+ * v5.0 起**下缘不画线** —— 它现在落在主面板这张卡里,而卡与卡靠间隙分界、
+ * 卡内靠缩进线分界。标题下面再插一条通栏线,就成了第三种"边界",
+ * 反而让人读不出哪条才是一条列表的开始。
+ */
+export function StatusBar({ title, count }: { title: string; count?: string }) {
+  return (
+    <div className="pddcs-statusbar">
+      <span className="pg">{title}</span>
+      {count ? <span className="ct">{count}</span> : null}
+    </div>
+  )
+}
+
+// ── 列表容器 ─────────────────────────────────────────────────────────────────
+
+/**
+ * 列表容器。
+ *
+ * **卡片的样式挂在 `.pddcs-list > *` 上**(见 popup-css)—— 所以这个组件的职责
+ * 比看起来重要:三个页签的列表都得用它包一层,卡片才会成立。
+ * v5.0 起容器自带上下左右内缩与行间隙,内容**不要**再各写一份左右内边距。
+ */
+export function List({ children }: { children: React.ReactNode }) {
+  return <div className="pddcs-list">{children}</div>
+}
+
+// ── 拨杆开关(iOS 胶囊轨 + 圆柄)────────────────────────────────────────────
 
 export function Toggle({
   label,
   desc,
   checked,
   onChange,
-  tk,
 }: {
   label: string
-  desc: string
+  /** 可选:能用三五个字说清的就写,说不清的不如不写 */
+  desc?: string
   checked: boolean
   onChange: (v: boolean) => void
-  tk: ThemeTokens
 }) {
-  const [hover, setHover] = useState(false)
-  // 选中态 = 控件激活色(2026-09-16 第四十一轮用户"开关…颜色修改为灰色和白色"):
-  // 浅色中性深灰 / 深色白,原 accent 蓝退出开关;
-  // 未选中轨道仍走专用令牌(比 inputBorder 深一档,悬浮再深一档给出"可点"暗示)。
-  const track = checked
-    ? hover
-      ? tk.controlActiveHover
-      : tk.controlActive
-    : hover
-      ? tk.switchTrackHover
-      : tk.switchTrack
   return (
-    // 容器是 div 而非 label(第四十八轮用户"只有在点击开关时才开启/关闭,
-    // 目前点击对应配置文字就会触发"):原先整行是带 onClick 的 <label>,
-    // 点标签文字也会翻转 —— 而标签旁边就挨着说明文字,想选一句话复制都做不到。
-    // 现在**只有开关本体**可点;键盘可达性不受影响(开关自带 tabIndex + onKeyDown)。
-    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span
-          style={{
-            display: 'block',
-            fontSize: formType.label.size,
-            fontWeight: formType.label.weight,
-          }}
-        >
-          {label}
-        </span>
-        {/* 说明文字:formType.desc 档(11.5 regular)+ textMuted;
-            与标签的间距统一取 formGap.labelDesc(第四十一轮"间距统一") */}
-        <span
-          style={{
-            display: 'block',
-            fontSize: formType.desc.size,
-            fontWeight: formType.desc.weight,
-            color: tk.textMuted,
-            lineHeight: 1.55,
-            marginTop: formGap.labelDesc,
-          }}
-        >
-          {desc}
-        </span>
+    // 容器是 div 而非 label:整行可点会让"想复制标签旁边那句话"变成一次误触,
+    // 故**只有开关本体**可点;键盘可达性由 tabIndex + onKeyDown 保证。
+    // pddcs-hair:设置页的行与行之间那条缩进发丝线(一段的最后一行不画)
+    <div className="pddcs-srow pddcs-hair">
+      <span className="pddcs-srow-label">
+        <span className="n">{label}</span>
+        {desc && <span className="d">{desc}</span>}
       </span>
       <span
         role="switch"
@@ -431,40 +428,24 @@ export function Toggle({
         title={`${checked ? '点击关闭' : '点击开启'}:${label}`}
         tabIndex={0}
         className="pddcs-switch"
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
         onClick={() => onChange(!checked)}
         onKeyDown={(e) => {
-          // 键盘可达(2026-09-15 设计6):Enter/Space 切换,Space 阻断页面滚动
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             e.stopPropagation()
             onChange(!checked)
           }
         }}
-        style={{
-          width: size.toggleWidth,
-          height: size.toggleHeight,
-          flexShrink: 0,
-          borderRadius: radius.pill,
-          position: 'relative',
-          transition: `background-color ${motion.normal}`,
-          cursor: 'pointer',
-          backgroundColor: track,
-        }}
       >
-        {/* 滑块位置/按压拉伸全由 popup RESET_CSS 的 [aria-checked] / :active 规则驱动
-            (内联 left 会压过 :active 拉伸;React 只声明结构) */}
         <span className="pddcs-switch-knob" />
       </span>
     </div>
   )
 }
 
-// ── 滑杆(自定义填充轨道;拇指钮样式见 popup RESET_CSS .pddcs-slider)─────────
+// ── 滑杆(iOS 圆拇指;样式见 popup-css .pddcs-slider)──────────────────────
 
 export function Slider({
-  tk,
   label,
   value,
   min,
@@ -473,7 +454,6 @@ export function Slider({
   onChange,
   format,
 }: {
-  tk: ThemeTokens
   label: string
   value: number
   min: number
@@ -482,20 +462,13 @@ export function Slider({
   onChange: (v: number) => void
   format: (v: number) => string
 }) {
-  // 填充进度硬切:激活色到当前值,其后是轨道色(inputBorder)
   const pct = Math.round(((value - min) / (max - min)) * 100)
   return (
-    <div>
-      {/* 标签走 formType.label(12.5 semibold),当前值同档但 regular + 灰 + 等宽数字 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: formType.label.size }}>
-        <span style={{ fontWeight: formType.label.weight }}>{label}</span>
-        <span
-          style={{
-            color: tk.textMuted,
-            fontFamily: 'ui-monospace, Consolas, monospace',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
+    <div className="pddcs-srow pddcs-hair" style={{ display: 'block' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.md }}>
+        <span style={{ flex: 1, fontSize: fontSize.body }}>{label}</span>
+        {/* 读数走 .pddcs-num(等宽 + 表格数字),不再各写一份内联字体栈 */}
+        <span className="pddcs-num" style={{ fontSize: fontSize.cap, color: 'var(--pddcs-text-tertiary)' }}>
           {format(value)}
         </span>
       </div>
@@ -508,46 +481,79 @@ export function Slider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
-          // 第四十一轮:已填充段由 accent 蓝改控件激活色(浅色深灰 / 深色白),与开关同一令牌
-          backgroundImage: `linear-gradient(to right, ${tk.controlActive} ${pct}%, ${tk.inputBorder} ${pct}%)`,
+          backgroundImage: `linear-gradient(to right, var(--pddcs-accent) ${pct}%, var(--pddcs-border) ${pct}%)`,
         }}
       />
     </div>
   )
 }
 
-// ── 样式原语(供表单类元素)─────────────────────────────────────────────────
+// ── 设置行(标签 + 右侧控件)────────────────────────────────────────────────
 
-export function inputStyle(tk: ThemeTokens, extra?: React.CSSProperties): React.CSSProperties {
-  return {
-    width: '100%',
-    padding: `7px ${spacing.xl}px`,
-    borderRadius: radius.md,
-    border: `1px solid ${tk.inputBorder}`,
-    backgroundColor: tk.inputBg,
-    color: tk.text,
-    fontSize: fontSize.body,
-    outline: 'none',
-    fontFamily: 'inherit',
-    lineHeight: 1.5,
-    transition: `border-color ${motion.fast}`,
-    ...extra,
-  }
+export function SettingRow({
+  label,
+  desc,
+  children,
+  hair = true,
+}: {
+  label: string
+  desc?: string
+  children?: React.ReactNode
+  /** 是否画下缘发丝线(一段列表的最后一行传 false) */
+  hair?: boolean
+}) {
+  return (
+    <div className={`pddcs-srow${hair ? ' pddcs-hair' : ''}`}>
+      <span className="pddcs-srow-label">
+        <span className="n">{label}</span>
+        {desc && <span className="d">{desc}</span>}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+// ── 样式原语 ─────────────────────────────────────────────────────────────────
+
+/** 顶部工具栏(新建条目 / 上传 .md / 上传尺码表 那一排) */
+export function Toolbar({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: spacing.lg,
+        flexWrap: 'wrap',
+        padding: `0 ${spacing.xxl}px ${spacing.xl}px`,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** 输入框 / 文本域的附加样式(几何与配色在 popup-css `.pddcs-input`) */
+export function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
+  return { width: '100%', ...extra }
 }
 
 /**
- * 与按钮同排的输入框样式:显式 height 取 controlH 档位,与同排按钮严格等高。
- * (2026-09-15 用户反馈:新建子文件夹的输入框靠 padding+line-height 撑到 35px,
- *  同排「创建/取消」为 28px,相差 7px。)
+ * 列表项的发丝线缩进量。与 `pddcs-hair` 配对使用:
+ * `--hair-in` 是自定义属性,CSSProperties 里没有它的位置,故做一次断言。
  */
-export function controlStyle(
-  tk: ThemeTokens,
-  height: number,
-  extra?: React.CSSProperties,
-): React.CSSProperties {
-  return inputStyle(tk, { height, padding: `0 ${spacing.xl - 2}px`, ...extra })
+export function hairStyle(indentPx: number): React.CSSProperties {
+  return { '--hair-in': `${indentPx}px` } as React.CSSProperties
 }
 
+export const ICON_SIZE = size.iconBtn
+export const ICON_BTN_SIZE = controlH.icon
+export const HAIR_IN = spacing.xxl
+
+/** 与按钮同排的输入框:显式 height 取 controlH 档位,与同排按钮严格等高 */
+export function controlStyle(height: number, extra?: React.CSSProperties): React.CSSProperties {
+  return { width: '100%', height, padding: `0 ${spacing.xl}px`, ...extra }
+}
+
+export { formType, radius }
 
 export function formatTs(ts: number): string {
   const d = new Date(ts)

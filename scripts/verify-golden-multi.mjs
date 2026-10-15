@@ -104,8 +104,12 @@ check('取消的那条已不在库中,新条入列', !after.some((g) => g.id ===
 const order2 = await panelOrder()
 check('取消+新设后,最新设置的排最前(5 → 3 → 1)', order2.join(',') === '5,3,1', `order=${order2.join(',')}`)
 
-// ── ⑥ 结构:按问题类型分区(第五十七轮 Task 6 起,顶层由文件夹树改为类型分区)──
-// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认它落在该类型的分区里。
+// ── ⑥ 结构:按问题类型分类(v3.0 起,类型从**页内分区标题**改为**顶部导航栏**)──
+// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认:
+//   · 它落在该类型的卡片上(卡带 data-category-id 锚点);
+//   · 导航上「订单物流」那一项的计数跟着变。
+// 条数从分区标题搬到了导航项 —— 这是 v3.0 的结构改动,断言随之更新;
+// 数据层什么都没变,故本脚本其余 ①~⑤ 一步未动。
 const CAT_NAME = '订单物流'
 const CAT_ID = 'preset:order'
 // 用独立问题,避免撞上上面那个问题的 3 条上限
@@ -119,16 +123,18 @@ await sleep(1500)
 await pop.locator('button[title="标准回答"]').click()
 await sleep(1200)
 const rel = await pop.evaluate(({ catId, catName }) => {
-  // 分区容器带稳定锚点 data-category-id(见 FoldersTab 分的分区包裹 div)。
-  // 不再靠标题 div 的文字/DOM 形状定位 —— 那随渲染改一次就会静默失配。
+  // 卡片带稳定锚点 data-category-id(见 FoldersTab 的 goldenCard)。
+  // 不再靠文字/DOM 形状定位 —— 那随渲染改一次就会静默失配。
   const cards = [...document.querySelectorAll('[data-category-id]')].filter(
     (el) => el.getAttribute('data-category-id') === catId,
   )
+  // 导航项同样是稳定锚点 data-cat-id(见 ui/components#CatNav)
+  const nav = document.querySelector(`.pddcs-catnav button[data-cat-id="${catId}"]`)
   const t = cards[0]?.innerText ?? ''
   return {
-    headerText: t.split('\n')[0] ?? '',
+    navText: nav?.textContent ?? '(找不到导航项)',
     answerIdx: t.indexOf('类型验收答复'),
-    // 失败时最想知道的是"页面上到底有没有这个分区":没分区 / 分区在但内容没进来
+    // 失败时最想知道的是"这条标答到底在不在页面上":导航在但卡不在 / 卡在但答案没进来
     // 修法完全不同,只报 -1 等于没说
     cards: cards.length,
     catName,
@@ -136,8 +142,8 @@ const rel = await pop.evaluate(({ catId, catName }) => {
   }
 }, { catId: CAT_ID, catName: CAT_NAME })
 check(
-  '标答落在「订单物流」类型分区内,分区标题带条数',
-  rel.cards === 1 && /·\s*\d+/.test(rel.headerText) && rel.answerIdx >= 0,
+  '标答落在「订单物流」类型下,且导航项计数跟着走',
+  rel.cards === 1 && /订单物流\s*1/.test(rel.navText) && rel.answerIdx >= 0,
   JSON.stringify(rel),
 )
 

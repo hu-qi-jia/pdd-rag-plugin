@@ -20,6 +20,10 @@ export interface ImportDataResponse {
     skippedGoldens?: number
     /** 因目标问题已达上限而未导入的标准回答条数 */
     limitedGoldens?: number
+    /** 新建的问题类型条数(旧导出文件没有类型表 → 恒为 0) */
+    addedCategories?: number
+    /** 本地已有同 id/同名的类型、没重复建的条数 */
+    skippedCategories?: number
     addedFolders?: number
     skippedFolders?: number
     addedKnowledge?: number

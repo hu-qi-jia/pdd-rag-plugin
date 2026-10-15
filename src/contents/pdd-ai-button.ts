@@ -74,7 +74,6 @@ import {
   buildOverlayCss,
   panelSurface,
   parseThemeMode,
-  supportsBackdropBlur,
 } from '../ui/overlay-css'
 import {
   COPY_ICON,
@@ -111,9 +110,10 @@ function applyOverlayTheme(theme: ThemeMode): void {
     style.id = STYLE_ID
     document.head.appendChild(style)
   }
-  style.textContent = buildOverlayCss(getThemeTokens(theme))
-  // 面板开着时切主题:同步内联背景(见 openPopup 的不透明双保险)
-  if (popupEl) popupEl.style.backgroundColor = getThemeTokens(theme).bg
+  style.textContent = buildOverlayCss(getThemeTokens(theme), theme)
+  // 面板开着时切主题:同步内联背景。取哪个值由 overlay-css#panelSurface 单点决定,
+  // 与 CSS 里的材料底色同源 —— 两份值分家会把毛玻璃踩成不透明板
+  if (popupEl) popupEl.style.backgroundColor = panelSurface(theme)
 }
 
 /** Lucide "sparkles" 图标已按用户要求移除(2026-09-15):按钮为纯文字胶囊 */
@@ -474,18 +474,26 @@ function movePanelSelection(delta: number): boolean {
   return true
 }
 
+/**
+ * 类别灰标(v3.0:方括号终端记法)。
+ *
+ * v2.6 是软底胶囊徽标:标准回答 = 琥珀软底金字、知识库 = 绿软底绿字、历史 = 中性灰底。
+ * v3.0 只剩一个语义色(琥珀),绿已退役;而「[标准回答]」这样的方括号写法本身就够读了 ——
+ * 一行里挂三四个彩色软底块,读起来像三种不同的东西,其实都是同一句话的一部分。
+ */
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
   const b = document.createElement('span')
-  b.className = `pddcs-badge ${kind}`
+  b.className = 'pddcs-tag'
+  if (kind === 'golden') b.dataset.tone = 'strong'
   b.textContent = kindLabel(kind)
   return b
 }
 
 /**
  * 图标操作钮(第三十七轮 v2.6.24,用户指定"设置标准回答用星图标、复制用图标替代")——
- * 24px 方钮 + 13px lucide 图标(与 popup 行悬浮图标钮同档同语言);
- * 无文字,语义落在 `title` 与 `aria-label` 上;`data-action` 供验收脚本稳定定位
- * (原先靠按钮文字选元素,文案一改脚本就断)。
+ * 28px 方钮 + 16px lucide 图标(与 popup 的 `IconBtn` 同档同语言,两个尺寸都取
+ * `overlay-icons` 的单点);无文字,语义落在 `title` 与 `aria-label` 上;
+ * `data-action` 供验收脚本稳定定位(原先靠按钮文字选元素,文案一改脚本就断)。
  */
 function iconBtn(icon: string, label: string, action: string): HTMLButtonElement {
   const b = document.createElement('button')
@@ -748,7 +756,6 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
         : `设为标准回答(当前问题 + 该回复,每个问题最多 ${MAX_GOLDENS_PER_QUESTION} 条)`,
       'golden',
     )
-    goldBtn.classList.add('pddcs-icon-btn-star')
     if (isGolden) goldBtn.classList.add('pddcs-icon-btn-golden')
     goldBtn.addEventListener('click', (ev) => {
       ev.stopPropagation()
@@ -803,11 +810,11 @@ function openPopup(
   // 键盘面板挂标记类:鼠标不可控(不改选中、不给悬浮底色、不显悬浮操作钮)全靠它,
   // 样式侧的守卫见 ui/overlay-css.ts#pddcs-popup-keyboard
   el.className = opts.keyboard ? 'pddcs-popup pddcs-popup-keyboard' : 'pddcs-popup'
-  // 背景双保险(第二十三轮):本样式注入平台页面,类样式可能被页面级 !important 规则盖掉,
-  // 内联背景优先级更高,直观兜底。
-  // v2.7.0 起这个兜底要**跟着材料走**:支持背景模糊时面板是半透明的,内联若仍写不透明面色,
-  // 就会把毛玻璃一脚踩回白板 —— 取哪个值由 overlay-css#panelSurface 单点决定(与 CSS 同源)
-  el.style.backgroundColor = panelSurface(getThemeTokens(currentTheme), supportsBackdropBlur())
+  // 背景兜底:本样式注入平台页面,类样式可能被页面级 !important 规则盖掉,
+  // 内联背景优先级更高。取的值必须与 CSS 里那份**同源**(overlay-css#panelSurface)
+  // —— v4.0 的面板是毛玻璃材料,内联兜底若写不透明令牌(曾经写的是 tk.bg),
+  // 内联优先级会把它踩成一块实心白板:backdrop-filter 还在,但后面没东西可透。
+  el.style.backgroundColor = panelSurface(currentTheme)
 
   const head = document.createElement('div')
   head.className = 'pddcs-popup-head'

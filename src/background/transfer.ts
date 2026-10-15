@@ -10,11 +10,13 @@ import {
   EXPORT_VERSION,
   buildExportEnvelope,
   goldenImportContext,
+  planCategoryImports,
   planFolderImports,
   planGoldenImports,
   planKbDocImports,
   planKnowledgeImports,
   planMemoryImports,
+  resolveImportedCategory,
 } from "./transferPlan";
 import type { ExportEnvelope } from "../types/transfer";
 import { MAX_GOLDENS_PER_QUESTION } from "./goldens";
@@ -25,10 +27,13 @@ export async function exportData(
 ): Promise<{ envelope?: ExportEnvelope; error?: string }> {
   try {
     const includeMemory = !!message.payload?.includeMemory;
-    const [goldens, folders, knowledge, kbDocs, settings, qaRecords, replies] =
+    const [goldens, folders, categories, knowledge, kbDocs, settings, qaRecords, replies] =
       await Promise.all([
         db.goldens.toArray(),
         db.listFolders(),
+        // 类型表必须跟着走:记录级 categoryId 是裸 id,类型表缺席时导入端
+        // 只能把它们全判成悬空、退回未分类(见 types/transfer.ts 文件头)
+        db.listCategories(),
         db.knowledge.toArray(),
         // v0.16:文档原文一并导出 —— 换台机器导入后仍能按新规则重切,
         // 不必让用户重新找原文上传(见 types/transfer.ts#ExportedKbDoc)
@@ -41,6 +46,7 @@ export async function exportData(
       envelope: buildExportEnvelope({
         goldens,
         folders,
+        categories,
         knowledge,
         kbDocs,
         settings,
@@ -60,6 +66,10 @@ export interface ImportOutcome {
   skippedGoldens?: number;
   /** 因目标问题已达上限而未导入的条数 */
   limitedGoldens?: number;
+  /** 新建的问题类型条数(旧导出文件没有类型表 → 恒为 0) */
+  addedCategories?: number;
+  /** 已在本地命中(按 id 或按名字)而没新建的类型条数 */
+  skippedCategories?: number;
   addedFolders?: number;
   skippedFolders?: number;
   addedKnowledge?: number;
@@ -93,6 +103,14 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
       existingFolderIds,
     );
 
+    // 1.5)问题类型(记录级 categoryId 的外键目标先就位)
+    //     旧导出文件没有 env.categories → 空数组 → 不新建、记录全落未分类,
+    //     与从前行为一致(不需要为兼容性多加一个分支)
+    const categoryPlan = planCategoryImports(
+      asArray(env.categories),
+      await db.listCategories(),
+    );
+
     // 2) 金标准((问题+答案) 幂等 + 每问题上限;悬空 folderId 归"默认文件夹")
     const goldenCtx = goldenImportContext(await db.goldens.toArray());
     const goldenPlan = planGoldenImports(
@@ -106,6 +124,10 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
     ]);
     for (const g of goldenPlan.toAdd) {
       if (g.folderId !== null && !knownFolderIds.has(g.folderId)) g.folderId = null;
+      // 导出 id → 本地 id。这一步**必须在落库之前、计划之后**:
+      // 计划阶段还不知道哪些类型会被新建,而在计划里查库又会让它不再是纯函数
+      // (folderId 的悬空处理同序,见上)
+      resolveImportedCategory(g, categoryPlan.idMap);
     }
 
     // 2.5) 知识库(标题 hash 幂等;enabled 原样保留,向量一律重嵌)
@@ -137,15 +159,29 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
         new Set(existingQaIds as string[]),
         new Set(existingReplyIds as string[]),
       );
+      for (const q of memPlan.toAddQa) resolveImportedCategory(q, categoryPlan.idMap);
     }
 
     // ── 写库阶段(2026-09-15 审计:多个 bulkAdd 串行无事务,中途失败会留下
     // 半成品库;现整体包进一个 Dexie 事务,任一步失败全部回滚)──────────────────
     await db.transaction(
       "rw",
-      [db.folders, db.goldens, db.knowledge, db.kbDocs, db.qaRecords, db.replies],
+      [
+        db.folders,
+        db.categories,
+        db.goldens,
+        db.knowledge,
+        db.kbDocs,
+        db.qaRecords,
+        db.replies,
+      ],
       async () => {
         if (folderPlan.toAdd.length > 0) await db.folders.bulkAdd(folderPlan.toAdd);
+        // 类型必须先落:金标准/问答的 categoryId 指向它(同一事务内无外键约束,
+        // 但顺序保证中断时不会留下"记录已进去、类型没进去"的半成品)
+        if (categoryPlan.toAdd.length > 0) {
+          await db.categories.bulkAdd(categoryPlan.toAdd);
+        }
         if (goldenPlan.toAdd.length > 0) await db.goldens.bulkAdd(goldenPlan.toAdd);
         if (kbPlan.toAdd.length > 0) await db.knowledge.bulkAdd(kbPlan.toAdd);
         if (kbDocPlan.toAdd.length > 0) await db.kbDocs.bulkAdd(kbDocPlan.toAdd);
@@ -178,6 +214,8 @@ export async function importData(message: ImportDataRequest): Promise<ImportOutc
       addedGoldens: goldenPlan.toAdd.length,
       skippedGoldens: goldenPlan.skipped,
       limitedGoldens: goldenPlan.limited,
+      addedCategories: categoryPlan.toAdd.length,
+      skippedCategories: categoryPlan.skipped,
       addedFolders: folderPlan.toAdd.length,
       skippedFolders: folderPlan.skipped,
       addedKnowledge: kbPlan.toAdd.length,

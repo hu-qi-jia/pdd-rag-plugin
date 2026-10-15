@@ -3,11 +3,50 @@
 // 设计依据:设计文档 §8(信封 2.0:默认 goldens+folders+settings,记忆可选;
 // 恢复按 id/内容幂等,不覆盖本地编辑)。导出统一剥离向量字段、hasEmbedding 归 0,
 // 导入端全量重新嵌入 —— 终态与"含向量搬库"一致,免去跨模型版本校验。
+//
+// ⚠️ **只剥离向量,不剥离分类**。第五十六轮引入 categories 之后,导出曾长期漏带
+// 分类(记录级的 categoryId 与类型表本身都没有),导入端于是把分类全丢、重新变回
+// 补分类候选 —— 而补分类要花 API 额度。本文件现在把分类一并往返,理由见下方
+// categoryId 字段的注释。
+//
+// **字段是加法,EXPORT_VERSION 不动**:transfer.ts 的版本校验是**严格相等**,
+// 一改 '2.0' → '2.1' 会把用户手里所有存量备份直接拒收。新增字段一律走
+// "旧文件没有该字段 → 导入端按缺省处理"这条路(KbDoc.isSizeTable 当年就是这么做的)。
 
-import type { FolderRecord, PddSettings } from './memory'
+import type { CategoryRecord, FolderRecord, PddSettings } from './memory'
 
-/** 导出金标准(向量剥离,导入端统一重嵌) */
-export interface ExportedGolden {
+/**
+ * 分类字段在导出记录上的公共形状。
+ *
+ * 为什么必须往返:分类是**用户看得见、且被检索依赖**的状态 ——
+ *   - `categoryId` 决定这条记录在按类型过滤时进不进池;
+ *   - `categorySource='manual'` 让机器补分类**永不覆盖**它(见 db.updateGoldenCategory 的守卫)。
+ * 丢了它,一次"导出→换机器导入"就会让用户手工摆好的分类静默消失,
+ * 且因为丢失后重新成为补分类候选,还会平白再烧一轮 API。
+ *
+ * `categoryConfidence` 一并带上:它是"这条判得有多虚"的唯一证据,
+ * 丢了就再也说不清哪些是勉强过线的(标准回答页据此标「低置信」)。
+ */
+export interface ExportedCategoryFields<
+  S extends string = 'jev' | 'inherit' | 'manual',
+> {
+  categoryId?: string | null
+  /**
+   * 与记录上的同名字段同义:谁打的标。
+   *
+   * **泛型不是花招**:`'inherit'` 只可能出现在金标准上(它是"从来源问答继承"的标记),
+   * 问答记录只有 `'jev' | 'manual'`。收窄成泛型参数,导出侧就不可能把
+   * 一个问答记录写成 `'inherit'` —— 这条约束是 `tsc` 在守,不是靠注释。
+   */
+  categorySource?: S
+  /** 打标时间;判定说明改动后据此只重跑旧的 */
+  categoryAt?: number
+  /** 打标时该标签的概率(0~1) */
+  categoryConfidence?: number
+}
+
+/** 导出金标准(向量剥离,导入端统一重嵌;分类一并往返) */
+export interface ExportedGolden extends ExportedCategoryFields {
   id: string
   folderId: string | null
   question: string
@@ -20,8 +59,8 @@ export interface ExportedGolden {
   updatedAt: number
 }
 
-/** 导出问答记录(问题向量剥离) */
-export interface ExportedQa {
+/** 导出问答记录(问题向量剥离;分类一并往返)。问答不可能有 `'inherit'` */
+export interface ExportedQa extends ExportedCategoryFields<'jev' | 'manual'> {
   id: string
   sessionKey: string
   buyerIdTail?: string
@@ -101,7 +140,21 @@ export interface ExportEnvelope {
   version: string
   exportedAt: number
   settings: ExportedSettings
+  /**
+   * ⚠️ **legacy**:v8 起文件夹体系已被 categories 取代,这张表 `db.ts` 里写着
+   * "迁移后不再被读写",UI 上也早已没有任何入口。仍然导出只是为了**读得动旧文件**
+   * (旧备份里没有 categories,只有 folders)—— 新写入端保留它是零成本的包袱,
+   * 但不要据此认为文件夹还活着。真正的类型在下面的 `categories`。
+   */
   folders: FolderRecord[]
+  /**
+   * 问题类型表。**必须随导出往返**:记录级的 categoryId 是外键,不带类型表的话
+   * 导入端只能把这批 id 全判成悬空、退回未分类。
+   *
+   * 旧导出文件(第五十八轮之前)没有这个字段 → 导入端按空数组处理,
+   * 行为与从前一致(记录落回未分类)。
+   */
+  categories?: CategoryRecord[]
   goldens: ExportedGolden[]
   /** 知识库:人工精选数据,与金标准同级,始终导出(不受 includeMemory 门控) */
   knowledge?: ExportedKnowledge[]

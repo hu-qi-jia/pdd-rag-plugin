@@ -21,32 +21,14 @@ import {
 import type { PanelCategory, PanelFolder, PanelGolden, PanelKnowledge } from '../types/messages'
 
 /**
- * 文档分块 id → 块序号。
+ * 注:`chunkOrdinal` / `firstChunkIds` 两个 helper 已随 v3.0 一起删除。
  *
- * `importKbDocument` 造的 id 形如 `${rootId}-c${i}`(rootId 是随机 id);
- * 只有一块时 id 就是 rootId、**不带** `-c<n>` 后缀 —— 视为第 0 块。
- * 不能写成 `id === docId + '-c0'`:那是把文档名误当作了 id 前缀。
+ * 它们服务的唯一场景是"尺码表开关只能在该文档的第一块上渲染一次" —— 而 v3.0 把
+ * 尺码表改成**上传入口**后,"是不是尺码表"由上传动作直接决定,不再需要"认出第一块"。
+ * 保留它们只会诱使下一次迭代再走一遍那条脆路。
+ * (background/aiMaterials.ts 里另有一份同名的私有 helper,服务于"同文档兄弟块排序",
+ *  与本处无关,未受影响。)
  */
-export function chunkOrdinal(id: string): number {
-  const m = /-c(\d+)$/.exec(id)
-  return m ? Number(m[1]) : 0
-}
-
-/**
- * 每篇文档的**第一块** id 集合。
- *
- * 「是不是尺码表」是**文档级**的(落在 kbDocs,不随块存),而面板一篇文档一篇文档地
- * 切成许多块、每块一条记录 —— 开关只能在该文档的第一块上渲染一次,否则一篇 20 块的
- * 文档会冒出 20 个开关,点哪个都改同一篇文档,用户无从判断自己改的是什么。
- */
-export function firstChunkIds(items: PanelKnowledge[]): Set<string> {
-  const out = new Set<string>()
-  for (const k of items) {
-    if (k.source !== 'doc' || !k.docId) continue
-    if (chunkOrdinal(k.id) === 0) out.add(k.id)
-  }
-  return out
-}
 
 export type { PanelCategory, PanelFolder, PanelGolden }
 
@@ -253,6 +235,81 @@ export function groupByCategory<T extends { categoryId: string }>(
   }
   if (uncategorized.length > 0) out.push({ category: uncCategory, items: uncategorized })
   return out
+}
+
+// ─── 分类导航(v3.0:类型从页内分区标题改为顶部导航栏)─────────────────────────
+
+/**
+ * 分类导航里「全部」项的 id。
+ * 取一个不会被类型表占用的字面量:类型 id 来自 `categories` 表(预置 + 用户自建),
+ * 没有一条会叫 'all'。
+ */
+export const ALL_CATEGORY_ID = 'all'
+
+export interface CatNavEntry {
+  id: string
+  label: string
+  count: number
+}
+
+/**
+ * 分类导航项的**计数**。
+ *
+ * 口径(唯一自洽的那一个):计数描述的是**当前搜索结果按分类的分布**,不是库存总量 ——
+ * 搜索框里打了字之后,导航上各分类的数是"这批命中里各有多少条"。
+ * 若改成库存口径,搜索时导航会显示"商品咨询 31"而列表里只有 2 条,两处对不上。
+ *
+ * 三条不变量与 `groupByCategory` 完全一致(两处必须同口径,否则导航点进去条数对不上):
+ *  ① 类型表里没有的 categoryId 一律并进「未分类」;
+ *  ② 「未分类」恒最后;
+ *  ③ **计数为 0 的类型照样产出** —— 与 groupByCategory"空组不产出"不同,
+ *     这里是刻意的:类别是固定位置,不能今天消失、明天跳回来。
+ */
+export function catNavItems<T extends { categoryId: string }>(
+  shown: T[],
+  categories: PanelCategory[],
+): CatNavEntry[] {
+  const known = new Set(categories.map((c) => c.id))
+  const counts = new Map<string, number>()
+  let uncategorized = 0
+  for (const it of shown) {
+    const id = known.has(it.categoryId) ? it.categoryId : UNCATEGORIZED_CATEGORY_ID
+    if (id === UNCATEGORIZED_CATEGORY_ID) uncategorized++
+    else counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+
+  const out: CatNavEntry[] = [{ id: ALL_CATEGORY_ID, label: '全部', count: shown.length }]
+  for (const c of categoryOrder(categories)) {
+    if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
+    out.push({ id: c.id, label: c.name, count: counts.get(c.id) ?? 0 })
+  }
+  out.push({
+    id: UNCATEGORIZED_CATEGORY_ID,
+    label: UNCATEGORIZED_CATEGORY_NAME,
+    count: uncategorized,
+  })
+  return out
+}
+
+/**
+ * 按选中的分类过滤。与 `catNavItems` 共用同一条"什么算未分类"的判据 ——
+ * 两处若各判各的,导航上写「未分类 3」、点进去却是 2 条。
+ */
+export function filterByCategory<T extends { categoryId: string }>(
+  shown: T[],
+  categoryId: string,
+  categories: PanelCategory[],
+): T[] {
+  if (categoryId === ALL_CATEGORY_ID) return shown
+  if (categoryId === UNCATEGORIZED_CATEGORY_ID) {
+    // 注意 `uncategorized` **本身也在类型表里** —— 只判 `!known.has(id)` 会把它自己
+    // 筛掉,于是导航写「未分类 2」、点进去只剩幽灵类型那 1 条(catNav.test 钉着这条)
+    const known = new Set(categories.map((c) => c.id))
+    return shown.filter(
+      (it) => !known.has(it.categoryId) || it.categoryId === UNCATEGORIZED_CATEGORY_ID,
+    )
+  }
+  return shown.filter((it) => it.categoryId === categoryId)
 }
 
 // ─── 判定说明与预置类型的"含义相近"提示(spec §5.3,纯提示不做拦截)──────────────

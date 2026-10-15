@@ -1,8 +1,10 @@
-// 记忆卡片操作布局单测(2026-09-15 第十八轮用户要求):
-// ①「设置标准回答」放回每个回答条目后方(单/多回复口径统一,不再按回复数分流);
-// ②「删除」移至问题行折叠钮左侧、以垃圾桶图标展示(原底部文字按钮行整体移除,
-//    确认条改为点图标后在问题行下方出现);
-// 已设金标 → 原按钮位置显示「已设为标准回答」徽标。
+// 记忆页的操作布局(v3.0 重写)。
+//
+// v2.6 的形态:折叠行里并排「设为标准」文字钮 + 删除垃圾桶图标 + 展开箭头,
+// 三个控件挤在 34px 的问题行里,其中两个还是不可逆操作与展开开关同权。
+// v3.0 之后:
+//  · ★/⧉ 收进**展开区里每条回复的行尾**(每条各带一对,单/多回复口径统一);
+//  · 删除退到展开区底部 —— 一个破坏性操作不该和"展开"挤在同一行。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -20,7 +22,6 @@ const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')
-const { lightTheme } = await import('../../../src/ui/theme')
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -31,7 +32,6 @@ const reply = (id: string, goldenId?: string): MemoryReplyItem => ({
   ...(goldenId ? { goldenId } : {}),
 })
 
-// 第五十七轮 Task 5 起条目按类型分区;用非未分类的类型,分组默认展开,不影响本页断言
 const CATEGORIES: PanelCategory[] = [
   { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
 ]
@@ -43,10 +43,31 @@ function page(items: MemoryListItem[]): GetMemoryListResponse {
 let container: HTMLDivElement
 let root: Root
 
-const btns = (text: string): HTMLButtonElement[] =>
-  Array.from(container.querySelectorAll('button')).filter((el) =>
-    el.textContent?.includes(text),
-  )
+const qa = (id: string, replies: MemoryReplyItem[]): MemoryListItem => ({
+  id,
+  question: `问题${id}`,
+  questionTs: Date.now(),
+  replyCount: replies.length,
+  categoryId: 'preset:size',
+  replies,
+})
+
+const textBtn = (label: string): HTMLButtonElement | null =>
+  Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+    (b) => b.textContent?.trim() === label,
+  ) ?? null
+
+const click = async (el: HTMLElement) => {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  await act(async () => {})
+}
+
+/** 展开第一个问题行 */
+async function openFirstRow() {
+  await click(container.querySelector('.pddcs-qrow') as HTMLElement)
+}
 
 beforeEach(() => {
   container = document.createElement('div')
@@ -63,122 +84,103 @@ afterEach(() => {
 async function renderWith(items: MemoryListItem[]) {
   mockedSend.mockResolvedValueOnce(page(items))
   await act(async () => {
-    root.render(
-      <MemoryListTab
-        tk={lightTheme}
-        retentionDays={90}
-        categories={CATEGORIES}
-        onDataChanged={vi.fn()}
-      />,
-    )
+    root.render(<MemoryListTab categories={CATEGORIES} onDataChanged={vi.fn()} />)
   })
   await act(async () => {})
 }
 
-const click = async (el: HTMLElement) => {
-  await act(async () => {
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  })
-}
-
-describe('MemoryListTab:「设置标准回答」位置(第十八轮:放回每条回答后方)', () => {
-  it('单回复卡片:按钮在该回复行内(与回复文本同容器)', async () => {
-    await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
-    ])
-    const goldenBtns = btns('设为标准')
-    expect(goldenBtns).toHaveLength(1)
-    // 回复行容器同时包含回复文本与按钮
-    expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
+describe('记忆页 v3.0:★/⧉ 在每条回复的行尾', () => {
+  it('单回复:展开后该回复行尾恰好一对图标钮,且与回复文本同容器', async () => {
+    await renderWith([qa('qa-1', [reply('r1')])])
+    await openFirstRow()
+    const row = container.querySelector('.pddcs-reply') as HTMLElement
+    const icons = row.querySelectorAll('.pddcs-iconbtn')
+    expect(icons).toHaveLength(2)
+    expect(row.textContent).toContain('回复r1')
+    expect(icons[0].getAttribute('title')).toBe('设为标准回答')
+    expect(icons[1].getAttribute('title')).toBe('复制该条回复')
   })
 
-  it('多回复卡片:每条回复各带按钮', async () => {
-    await renderWith([
-      {
-        id: 'qa-2',
-        question: '问题二',
-        questionTs: 1,
-        replyCount: 2,
-        categoryId: 'preset:size',
-        replies: [reply('r1'), reply('r2')],
-      },
-    ])
-    const goldenBtns = btns('设为标准')
-    expect(goldenBtns).toHaveLength(2)
-    expect(goldenBtns[0].parentElement!.textContent).toContain('回复r1')
-    expect(goldenBtns[1].parentElement!.textContent).toContain('回复r2')
+  it('多回复:每条各带一对,互不共用', async () => {
+    await renderWith([qa('qa-2', [reply('r1'), reply('r2')])])
+    await openFirstRow()
+    const rows = Array.from(container.querySelectorAll('.pddcs-reply'))
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('回复r1')
+    expect(rows[1].textContent).toContain('回复r2')
+    for (const r of rows) expect(r.querySelectorAll('.pddcs-iconbtn')).toHaveLength(2)
   })
 
-  it('已设金标:回复行内显示「标准回答」琥珀徽标而非按钮', async () => {
-    await renderWith([
-      {
-        id: 'qa-3',
-        question: '问题三',
-        questionTs: 1,
-        replyCount: 1,
-        categoryId: 'preset:size',
-        replies: [reply('r1', 'gd-1')],
-      },
-    ])
-    expect(btns('设为标准')).toHaveLength(0)
-    expect(container.textContent).toContain('标准回答')
+  it('已设金标:★ 呈 data-on 态,title 改为「取消标准回答」', async () => {
+    await renderWith([qa('qa-3', [reply('r1', 'gd-1')])])
+    await openFirstRow()
+    const star = container.querySelector('.pddcs-reply .pddcs-iconbtn') as HTMLElement
+    expect(star.getAttribute('data-on')).toBe('true')
+    expect(star.getAttribute('title')).toBe('取消标准回答')
   })
 
-  it('金标控件为 mini 尺寸(24px 高、caption 字号),减少对内容区的挤压(第十九轮)', async () => {
-    await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
-    ])
-    const b = btns('设为标准')[0]
-    expect(b.style.height).toBe('24px')
-    expect(b.style.fontSize).toBe('10.5px')
+  it('未设金标:★ 无 data-on 态', async () => {
+    await renderWith([qa('qa-1', [reply('r1')])])
+    await openFirstRow()
+    expect(
+      container.querySelector('.pddcs-reply .pddcs-iconbtn')!.getAttribute('data-on'),
+    ).toBeNull()
+  })
+
+  it('折叠态下展开区不存在 —— ★/⧉ 只随展开出现', async () => {
+    await renderWith([qa('qa-1', [reply('r1')])])
+    expect(container.querySelector('.pddcs-reply')).toBeNull()
+    expect(container.querySelector('.pddcs-qopen')).toBeNull()
+    // 行尾那两枚是删除与折叠指示,不是 ★/⧉
+    expect(container.querySelector('button[title="设为标准回答"]')).toBeNull()
   })
 })
 
-describe('MemoryListTab:删除入口(第十八轮:折叠钮左侧图标)', () => {
-  it('删除是问题行内的图标钮(title 标识),位于折叠钮左侧,不再有「删除」文字按钮', async () => {
-    await renderWith([
-      { id: 'qa-1', question: '问题一', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
-    ])
-    // 旧底部文字按钮已不存在(图标钮无文字)
-    expect(btns('删除')).toHaveLength(0)
-    const del = container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement
-    // 第五十七轮 Task 5 起分区标题也是 aria-expanded 的 disclosure 按钮,故这里按 title 精确定位条目折叠钮
-    const chevron = container.querySelector('button[title="折叠该问题"]') as HTMLButtonElement
+describe('记忆页 v4.0:删除入口', () => {
+  it('★ 删除是**折叠行上常驻的图标**(不再藏在展开区底部),与折叠指示同排', async () => {
+    await renderWith([qa('qa-1', [reply('r1')])])
+    const row = container.querySelector('.pddcs-qrow') as HTMLElement
+    const del = row.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement
     expect(del).toBeTruthy()
-    expect(chevron).toBeTruthy()
-    // 同一问题行,删除在折叠钮左侧(DOM 顺序在前 = 视觉左侧)
-    expect(del.parentElement).toBe(chevron.parentElement)
-    const kids = Array.from(del.parentElement!.children)
-    expect(kids.indexOf(del)).toBeLessThan(kids.indexOf(chevron))
-    // 图标钮与折叠钮同尺寸(等高铁律;jsdom 下比对内联样式)
-    expect(del.style.height).toBe(chevron.style.height)
-    expect(del.style.width).toBe(chevron.style.width)
+    // 图标在问题后方(第一行内),折叠指示紧随其后
+    const line1 = row.querySelector('.line1') as HTMLElement
+    expect(line1.contains(del)).toBe(true)
+    expect(line1.querySelector('.chev')).toBeTruthy()
+    // 展开区里不再有"删除此问答"文字钮 —— 入口只有一个
+    expect(textBtn('删除此问答')).toBeNull()
   })
 
-  it('点删除图标 → 问题行下方出确认条;取消可退出;确认调 DELETE_QA', async () => {
-    mockedSend
-      .mockResolvedValueOnce(
-        page([{ id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] }]),
-      )
-      .mockResolvedValueOnce({
-        type: 'DELETE_QA_RESPONSE',
-        payload: { success: true },
-      } as never)
-      .mockResolvedValueOnce(page([]))
-    await renderWith([
-      { id: 'qa-9', question: '问题九', questionTs: 1, replyCount: 1, categoryId: 'preset:size', replies: [reply('r1')] },
-    ])
-    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement)
+  it('行是 div+role=button 而不是 <button> —— 按钮不能套按钮', async () => {
+    await renderWith([qa('qa-1', [reply('r1')])])
+    const row = container.querySelector('.pddcs-qrow') as HTMLElement
+    expect(row.tagName).toBe('DIV')
+    expect(row.getAttribute('role')).toBe('button')
+    // 行内确实有真正的 <button>(删除),这正是不能把行做成 <button> 的原因
+    expect(row.querySelectorAll('button').length).toBeGreaterThan(0)
+  })
+
+  it('点删除 → 该行就地展开并出确认条;取消可退出;确认发 DELETE_QA', async () => {
+    mockedSend.mockResolvedValueOnce(page([qa('qa-9', [reply('r1')])]))
+    mockedSend.mockResolvedValueOnce({ type: 'DELETE_QA_RESPONSE', payload: { success: true } } as never)
+    mockedSend.mockResolvedValueOnce(page([]))
+    await act(async () => {
+      root.render(<MemoryListTab categories={CATEGORIES} onDataChanged={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLElement)
     expect(container.textContent).toContain('删除该问答及其全部回复?')
+
     // 取消 → 确认条消失,未发删除请求
-    await click(btns('取消')[0])
+    await click(textBtn('取消')!)
     expect(container.textContent).not.toContain('删除该问答及其全部回复?')
-    expect(mockedSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DELETE_QA' }))
-    // 再点图标 → 确认 → 发 DELETE_QA
-    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLButtonElement)
-    await click(btns('确认')[0])
-    expect(mockedSend).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'DELETE_QA', payload: { id: 'qa-9' } }),
+    expect(mockedSend.mock.calls.map((c) => (c[0] as { type: string }).type)).not.toContain(
+      'DELETE_QA',
     )
+
+    // 再点 → 确认 → 发 DELETE_QA
+    await click(container.querySelector('button[title="删除该问答(需确认)"]') as HTMLElement)
+    await click(textBtn('确认')!)
+    expect(mockedSend).toHaveBeenCalledWith({ type: 'DELETE_QA', payload: { id: 'qa-9' } })
   })
 })

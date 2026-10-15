@@ -62,6 +62,12 @@ export async function getMemoryList(
     replies: (byQa.get(q.id) ?? []).sort((a, b) => a.ts - b.ts),
     // 出口归一(裁决 I2):库里三种形态(undefined / null / 具体 id)在这里收敛成一种
     categoryId: q.categoryId ?? UNCATEGORIZED_CATEGORY_ID,
+    // 来源与概率**不归一**:它们是"这条判得准不准"的证据,缺省本身就是信息。
+    // 面板据此标「低置信」,故必须原样送到 UI —— 归成 undefined 就再也看不出机器判过
+    ...(q.categorySource !== undefined ? { categorySource: q.categorySource } : {}),
+    ...(q.categoryConfidence !== undefined
+      ? { categoryConfidence: q.categoryConfidence }
+      : {}),
   }));
   return { items, total, hasMore: offset + items.length < total };
 }
@@ -129,6 +135,8 @@ export async function getPanelData(
       updatedAt: g.updatedAt,
       categoryId: g.categoryId ?? UNCATEGORIZED_CATEGORY_ID,
       categorySource: g.categorySource,
+      // 概率跟着来源一起送:缺它就没法在卡上标「低置信」,这个字段也就继续只写不读
+      categoryConfidence: g.categoryConfidence,
     })),
     knowledge: knowledge.map((k) => ({
       id: k.id,

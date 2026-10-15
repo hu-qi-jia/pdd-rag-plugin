@@ -8,18 +8,25 @@
  *
  * 口径(与 popup 的 lucide-react 图标钮**同源同档**,不产生第二套图标语言):
  *  - 路径数据取自 lucide-react@0.575.0 的 `star` / `copy` / `loader-circle`
- *    (`defaultAttributes`:24×24 画布 / fill none / stroke currentColor / 2px 描边 / 圆角线帽);
- *  - 渲染尺寸 13px,与 popup 行内图标钮(24px 钮 × 13px 图标)一致;
- *  - `currentColor` 继承,CSS 里由 `.pddcs-icon-btn` 决定颜色(含金色已设态)。
+ *    (`defaultAttributes`:24×24 画布 / fill none / stroke currentColor / 2px 描边);
+ *  - 渲染尺寸取 `design.size.iconBtn`(28px 钮 × 16px 图标,四周各留 6px)——
+ *    它们长在 `.pddcs-icon-btn` 里,判据是容器,所以与 popup 的 `IconBtn` 同一档
+ *    (此前这里是 `size.icon`(14),两个面上同形状的钮里图标一大一小);
+ *  - `currentColor` 继承,CSS 里由 `.pddcs-icon-btn` 决定颜色(含已设标准回答的实心态)。
+ *
+ * 图标本身的**线帽仍是圆头**(lucide 的 `stroke-linecap: round` 未改):
+ * 12px 下圆头与方头肉眼无差,要让图标也全直角得手写 path —— 收益为零,
+ * 维护成本却落在每一次升级图标库上。全直角语言管的是**容器**(直角方钮),
+ * 不是像素级的笔画端点。
  */
 import { controlH, size } from './design'
 
-/** 图标渲染边长(与 popup 行内图标钮同档;钮本身取 controlH.inline)。
- *  第五十一轮起取自 `design.size.icon` —— 与 popup 的 FoldersTab.ICON_SIZE 同源。 */
-export const ICON_SIZE = size.icon
+/** 图标渲染边长 —— 与 popup 的 `IconBtn` 严格同档(容器都是 28px 图标钮)。
+ *  popup 侧的对应单点是 `FoldersTab.ICON_SIZE`(= `size.iconBtn`)。 */
+export const ICON_SIZE = size.iconBtn
 
-/** 图标钮边长:与 popup 行悬浮图标钮严格同档(等高铁律:同行控件同档) */
-export const ICON_BTN_SIZE = controlH.inline
+/** 图标钮边长:与 popup 行内图标钮严格同档(等高铁律:同行控件同档) */
+export const ICON_BTN_SIZE = controlH.icon
 
 /** lucide star —— 未设标准回答态(描边星) */
 const STAR_PATH =

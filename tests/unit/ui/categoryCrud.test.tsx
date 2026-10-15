@@ -117,10 +117,14 @@ afterEach(() => {
 
 async function render() {
   await act(async () => {
-    root.render(<FoldersTab tk={lightTheme} onDataChanged={vi.fn()} />)
+    root.render(<FoldersTab onDataChanged={vi.fn()} />)
   })
   await act(async () => {})
 }
+
+/** 分类导航里的某一项(按稳定的 data-cat-id 锚点,不按文字/位置) */
+const navItem = (catId: string): HTMLButtonElement =>
+  container.querySelector<HTMLButtonElement>(`.pddcs-catnav button[data-cat-id="${catId}"]`)!
 
 const createFormOpen = () => container.querySelectorAll('input.pddcs-input').length > 0
 
@@ -165,20 +169,37 @@ describe('FoldersTab:新建类型', () => {
   })
 })
 
-describe('FoldersTab:分区头的类型操作钮', () => {
-  it('只有自定义类型有改名/删除钮;预置与未分类没有', async () => {
+describe('FoldersTab:类型操作钮跟着选中的类型走', () => {
+  it('默认「全部」时没有改名/删除钮 —— 没有"当前类型",就没有可改的东西', async () => {
     await render()
-    // 预置分区(尺码推荐)有 1 条标答 → 会渲染;两个自定义分区(发票有标答、催件为空)也渲染
-    expect(btns('重命名类型')).toHaveLength(2)
-    expect(btns('删除类型')).toHaveLength(2)
-    // 种类徽标在:预置分区显示「预置」,自定义分区显示「自定义」
-    expect(noticeText()).toContain('预置')
-    expect(noticeText()).toContain('自定义')
+    expect(btns('重命名这个类型')).toHaveLength(0)
+    expect(btns('删除这个类型')).toHaveLength(0)
   })
 
-  it('改名:点钮出内联输入(预填原名),保存发出 RENAME_CATEGORY', async () => {
+  it('选中预置类型:没有钮(预置不可改名/删除)', async () => {
     await render()
-    await click(btns('重命名类型')[0])
+    await click(navItem('preset:size'))
+    expect(btns('重命名这个类型')).toHaveLength(0)
+    expect(btns('删除这个类型')).toHaveLength(0)
+  })
+
+  it('选中未分类:没有钮', async () => {
+    await render()
+    await click(navItem('uncategorized'))
+    expect(btns('重命名这个类型')).toHaveLength(0)
+  })
+
+  it('选中自定义类型:两枚钮出现', async () => {
+    await render()
+    await click(navItem('cat-1'))
+    expect(btns('重命名这个类型')).toHaveLength(1)
+    expect(btns('删除这个类型')).toHaveLength(1)
+  })
+
+  it('改名:点钮出内联输入(预填被选中类型的原名),保存发出 RENAME_CATEGORY', async () => {
+    await render()
+    await click(navItem('cat-1'))
+    await click(btns('重命名这个类型')[0])
     const input = container.querySelector<HTMLInputElement>('input.pddcs-input')!
     expect(input.value).toBe('发票')
     await typeIn(input, '发票与开票')
@@ -191,7 +212,8 @@ describe('FoldersTab:分区头的类型操作钮', () => {
   it('删除:二次确认后发出 DELETE_CATEGORY,并提示标答落回未分类', async () => {
     respOverrides.DELETE_CATEGORY = { success: true, movedGoldens: 2 }
     await render()
-    await click(btns('删除类型')[0])
+    await click(navItem('cat-1'))
+    await click(btns('删除这个类型')[0])
     // 未确认前不发消息
     expect(sent.filter((m) => m.type === 'DELETE_CATEGORY')).toHaveLength(0)
     await click(textBtn('确认')!)
@@ -202,8 +224,18 @@ describe('FoldersTab:分区头的类型操作钮', () => {
 
   it('删除确认可取消:取消不发 DELETE_CATEGORY', async () => {
     await render()
-    await click(btns('删除类型')[0])
+    await click(navItem('cat-1'))
+    await click(btns('删除这个类型')[0])
     await click(textBtn('取消')!)
     expect(sent.filter((m) => m.type === 'DELETE_CATEGORY')).toHaveLength(0)
+  })
+
+  it('切走选中项会收起改名态(改名输入不会跨类型粘住)', async () => {
+    await render()
+    await click(navItem('cat-1'))
+    await click(btns('重命名这个类型')[0])
+    expect(container.querySelectorAll('input.pddcs-input')).toHaveLength(1)
+    await click(navItem('cat-2'))
+    expect(container.querySelectorAll('input.pddcs-input')).toHaveLength(0)
   })
 })

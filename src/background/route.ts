@@ -5,9 +5,13 @@
  *  - `size-only`:买家在问自己的尺码 → 历史回复不可复用(答案取决于他的身高体重),
  *    不检索,改走"尺码表整篇原文 + LLM 生成";
  *  - `filter`:收窄到类型集合对应的池子;
- *  - `no-filter`:jev 不可用 / 判不准 → 与今天完全一致。
+ *  - `no-filter`:jev 不可用 / 判不准 / **判得没底** → 与今天完全一致。
+ *
+ * 第六十七轮加了一道**低置信守卫**:概率最高的那一类连 `LOW_CONFIDENCE_LINE`
+ * 都不到时,一律走 no-filter。理由见 `decideRoute` 内的注释 —— 一句话是
+ * "弱信号不该产生硬后果"。
  */
-import { UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
+import { LOW_CONFIDENCE_LINE, UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
 import type { CategoryRecord } from '../types/memory'
 import type { RankedSource } from './retrieval'
 
@@ -52,6 +56,13 @@ export function pickedHasSize(categories: CategoryRecord[], picked: string[]): b
   return picked.some((id) => byId.get(id)?.route === 'size')
 }
 
+/** 一份概率分布里的最高值(空对象记 0)。与 topCosine 同形,只是作用的量不同 */
+function topProbability(probabilities: Record<string, number>): number {
+  let max = 0
+  for (const p of Object.values(probabilities)) if (p > max) max = p
+  return max
+}
+
 /**
  * 概率 → 路线。
  *
@@ -61,6 +72,8 @@ export function pickedHasSize(categories: CategoryRecord[], picked: string[]): b
  * 多意图:取**概率 ≥ 阈值的所有类型**,不取胜者。概率分散既可能是"判不准"、
  * 也可能是"买家一次问了两件事",而两种情况下"把池子放宽"都是对的 ——
  * 所以不需要两套逻辑,也不需要额外问问题。
+ *
+ * 前置还有一道**低置信守卫**(见下方),那是本函数唯一的"主动放弃判断"路径。
  */
 export function decideRoute(
   categories: CategoryRecord[],
@@ -69,10 +82,29 @@ export function decideRoute(
 ): RouteDecision {
   if (probabilities === null) return { kind: 'no-filter' }
 
+  // 低置信守卫(第六十七轮):概率最高的那一类都不到复核线 → 判得没底,别乱筛。
+  //
+  // 与上面"多意图取并集"是同一条思路的延伸 —— 概率分散或偏低时,把池子放宽总是对的。
+  // 区别在于:并集只在**有多个类过线**时才放宽;而这里管的是"只有一个类勉强过线"。
+  // 那种情况下并集帮不上忙(就一条),却会实打实地把其余类型全部排除掉。
+  //
+  // 守卫放在 picked 之前,**两种后果一起挡**:`filter`(收窄) 与 `size-only`
+  // (完全不检索)。后者比前者更限制用户能搜到什么,只挡小的不挡大的说不通。
+  //
+  // 判据刻意与「低置信」标记共用同一条线(LOW_CONFIDENCE_LINE):"标出来给人看的"
+  // 和"不许它收窄检索的"如果各用一条线,迟早会打架 —— 界面上标着"可能判错了",
+  // 检索却照样按它收窄,那是自相矛盾。
+  //
+  // ⚠️ 若实际数据下这条守卫让尺码路由几乎不再触发,**那不是 bug,是数据在说话**:
+  // 说明 jev 的置信度撑不起"完全不检索"这个后果。那时该做的是给尺码路线单独定一条
+  // 更低的线,而不是把守卫摘掉。
+  if (topProbability(probabilities) < LOW_CONFIDENCE_LINE) return { kind: 'no-filter' }
+
   const picked = Object.entries(probabilities)
     .filter(([, p]) => p >= threshold)
     .map(([id]) => id)
-  // 全低于阈值 → 判不准,别乱筛
+  // 全低于阈值 → 判不准,别乱筛。
+  // 阈值被调到 0.5 以上时这条才可能命中(守卫只保证最高的一条 ≥ 0.5)
   if (picked.length === 0) return { kind: 'no-filter' }
 
   const byId = new Map(categories.map((c) => [c.id, c]))

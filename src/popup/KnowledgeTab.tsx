@@ -1,13 +1,18 @@
 /**
- * 知识库页(P4-KB,设计文档 §7):人工维护的"标题+正文"话术卡 + md 文档上传。
- * 手工条目操作:新建(内联表单)/ 关键词筛选 / 编辑(标题实质变更才重嵌)/
- * 停用开关(停用不参与检索、不重嵌)/ 删除(内联二次确认)/ 填充 / 复制 ——
- * 这一排(填充在左)v2.6.30 合并为整组、v2.6.31 起**默认可见**(不再悬浮才显,与文件夹页同构)。
- * 文档上传:md 文本按 500 字/75 重叠分块(同原项目),每块一条只读条目,逐块向量化;
- * 同名文档重复上传整篇替换。
+ * 知识库页 — v4.0「Codex × iOS · 黑灰白」
+ *
+ * 结构:工具栏(新建条目 / 上传 .md / 上传尺码表)→ 尺码表状态条 → 搜索 → 条目卡流。
+ *
+ * 尺码表走**上传入口**,不再有"每块一个开关":
+ * 它本来是文档级标记(落在 kbDocs),而一篇文档会切成许多块 —— v2.6 为了让开关
+ * 只出现一次,弄了套 `firstChunkIds`("只在该文档第一块上渲染"),既绕又脆:
+ * 单块文档、早期盲切留下的文档都可能认不出"第一块",于是那个开关**静默失效**。
+ * 现在"是不是尺码表"由**你点了哪个按钮**决定。顶部那行状态条是唯一的显示与撤销处。
+ *
+ * v4.0 还删了两处冗余文字:状态条尾部的"整篇原文作生成资料,不参与检索"、
+ * 页脚整块的"检索层级:标准回答 > 历史 > 知识库"。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ThemeTokens } from '../ui/theme'
 import { sendMessage } from '../shared/message-passing'
 import type {
   CreateKbResponse,
@@ -20,34 +25,36 @@ import type {
   UploadKbDocResponse,
 } from '../types/messages'
 import {
-  Badge,
   Btn,
-  Card,
+  ConfirmRow,
   CreateBtn,
   EmptyState,
+  IconBtn,
+  List,
   Notice,
   SearchInput,
-  Toggle,
+  Tag,
+  Toolbar,
   formatTs,
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
-import { fontSize, fontWeight, radius, spacing } from '../ui/design'
-import { FileTextIcon, UploadIcon } from '../ui/icons'
-import { firstChunkIds, legacyDocNotice } from './logic'
+import { fontSize, size, spacing } from '../ui/design'
+import {
+  CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FillIcon,
+  PencilIcon,
+  TrashIcon,
+  UploadIcon,
+} from '../ui/icons'
+import { legacyDocNotice } from './logic'
 
-export function KnowledgeTab({
-  tk,
-  onDataChanged,
-}: {
-  tk: ThemeTokens
-  onDataChanged: () => Promise<void> | void
-}) {
+export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<void> | void }) {
   const [items, setItems] = useState<PanelKnowledge[]>([])
   /** 升级前上传、无原文可重切的文档名(非空则提示重新上传) */
   const [legacyDocs, setLegacyDocs] = useState<string[]>([])
-  /** 逐条用量(v0.16):条目 id → 被填充次数(文档块也能看出哪段真被用过) */
-  const [itemUsage, setItemUsage] = useState<Record<string, number>>({})
   const [keyword, setKeyword] = useState('')
   const [msg, setMsg] = useState<NoticeMsg>(null)
   const [loading, setLoading] = useState(true)
@@ -60,8 +67,10 @@ export function KnowledgeTab({
   const [draftTitle, setDraftTitle] = useState('')
   const [draftContent, setDraftContent] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [confirmUnsetSize, setConfirmUnsetSize] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const sizeFileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     try {
@@ -71,7 +80,6 @@ export function KnowledgeTab({
       } else {
         setItems(resp.payload.knowledge ?? [])
         setLegacyDocs(resp.payload.legacyDocs ?? [])
-        setItemUsage(resp.payload.itemUsage ?? {})
       }
     } catch (err) {
       setMsg({ ok: false, text: `读取失败:${String(err)}` })
@@ -92,13 +100,19 @@ export function KnowledgeTab({
   const shown = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     if (!kw) return items
-    return items.filter((k) => k.title.toLowerCase().includes(kw) || k.content.toLowerCase().includes(kw))
+    return items.filter(
+      (k) => k.title.toLowerCase().includes(kw) || k.content.toLowerCase().includes(kw),
+    )
   }, [items, keyword])
 
   const legacyNotice = useMemo(() => legacyDocNotice(legacyDocs), [legacyDocs])
 
-  /** 每篇文档的**第一块** id:尺码表开关是文档级的,只在这些块上渲染一次 */
-  const sizeSwitchIds = useMemo(() => firstChunkIds(shown), [shown])
+  /** 当前尺码表的 docId(唯一的真源在 kbDocs.isSizeTable,这里从块上读回) */
+  const sizeDocId = useMemo(() => items.find((k) => k.isSizeTable === true)?.docId ?? null, [items])
+  const sizeChunkCount = useMemo(
+    () => (sizeDocId ? items.filter((k) => k.docId === sizeDocId).length : 0),
+    [items, sizeDocId],
+  )
 
   /** 上传 md 文档:读文本 → UPLOAD_KB_DOC(分块+逐块向量化,同名整篇替换) */
   const uploadDoc = async (file: File) => {
@@ -123,6 +137,69 @@ export function KnowledgeTab({
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  /**
+   * 上传尺码表 —— 唯一的标记入口。
+   * 两步:先按普通文档上传(同样的分块与原文留存),再对该 docId 打文档级标记。
+   * 「同一时刻只有一份尺码表」由后台保证(见 knowledge#setKbDocSizeTable),
+   * 这里只负责把"顶替了谁"如实报给用户。
+   */
+  const uploadSizeTable = async (file: File) => {
+    setUploading(true)
+    try {
+      const up = await sendMessage<UploadKbDocResponse>({
+        type: 'UPLOAD_KB_DOC',
+        payload: { name: file.name, content: await file.text() },
+      })
+      if (up.payload.error || !up.payload.docId) {
+        setMsg({
+          ok: false,
+          text: `上传失败:${up.payload.error ?? '后台没有回带 docId,无法标记尺码表'}`,
+        })
+        return
+      }
+      const mark = await sendMessage<SetKbSizeTableResponse>({
+        type: 'SET_KB_SIZE_TABLE',
+        payload: { docId: up.payload.docId, on: true },
+      })
+      if (!mark.payload.success) {
+        setMsg({ ok: false, text: `标记为尺码表失败:${mark.payload.error ?? '未知错误'}` })
+      } else {
+        setMsg({
+          ok: true,
+          text:
+            `已上传尺码表《${up.payload.docId}》共 ${up.payload.chunkCount} 块` +
+            (mark.payload.replaced ? `,已替换原尺码表《${mark.payload.replaced}》` : ''),
+        })
+      }
+      await refresh()
+    } catch (err) {
+      setMsg({ ok: false, text: `上传失败:${String(err)}` })
+    } finally {
+      setUploading(false)
+      if (sizeFileRef.current) sizeFileRef.current.value = ''
+    }
+  }
+
+  /** 取消尺码表标记:文档本身保留,只是重新回到向量检索池 */
+  const unsetSizeTable = async () => {
+    if (!sizeDocId) return
+    try {
+      const resp = await sendMessage<SetKbSizeTableResponse>({
+        type: 'SET_KB_SIZE_TABLE',
+        payload: { docId: sizeDocId, on: false },
+      })
+      if (resp.payload.success) {
+        setMsg({ ok: true, text: '已取消尺码表标记:该文档恢复参与向量检索' })
+        await refresh()
+      } else {
+        setMsg({ ok: false, text: `取消失败:${resp.payload.error ?? '未知错误'}` })
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: `取消失败:${String(err)}` })
+    }
+    setConfirmUnsetSize(false)
   }
 
   const submitCreate = async () => {
@@ -163,10 +240,7 @@ export function KnowledgeTab({
         setMsg({ ok: false, text: `保存失败:${resp.payload.error}` })
         return
       }
-      setMsg({
-        ok: true,
-        text: resp.payload.reembed ? '已保存,正在重新生成标题向量' : '已保存',
-      })
+      setMsg({ ok: true, text: resp.payload.reembed ? '已保存,正在重新生成标题向量' : '已保存' })
       await refresh()
     } catch (err) {
       setMsg({ ok: false, text: `保存失败:${String(err)}` })
@@ -187,38 +261,11 @@ export function KnowledgeTab({
     }
   }
 
-  /**
-   * 标记/取消「该文档是尺码表」(文档级)。标记后整篇原文作尺码生成的 LLM 材料、
-   * 且该文档的块不再进向量检索池(spec §八)。
-   */
-  const toggleSizeTable = async (k: PanelKnowledge, on: boolean) => {
-    if (!k.docId) return
-    try {
-      const resp = await sendMessage<SetKbSizeTableResponse>({
-        type: 'SET_KB_SIZE_TABLE',
-        payload: { docId: k.docId, on },
-      })
-      if (resp.payload.error) {
-        setMsg({ ok: false, text: `标记失败:${resp.payload.error}` })
-      } else {
-        setMsg({
-          ok: true,
-          text: on
-            ? '已标为尺码表:整篇原文作生成材料,不再参与向量检索'
-            : '已取消尺码表标记:该文档恢复参与向量检索',
-        })
-        await refresh()
-      }
-    } catch (err) {
-      setMsg({ ok: false, text: `标记失败:${String(err)}` })
-    }
-  }
-
   const fillKb = async (k: PanelKnowledge) => {
     try {
       const resp = await sendMessage<FillInputResponse>({
         type: 'FILL_INPUT',
-        // 带上来源标注:SW 填成功后据此记一笔使用统计(填充成功才计,见 fillToChatPage)
+        // 带上来源标注:SW 填成功后据此记一笔使用统计
         payload: { text: k.content, itemKind: 'knowledge', itemId: k.id },
       })
       if (resp.payload.success) setMsg({ ok: true, text: '已填充至输入框,发送由人工完成' })
@@ -256,20 +303,34 @@ export function KnowledgeTab({
   }
 
   if (loading) {
-    return <div style={{ fontSize: fontSize.secondary, color: tk.textMuted }}>读取中…</div>
+    return (
+      <div style={{ fontSize: fontSize.sub, color: 'var(--pddcs-text-tertiary)', padding: spacing.xxl }}>
+        读取中…
+      </div>
+    )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+    <div>
+      <Notice msg={msg} onDismiss={() => setMsg(null)} />
+
       {creating ? (
-        <Card tk={tk} style={{ padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`, gap: spacing.md }}>
+        // 与上面的编辑态同一副长相(创建 = 编辑),也不再自画一块填充底的方盒 ——
+        // 见 FoldersTab 同一处的说明
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: spacing.xl,
+            padding: `${spacing.xxl}px ${spacing.xxl}px 0`,
+          }}
+        >
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="标题(检索锚,如:退货政策)"
             autoFocus
             className="pddcs-input"
-            style={inputStyle(tk)}
           />
           <textarea
             value={newContent}
@@ -277,31 +338,52 @@ export function KnowledgeTab({
             rows={4}
             placeholder="正文(填充与复制的内容)"
             className="pddcs-input"
-            style={inputStyle(tk, { resize: 'vertical' })}
+            style={inputStyle({ resize: 'vertical' })}
           />
-          <div style={{ display: 'flex', gap: spacing.sm }}>
-            <Btn tk={tk} variant="primary" onClick={() => void submitCreate()} title="创建后自动向量化">
+          <div style={{ display: 'flex', gap: spacing.md }}>
+            <Btn variant="primary" onClick={() => void submitCreate()} title="创建后自动向量化">
               创建
             </Btn>
-            <Btn tk={tk} variant="ghost" onClick={() => setCreating(false)}>
+            <Btn variant="ghost" onClick={() => setCreating(false)}>
               取消
             </Btn>
           </div>
-        </Card>
+        </div>
       ) : (
-        <div style={{ display: 'flex', gap: spacing.sm }}>
-          <CreateBtn tk={tk} label="新建条目" onClick={() => setCreating(true)} />
-          <Btn tk={tk} disabled={uploading} title="上传 .md 文档:自动切分(问答体按条、其余按小节)并逐块向量化" onClick={() => fileRef.current?.click()}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <UploadIcon size={12} strokeWidth={2} />
-              {uploading ? '导入中…' : '上传 .md'}
-            </span>
-          </Btn>
+        <div style={{ paddingTop: spacing.xxl }}>
+          <Toolbar>
+            <CreateBtn label="新建条目" onClick={() => setCreating(true)} />
+            <Btn
+              disabled={uploading}
+              title="上传 .md 文档:自动切分(问答体按条、其余按小节)并逐块向量化"
+              onClick={() => fileRef.current?.click()}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <UploadIcon size={size.icon} strokeWidth={2} />
+                上传 .md
+              </span>
+            </Btn>
+            {/* 尺码表走**自己的上传按钮**:「是不是尺码表」由此变成"你点了哪个钮",
+                不依赖代码认出"第一块" */}
+            <Btn
+              disabled={uploading}
+              title="上传尺码表:整篇原文作为尺码生成的资料,不参与向量检索"
+              onClick={() => sizeFileRef.current?.click()}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <UploadIcon size={size.icon} strokeWidth={2} />
+                上传尺码表
+              </span>
+            </Btn>
+          </Toolbar>
         </div>
       )}
 
+      {/* data-kind 是**稳定的锚点**:两个文件选择框外观完全一样(都是隐藏的),
+          测试与验收脚本按它区分,而不是按 DOM 顺序 */}
       <input
         ref={fileRef}
+        data-kind="doc"
         type="file"
         accept=".md,.markdown,text/markdown,text/plain"
         style={{ display: 'none' }}
@@ -310,31 +392,65 @@ export function KnowledgeTab({
           if (f) void uploadDoc(f)
         }}
       />
+      <input
+        ref={sizeFileRef}
+        data-kind="size"
+        type="file"
+        accept=".md,.markdown,text/markdown,text/plain"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void uploadSizeTable(f)
+        }}
+      />
+
+      {/* 尺码表状态条:一行文字 + 发丝线,整页唯一的显示与撤销处 */}
+      {sizeDocId && (
+        <div className="pddcs-sizeline pddcs-hair">
+          <span className="nm">尺码表</span>
+          <span>{sizeDocId}</span>
+          <span className="ct">{sizeChunkCount} 块</span>
+          {/* 撑开用的空档只在"只有一个按钮"时需要。确认态下它是多余的一个 flex:1 ——
+              和确认条并排会把剩下的宽度对半分,确认文字被挤成两三行 */}
+          {!confirmUnsetSize && <span className="sp" />}
+          {confirmUnsetSize ? (
+            <ConfirmRow
+              text="取消标记后该文档恢复参与向量检索?"
+              onOk={() => void unsetSizeTable()}
+              onCancel={() => setConfirmUnsetSize(false)}
+            />
+          ) : (
+            <Btn variant="ghost" small onClick={() => setConfirmUnsetSize(true)}>
+              取消标记
+            </Btn>
+          )}
+        </div>
+      )}
 
       {/* 旧版文档(有块无原文)提示:它们检索不到却看起来一切正常,不说一声
-          用户只会以为"知识库不灵"。不是错误提示(用户没做错什么),但确实要动手。 */}
+          用户只会以为"知识库不灵"。不是错误提示(用户没做错什么),但确实要动手 */}
       {legacyNotice && (
         <div
           style={{
-            padding: `${spacing.sm + 2}px ${spacing.xl}px`,
-            borderRadius: radius.md,
-            fontSize: fontSize.secondary,
+            background: 'var(--pddcs-danger-soft)',
+            color: 'var(--pddcs-danger)',
+            padding: `${spacing.lg}px ${spacing.xxl}px`,
+            fontSize: fontSize.sub,
             lineHeight: 1.55,
-            backgroundColor: tk.errorBg,
-            color: tk.errorText,
             wordBreak: 'break-word',
+            margin: `0 ${spacing.xxl}px ${spacing.xl}px`,
           }}
         >
           {legacyNotice}
         </div>
       )}
 
-      <SearchInput tk={tk} value={keyword} onChange={setKeyword} placeholder="搜索标题或正文" />
-
-      <Notice tk={tk} msg={msg} onDismiss={() => setMsg(null)} />
+      <div style={{ padding: `0 ${spacing.xxl}px ${spacing.xl}px` }}>
+        <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索标题或正文" />
+      </div>
 
       {shown.length === 0 && (
-        <EmptyState tk={tk}>
+        <EmptyState>
           {items.length === 0 ? (
             <>
               暂无知识条目
@@ -347,148 +463,121 @@ export function KnowledgeTab({
         </EmptyState>
       )}
 
-      {shown.map((k) => {
-        const editing = editingId === k.id
-        const disabled = k.enabled !== 1
-        return (
-          <Card
-            key={k.id}
-            tk={tk}
-            className="pddcs-kb-card"
-            style={{
-              padding: `${spacing.xl - 2}px ${spacing.xl + 2}px`,
-              gap: spacing.sm + 1,
-              opacity: disabled ? 0.55 : 1,
-            }}
-          >
-            {editing ? (
-              <>
-                <input
-                  value={draftTitle}
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                  className="pddcs-input"
-                  style={inputStyle(tk)}
-                />
-                <textarea
-                  value={draftContent}
-                  onChange={(e) => setDraftContent(e.target.value)}
-                  rows={5}
-                  className="pddcs-input"
-                  style={inputStyle(tk, { resize: 'vertical' })}
-                />
-                <div style={{ display: 'flex', gap: spacing.sm }}>
-                  <Btn tk={tk} variant="primary" onClick={() => void submitEdit()} title="标题实质变更时自动重新生成向量">
-                    保存
-                  </Btn>
-                  <Btn tk={tk} variant="ghost" onClick={() => setEditingId(null)}>
-                    取消
-                  </Btn>
+      {shown.length > 0 && (
+        <List>
+          {shown.map((k) => {
+            if (editingId === k.id) {
+              return (
+                <div className="pddcs-gcard pddcs-hair" key={k.id}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                    <input
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      className="pddcs-input"
+                    />
+                    <textarea
+                      value={draftContent}
+                      onChange={(e) => setDraftContent(e.target.value)}
+                      rows={5}
+                      className="pddcs-input"
+                      style={inputStyle({ resize: 'vertical' })}
+                    />
+                    <div style={{ display: 'flex', gap: spacing.md }}>
+                      <Btn
+                        variant="primary"
+                        onClick={() => void submitEdit()}
+                        title="标题实质变更时自动重新生成向量"
+                      >
+                        保存
+                      </Btn>
+                      <Btn variant="ghost" onClick={() => setEditingId(null)}>
+                        取消
+                      </Btn>
+                    </div>
+                  </div>
                 </div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-                  {/* 徽标只标文档块(2026-09-15 设计6:本页即知识库,手工条目徽标冗余);
-                      手工条目与文档块的区分交给徽标有无 */}
-                  {k.source === 'doc' && (
-                    <Badge tk={tk} tone="knowledge" icon={<FileTextIcon size={10} strokeWidth={2.2} />}>
-                      文档
-                    </Badge>
-                  )}
-                  {disabled && (
-                    <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>已停用</span>
-                  )}
-                  {!disabled && k.hasEmbedding === 0 && (
-                    <span style={{ fontSize: fontSize.caption, color: tk.textMuted }}>向量生成中</span>
-                  )}
+              )
+            }
+
+            const disabled = k.enabled !== 1
+            return (
+              <div className="pddcs-gcard pddcs-hair" key={k.id} style={{ opacity: disabled ? 0.5 : 1 }}>
+                {/* 灰标行:只上有信息量的标。文档块标 [文档] 以区分手工条目 */}
+                {/* 这张卡的灰标行**压在卡片顶部**(标 → 标题 → 正文),
+                    所以是 gmeta-top 而不是默认的 gmeta(默认贴着正文上缘) */}
+                <div className="pddcs-gmeta pddcs-gmeta-flush pddcs-gmeta-top">
+                  {k.source === 'doc' && <Tag>文档</Tag>}
+                  {disabled && <Tag>已停用</Tag>}
+                  {!disabled && k.hasEmbedding === 0 && <Tag>向量生成中</Tag>}
                   {!disabled && k.hasEmbedding === -1 && (
-                    <span style={{ fontSize: fontSize.caption, color: tk.errorText }}>嵌入失败,后台将自动重试</span>
+                    <Tag tone="danger" title="嵌入失败,后台将自动重试">
+                      嵌入失败
+                    </Tag>
                   )}
-                  {/* 被用次数(v0.16):文档块也能看出哪一段真被填过;0 次不显示(免得满屏灰标) */}
-                  {(itemUsage[k.id] ?? 0) > 0 && (
-                    <span
-                      title={`这条知识已填入输入框 ${itemUsage[k.id]} 次(仅本机计数)`}
-                      style={{ fontSize: fontSize.caption, color: tk.textTertiary, whiteSpace: 'nowrap' }}
-                    >
-                      被用 {itemUsage[k.id]} 次
-                    </span>
-                  )}
-                  <span style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: tk.textTertiary, fontVariantNumeric: 'tabular-nums' }}>
+                  <span
+                    className="pddcs-num"
+                    style={{ marginLeft: 'auto', fontSize: fontSize.cap, color: 'var(--pddcs-text-tertiary)' }}
+                  >
                     {formatTs(k.updatedAt)}
                   </span>
                 </div>
-                <div style={{ fontSize: fontSize.body, fontWeight: fontWeight.semibold, lineHeight: 1.45, wordBreak: 'break-word' }}>
-                  {k.title}
-                </div>
-                <div
-                  style={{
-                    fontSize: fontSize.secondary,
-                    color: tk.textMuted,
-                    lineHeight: 1.5,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {k.content}
-                </div>
-                {/* 尺码表开关:文档级标记,**只在该文档的第一块上渲染一次**
-                    (一篇文档切成很多块、每块一条记录,见 firstChunkIds) */}
-                {k.source === 'doc' && sizeSwitchIds.has(k.id) && (
-                  <Toggle
-                    tk={tk}
-                    label="尺码表"
-                    desc="整篇原文作为尺码生成的资料,不再参与向量检索"
-                    checked={k.isSizeTable === true}
-                    onChange={(v) => void toggleSizeTable(k, v)}
-                  />
-                )}
-                {/* 操作行(v2.6.30 合并 / v2.6.31 常驻):填充在左,复制/编辑/停用/删除紧随其右,
-                    **默认可见**(不再悬浮才显) */}
-                <div
-                  style={{ display: 'flex', gap: spacing.xs, flexWrap: 'wrap', alignItems: 'center' }}
-                >
-                  <Btn tk={tk} variant="primary" disabled={disabled} onClick={() => void fillKb(k)} title="填充到聊天页输入框,发送由人工完成">
-                    填充
-                  </Btn>
-                  <Btn tk={tk} disabled={disabled} onClick={() => void copyKb(k)}>
-                    复制
-                  </Btn>
-                  {k.source !== 'doc' && (
-                    <Btn tk={tk} onClick={() => startEdit(k)}>
-                      编辑
-                    </Btn>
-                  )}
-                  <Btn tk={tk} title={disabled ? '启用后重新参与检索' : '停用后保留数据,不参与检索'} onClick={() => void toggleEnabled(k)}>
-                    {disabled ? '启用' : '停用'}
-                  </Btn>
-                  {confirmDeleteId === k.id ? (
-                    <>
-                      <Btn tk={tk} variant="danger" onClick={() => void deleteKb(k.id)}>
-                        确认
-                      </Btn>
-                      <Btn tk={tk} variant="ghost" onClick={() => setConfirmDeleteId(null)}>
-                        取消
-                      </Btn>
-                    </>
-                  ) : (
-                    <Btn tk={tk} variant="danger" onClick={() => setConfirmDeleteId(k.id)}>
-                      删除
-                    </Btn>
-                  )}
-                </div>
-              </>
-            )}
-          </Card>
-        )
-      })}
 
-      <div style={{ fontSize: fontSize.caption, color: tk.textTertiary, lineHeight: 1.6 }}>
-        检索层级:标准回答 &gt; 历史记录 &gt; 知识库。.md 文档自动切分:问答体按条切、其余按小节切,超长内容按空行/句号智能截断;文档块只读,同名文档重新上传即整篇替换。
-      </div>
+                <div className="pddcs-kb-title">{k.title}</div>
+                <div className="pddcs-kb-body">{k.content}</div>
+
+                {/* pddcs-gops-flush:知识库卡没有 Q/A 字母槽,正文从 16px 起,
+                    操作行不补那 21px —— 图标与标题同一条竖线 */}
+                <div className="pddcs-gops pddcs-gops-flush">
+                  {confirmDeleteId === k.id ? (
+                    <ConfirmRow
+                      text="删除这条知识?同名文档重新上传可整篇替换。"
+                      onOk={() => void deleteKb(k.id)}
+                      onCancel={() => setConfirmDeleteId(null)}
+                    />
+                  ) : (
+                    <>
+                      {/* 填充也是图标:一行五个动作全是图标,形状一致、宽度一致,
+                          不会因为"填充"两个字把这一行撑歪 */}
+                      <IconBtn
+                        title="填充到聊天页输入框(发送由人工完成)"
+                        disabled={disabled}
+                        onClick={() => void fillKb(k)}
+                      >
+                        <FillIcon size={size.iconBtn} strokeWidth={2} />
+                      </IconBtn>
+                      <IconBtn title="复制正文" onClick={() => void copyKb(k)} disabled={disabled}>
+                        <CopyIcon size={size.iconBtn} strokeWidth={2} />
+                      </IconBtn>
+                      {k.source !== 'doc' && (
+                        <IconBtn title="编辑标题与正文" onClick={() => startEdit(k)}>
+                          <PencilIcon size={size.iconBtn} strokeWidth={2} />
+                        </IconBtn>
+                      )}
+                      <IconBtn
+                        title={disabled ? '启用后重新参与检索' : '停用后保留数据,不参与检索'}
+                        onClick={() => void toggleEnabled(k)}
+                      >
+                        {disabled ? (
+                          <EyeIcon size={size.iconBtn} strokeWidth={2} />
+                        ) : (
+                          <EyeOffIcon size={size.iconBtn} strokeWidth={2} />
+                        )}
+                      </IconBtn>
+                      <IconBtn
+                        title="删除"
+                        className="pddcs-iconbtn-danger"
+                        onClick={() => setConfirmDeleteId(k.id)}
+                      >
+                        <TrashIcon size={size.iconBtn} strokeWidth={2} />
+                      </IconBtn>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </List>
+      )}
     </div>
   )
 }

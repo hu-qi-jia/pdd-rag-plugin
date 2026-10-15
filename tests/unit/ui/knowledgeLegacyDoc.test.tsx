@@ -13,7 +13,6 @@ const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { KnowledgeTab } = await import('../../../src/popup/KnowledgeTab')
-const { lightTheme } = await import('../../../src/ui/theme')
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -55,7 +54,7 @@ async function renderWith(legacyDocs?: string[]) {
   }
   mockedSend.mockResolvedValueOnce(resp)
   await act(async () => {
-    root.render(<KnowledgeTab tk={lightTheme} onDataChanged={vi.fn()} />)
+    root.render(<KnowledgeTab onDataChanged={vi.fn()} />)
   })
   await act(async () => {})
 }

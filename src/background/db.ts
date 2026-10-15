@@ -831,6 +831,28 @@ export class PddDatabase extends Dexie {
     return new Set(docs.filter((d) => d.isSizeTable === true).map((d) => d.docId));
   }
 
+  /**
+   * 取消除 `keepDocId` 之外所有文档的尺码表标记,返回被取消的 docId。
+   *
+   * **「同一时刻只有一份尺码表」是 v3.0 的硬约束**:尺码路由会把整篇原文喂给生成
+   * 模型当材料,两份材料一起喂,模型只会拿到互相矛盾的两张表。
+   *
+   * 约束落在**写入路径**而不是前端:前端漏调一次,库里就会静默出现两份,
+   * 而症状(尺码回答开始胡说)离原因很远,排查成本极高。
+   */
+  async clearOtherSizeTables(keepDocId: string): Promise<string[]> {
+    const docs = await this.kbDocs.toArray();
+    const cleared = docs.filter((d) => d.isSizeTable === true && d.docId !== keepDocId);
+    if (cleared.length === 0) return [];
+    await this.transaction("rw", this.kbDocs, async () => {
+      for (const d of cleared) {
+        await this.kbDocs.put({ ...d, isSizeTable: false, updatedAt: Date.now() });
+      }
+    });
+    invalidateRetrievalCache();
+    return cleared.map((d) => d.docId);
+  }
+
   /** 分块器版本失配的文档(SW 启动时按新规则重切) */
   async getStaleKbDocs(version: string): Promise<KbDocRecord[]> {
     return this.kbDocs.filter((d) => d.splitterVersion !== version).toArray();

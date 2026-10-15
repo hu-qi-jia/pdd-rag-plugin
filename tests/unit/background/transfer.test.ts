@@ -7,11 +7,13 @@ import {
   EXPORT_VERSION,
   buildExportEnvelope,
   goldenImportContext,
+  planCategoryImports,
   planGoldenImports,
   planFolderImports,
   planMemoryImports,
   planKnowledgeImports,
   planKbDocImports,
+  resolveImportedCategory,
 } from '../../../src/background/transferPlan'
 import type {
   ExportedGolden,
@@ -21,7 +23,7 @@ import type {
   ExportedKbDoc,
 } from '../../../src/types/transfer'
 import { MAX_GOLDENS_PER_QUESTION, SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID, DEFAULT_SETTINGS } from '../../../src/shared/constants'
-import type { GoldenRecord, QaRecord, ReplyRecord, FolderRecord, KnowledgeRecord, KbDocRecord } from '../../../src/types/memory'
+import type { GoldenRecord, QaRecord, ReplyRecord, FolderRecord, KnowledgeRecord, KbDocRecord, CategoryRecord } from '../../../src/types/memory'
 // ─── 造数 ──────────────────────────────────────────────────────────────────────
 
 const golden = (
@@ -561,5 +563,218 @@ describe('尺码表标记 isSizeTable 导出往返', () => {
     expect(env.kbDocs?.[0]).not.toHaveProperty('isSizeTable')
     const plan = planKbDocImports(env.kbDocs as ExportedKbDoc[], new Set())
     expect(plan.toAdd[0]).not.toHaveProperty('isSizeTable')
+  })
+})
+
+// ─── 分类往返(第五十八轮引入 categories,导出曾长期漏带)───────────────────────
+//
+// 这一组钉的是"一次导出→换机器导入之后,用户看得见的分类还在不在"。
+// 漏带的代价不是少个字段:手工摆好的分类会静默消失,记录重新变回补分类候选,
+// 再白烧一轮 jev 额度。
+
+const cat = (
+  id: string,
+  name: string,
+  over: Partial<CategoryRecord> = {},
+): CategoryRecord => ({
+  id,
+  name,
+  criteria: `criteria-${name}`,
+  kind: 'custom',
+  route: 'retrieve',
+  filterable: true,
+  position: 100,
+  createdAt: 1,
+  updatedAt: 2,
+  ...over,
+})
+
+describe('分类:导出侧', () => {
+  it('★ 信封始终携带类型表(与 includeMemory 无关)', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      categories: [cat('preset:size', '尺码推荐', { kind: 'preset', route: 'size' })],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.categories).toHaveLength(1)
+    expect(env.categories?.[0].id).toBe('preset:size')
+    // 旧导出文件没有这个字段 → 导入端按空数组处理,故不能是 undefined
+    const noCats = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(noCats.categories).toEqual([])
+  })
+
+  it('★ 金标准带上分类四字段', () => {
+    const env = buildExportEnvelope({
+      goldens: [
+        {
+          ...golden('g1', 'q1'),
+          categoryId: 'preset:size',
+          categorySource: 'inherit',
+          categoryAt: 123,
+          categoryConfidence: 0.42,
+        },
+      ],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    const g = env.goldens[0]
+    expect(g.categoryId).toBe('preset:size')
+    expect(g.categorySource).toBe('inherit')
+    expect(g.categoryAt).toBe(123)
+    expect(g.categoryConfidence).toBe(0.42)
+  })
+
+  it('★ 没分类的记录**不带**这四个字段(缺席而非 null)—— 旧形状不被凭空补字段', () => {
+    const env = buildExportEnvelope({
+      goldens: [golden('g1', 'q1')],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: true,
+      qaRecords: [qa('qa1', 'q1')],
+      exportedAt: 1,
+    })
+    for (const k of ['categoryId', 'categorySource', 'categoryAt', 'categoryConfidence']) {
+      expect(env.goldens[0]).not.toHaveProperty(k)
+      expect(env.qaRecords?.[0]).not.toHaveProperty(k)
+    }
+  })
+
+  it('问答的 categorySource 只可能是 jev/manual —— inherit 是金标准独有的', () => {
+    const env = buildExportEnvelope({
+      goldens: [],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: true,
+      qaRecords: [{ ...qa('qa1', 'q1'), categoryId: 'x', categorySource: 'manual' }],
+      exportedAt: 1,
+    })
+    expect(env.qaRecords?.[0].categorySource).toBe('manual')
+  })
+})
+
+describe('planCategoryImports:三条判据', () => {
+  it('① 按 id 命中 → 复用本地那条(预置类型走这条,id 是写死的)', () => {
+    const local = [cat('preset:size', '尺码推荐', { kind: 'preset', route: 'size' })]
+    const plan = planCategoryImports([cat('preset:size', '尺码推荐')], local)
+    expect(plan.toAdd).toHaveLength(0)
+    expect(plan.skipped).toBe(1)
+    expect(plan.idMap.get('preset:size')).toBe('preset:size')
+  })
+
+  it('★ ② 按名字命中 → 映射到本地 id(换机器时自定义类型 id 不可能相等)', () => {
+    const local = [cat('local-uuid', '发票咨询')]
+    const plan = planCategoryImports([cat('other-machine-uuid', '发票咨询')], local)
+    expect(plan.toAdd).toHaveLength(0)
+    // 这一条是整组测试的重点:不映射的话导入的记录会挂着本地不存在的 id
+    expect(plan.idMap.get('other-machine-uuid')).toBe('local-uuid')
+  })
+
+  it('③ 都没有 → 新建,id 原样沿用', () => {
+    const plan = planCategoryImports([cat('new-uuid', '全新类型')], [])
+    expect(plan.toAdd).toHaveLength(1)
+    expect(plan.toAdd[0].id).toBe('new-uuid')
+    expect(plan.idMap.get('new-uuid')).toBe('new-uuid')
+  })
+
+  it('★ 包内重名 → 只建第一条,后一条映射到它(同名会让 jev 在两者间摇摆)', () => {
+    const plan = planCategoryImports(
+      [cat('u1', '同名'), cat('u2', '同名')],
+      [],
+    )
+    expect(plan.toAdd).toHaveLength(1)
+    expect(plan.toAdd[0].id).toBe('u1')
+    expect(plan.idMap.get('u2')).toBe('u1')
+    expect(plan.skipped).toBe(1)
+  })
+
+  it('空包(旧导出文件)→ 不新建、映射为空', () => {
+    const plan = planCategoryImports([], [cat('a', '甲')])
+    expect(plan.toAdd).toHaveLength(0)
+    expect(plan.idMap.size).toBe(0)
+  })
+})
+
+describe('resolveImportedCategory:悬空时四个字段一起清', () => {
+  it('映射得到 → 换成 本地 id', () => {
+    const rec: ExportedGolden = { ...golden('g1', 'q1'), categoryId: 'remote', categorySource: 'jev' }
+    resolveImportedCategory(rec, new Map([['remote', 'local']]))
+    expect(rec.categoryId).toBe('local')
+    expect(rec.categorySource).toBe('jev')
+  })
+
+  it('★ 悬空 → 四个字段**一起**清掉,不留"有来源没类型"的残骸', () => {
+    const rec: ExportedGolden = {
+      ...golden('g1', 'q1'),
+      categoryId: 'dangling',
+      categorySource: 'jev',
+      categoryAt: 9,
+      categoryConfidence: 0.9,
+    }
+    resolveImportedCategory(rec, new Map())
+    expect(rec).not.toHaveProperty('categoryId')
+    expect(rec).not.toHaveProperty('categorySource')
+    expect(rec).not.toHaveProperty('categoryAt')
+    expect(rec).not.toHaveProperty('categoryConfidence')
+  })
+
+  it('原本就没分类(null)→ 不动它', () => {
+    const rec: ExportedGolden = { ...golden('g1', 'q1'), categoryId: null }
+    resolveImportedCategory(rec, new Map())
+    expect(rec.categoryId).toBeNull()
+  })
+})
+
+describe('分类往返:导出 → 换机器导入', () => {
+  it('★ 金标准与问答的分类在往返后仍然指向**本地**类型', () => {
+    // 源机器:自定义类型 uuid 是 src-uuid
+    const env = buildExportEnvelope({
+      goldens: [{ ...golden('g1', 'q1'), categoryId: 'src-uuid', categorySource: 'manual', categoryAt: 7 }],
+      folders: [],
+      categories: [cat('src-uuid', '发票咨询')],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: true,
+      qaRecords: [{ ...qa('qa1', 'q1'), categoryId: 'src-uuid', categorySource: 'jev' }],
+      exportedAt: 1,
+    })
+
+    // 目标机器:已经有一条同名的本地类型(不同 id)
+    const localCats = [cat('dst-uuid', '发票咨询')]
+    const catPlan = planCategoryImports(env.categories as CategoryRecord[], localCats)
+    expect(catPlan.toAdd).toHaveLength(0) // 同名 → 不重复建
+
+    const goldenPlan = planGoldenImports(env.goldens, goldenImportContext([]), MAX_GOLDENS_PER_QUESTION)
+    for (const g of goldenPlan.toAdd) resolveImportedCategory(g, catPlan.idMap)
+    const memPlan = planMemoryImports(env.qaRecords as ExportedQa[], [], new Set(), new Set())
+    for (const q of memPlan.toAddQa) resolveImportedCategory(q, catPlan.idMap)
+
+    expect(goldenPlan.toAdd[0].categoryId).toBe('dst-uuid')
+    expect(goldenPlan.toAdd[0].categorySource).toBe('manual')
+    expect(goldenPlan.toAdd[0].categoryAt).toBe(7)
+    expect(memPlan.toAddQa[0].categoryId).toBe('dst-uuid')
+    expect(memPlan.toAddQa[0].categorySource).toBe('jev')
+  })
+
+  it('★ 旧导出文件(没有 categories 字段)→ 类型不新建,记录落回未分类', () => {
+    const catPlan = planCategoryImports([], [])
+    const goldenPlan = planGoldenImports(
+      [{ ...golden('g1', 'q1') } as ExportedGolden],
+      goldenImportContext([]),
+      MAX_GOLDENS_PER_QUESTION,
+    )
+    for (const g of goldenPlan.toAdd) resolveImportedCategory(g, catPlan.idMap)
+    // 旧文件本来就没带 categoryId,import 后仍然没有 —— 与从前行为逐字节一致
+    expect(catPlan.toAdd).toHaveLength(0)
+    expect(goldenPlan.toAdd[0]).not.toHaveProperty('categoryId')
   })
 })

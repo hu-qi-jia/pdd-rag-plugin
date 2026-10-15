@@ -14,7 +14,7 @@ let root: Root
 
 function renderNotice(msg: { ok: boolean; text: string }, onDismiss: () => void) {
   act(() => {
-    root.render(<Notice tk={lightTheme} msg={msg} onDismiss={onDismiss} />)
+    root.render(<Notice msg={msg} onDismiss={onDismiss} />)
   })
 }
 
@@ -54,11 +54,11 @@ describe('Notice:成功提示自动消失', () => {
   it('文本变化重置计时(拖滑杆连续弹提示,以最后一次为准)', () => {
     const onDismiss = vi.fn()
     act(() => {
-      root.render(<Notice tk={lightTheme} msg={{ ok: true, text: '已保存 50' }} onDismiss={onDismiss} />)
+      root.render(<Notice msg={{ ok: true, text: '已保存 50' }} onDismiss={onDismiss} />)
     })
     act(() => vi.advanceTimersByTime(NOTICE_OK_AUTO_DISMISS_MS - 100))
     act(() => {
-      root.render(<Notice tk={lightTheme} msg={{ ok: true, text: '已保存 60' }} onDismiss={onDismiss} />)
+      root.render(<Notice msg={{ ok: true, text: '已保存 60' }} onDismiss={onDismiss} />)
     })
     act(() => vi.advanceTimersByTime(NOTICE_OK_AUTO_DISMISS_MS - 200))
     expect(onDismiss).not.toHaveBeenCalled() // 旧计时已作废

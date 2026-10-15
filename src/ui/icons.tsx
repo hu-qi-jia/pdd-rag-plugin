@@ -35,4 +35,6 @@ export {
   CornerDownLeft as FillIcon,
   Star as StarIcon,
   Loader2 as LoaderIcon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
 } from 'lucide-react'

@@ -164,3 +164,73 @@ describe('deleteKnowledge · 孤儿原文清理', () => {
     expect(await db.listKnowledgeByDoc('')).toHaveLength(0)
   })
 })
+
+describe('setKbDocSizeTable · 尺码表标记(v3.0:同一时刻只有一份)', () => {
+  it('标记成功后 kbDocs.isSizeTable 为真,原文与分块都不动', async () => {
+    const { importKbDocument, setKbDocSizeTable, db } = await freshModules()
+    const { offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '尺码.md', content: TWO_CHUNKS })
+    const out = await setKbDocSizeTable('尺码', true)
+    expect(out).toEqual({ success: true, replaced: undefined })
+
+    const doc = await db.getKbDoc('尺码')
+    expect(doc?.isSizeTable).toBe(true)
+    // 标记是文档级字段,不动正文、不动块
+    expect(doc?.content).toBe(TWO_CHUNKS)
+    expect(await db.listKnowledgeByDoc('尺码')).toHaveLength(2)
+  })
+
+  it('★ 标记新尺码表会取消旧的,并报出被顶替的是谁(同一时刻只有一份)', async () => {
+    const { importKbDocument, setKbDocSizeTable, db } = await freshModules()
+    const { offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '旧尺码.md', content: TWO_CHUNKS })
+    await importKbDocument({ name: '新尺码.md', content: TWO_CHUNKS })
+    await setKbDocSizeTable('旧尺码', true)
+
+    const out = await setKbDocSizeTable('新尺码', true)
+    expect(out.replaced).toBe('旧尺码')
+    expect((await db.getKbDoc('新尺码'))?.isSizeTable).toBe(true)
+    expect((await db.getKbDoc('旧尺码'))?.isSizeTable).toBe(false)
+
+    // 读口只认唯一那篇 —— 尺码路由会把整篇原文喂给生成模型,两份材料只会互相矛盾
+    expect([...(await db.listSizeTableDocIds())]).toEqual(['新尺码'])
+  })
+
+  it('取消标记后文档回到向量检索池', async () => {
+    const { importKbDocument, setKbDocSizeTable, db } = await freshModules()
+    const { offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '尺码.md', content: TWO_CHUNKS })
+    await setKbDocSizeTable('尺码', true)
+    const out = await setKbDocSizeTable('尺码', false)
+    expect(out).toEqual({ success: true, replaced: undefined })
+    expect((await db.getKbDoc('尺码'))?.isSizeTable).toBe(false)
+    expect((await db.listSizeTableDocIds()).size).toBe(0)
+  })
+
+  it('原文不存在时报错返回,绝不凭空写一条只有 docId+标记的空记录', async () => {
+    const { setKbDocSizeTable, db } = await freshModules()
+    const out = await setKbDocSizeTable('不存在的文档', true)
+    expect(out.success).toBe(false)
+    expect(out.error).toContain('原文不存在')
+    // 空记录会让重分块流出一篇空文档、也让面板以为这篇存在
+    expect(await db.getKbDoc('不存在的文档')).toBeUndefined()
+  })
+
+  it('取消标记时不会误伤别的文档', async () => {
+    const { importKbDocument, setKbDocSizeTable, db } = await freshModules()
+    const { offscreen } = await freshModules()
+    vi.spyOn(offscreen, 'queueEmbedding').mockImplementation(() => {})
+
+    await importKbDocument({ name: '尺码.md', content: TWO_CHUNKS })
+    await importKbDocument({ name: '普通.md', content: TWO_CHUNKS })
+    await setKbDocSizeTable('尺码', true)
+    await setKbDocSizeTable('尺码', false)
+    expect((await db.getKbDoc('普通.md'))?.isSizeTable).toBeFalsy()
+  })
+})

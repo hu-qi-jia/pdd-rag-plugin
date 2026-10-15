@@ -59,6 +59,39 @@ export const LLM_TIMEOUT_MAX_MS = 30000
 export const JEV_TIMEOUT_MIN_MS = 1000
 export const JEV_TIMEOUT_MAX_MS = 30000
 
+/**
+ * 「低置信」线 —— 机器打标的概率低于它就标出来,提示人工看一眼。
+ *
+ * **为什么是一个固定值,而不是跟着 `classifyProbThreshold` 走**:
+ * 那个阈值是用户可调的门槛(默认 0.2,即"低于它就不打标")。若低置信线按它换算,
+ * 用户把门槛调到 0.6 之后,所有打上的标都"不低置信"了 —— 可是"模型自己都没过半"
+ * 是个**绝对**判断,不该随调参消失。
+ *
+ * 取 0.5 的语义是"连一半都没到"。它是不是太松,取决于 jev 实际给的概率分布:
+ * 若绝大多数条目都被标成低置信,那不是这条线错了,而是 `classifyProbThreshold`
+ * 该往上提 —— 一屏全是"低置信"本身就是结论。
+ */
+export const LOW_CONFIDENCE_LINE = 0.5
+
+/**
+ * 这条分类结果算不算"勉强过线"。
+ *
+ * 三类记录天然不是低置信,不参与标记:
+ *   - 非机器打标(`inherit` 继承自来源问答 / `manual` 人工摆放)—— 那是**确定**的分类;
+ *   - 没有概率值的(继承与人工路径都不写 confidence,见 db.setGoldenCategoryManual);
+ *   - 概率达标但缺失的旧数据。
+ */
+export function isLowConfidenceCategory(r: {
+  categorySource?: string
+  categoryConfidence?: number
+}): boolean {
+  return (
+    r.categorySource === 'jev' &&
+    typeof r.categoryConfidence === 'number' &&
+    r.categoryConfidence < LOW_CONFIDENCE_LINE
+  )
+}
+
 export const SETTINGS_STORAGE_KEY = 'pddcs:settings'
 
 /** AI 接口表单草稿(边填边存):弹窗失焦会被 Chrome 销毁,没保存的内容靠它续上。

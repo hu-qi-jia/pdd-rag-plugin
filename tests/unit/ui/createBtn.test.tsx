@@ -6,7 +6,6 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 const { CreateBtn } = await import('../../../src/ui/components')
-const { lightTheme } = await import('../../../src/ui/theme')
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -31,7 +30,7 @@ async function renderBtn(props: {
   title?: string
 }) {
   await act(async () => {
-    root.render(<CreateBtn tk={lightTheme} {...props} />)
+    root.render(<CreateBtn {...props} />)
   })
 }
 

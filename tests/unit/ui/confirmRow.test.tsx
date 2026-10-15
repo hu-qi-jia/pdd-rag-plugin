@@ -1,12 +1,12 @@
-// 内联二次确认行(第五十一轮单点化):文件夹页与记忆页此前各有一份实现,
-// 字号与按钮档位都不一致,记忆页那份还落在 `fontSize.caption + 0.5` 这个被明令禁止的临时值上。
-// 本测试锁住"两份合成一份"这件事:档位固定为内联档,字号落在令牌阶梯上。
+// 内联二次确认行(第五十一轮单点化;v3.0 改为 CSS 变量 + 组件不吃 tk)。
+//
+// 本测试锁住"全站只有一份确认行实现"这件事:警示文案走语义红、确认是危险钮、
+// 取消是幽灵钮 —— 样式分别落在 RESET_CSS 的 `.pddcs-btn[data-variant=...]` 上,
+// 组件只负责结构。
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ConfirmRow } from '../../../src/ui/components'
-import { controlH, fontSize } from '../../../src/ui/design'
-import { lightTheme } from '../../../src/ui/theme'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,9 +26,7 @@ afterEach(() => {
 
 function render(onOk = vi.fn(), onCancel = vi.fn()) {
   act(() => {
-    root.render(
-      <ConfirmRow tk={lightTheme} text="删除该问答及其全部回复?" onOk={onOk} onCancel={onCancel} />,
-    )
+    root.render(<ConfirmRow text="删除该问答及其全部回复?" onOk={onOk} onCancel={onCancel} />)
   })
   const btns = Array.from(container.querySelectorAll('button'))
   return { onOk, onCancel, text: container.textContent ?? '', btns }
@@ -54,30 +52,20 @@ describe('ConfirmRow:警示文案 + 确认/取消', () => {
     expect(onOk).toHaveBeenCalledTimes(1)
   })
 
-  it('走内联控件档(controlH.inline),不是表单档 —— 确认行长在行内', () => {
+  it('警示文案走语义红(v3.0 起经 CSS 变量取色,不再 prop-drill tk)', () => {
     render()
-    for (const b of Array.from(document.querySelectorAll('button'))) {
-      expect(b.style.height).toBe(`${controlH.inline}px`)
-    }
+    expect((container.querySelector('span') as HTMLElement).style.color).toBe(
+      'var(--pddcs-danger)',
+    )
   })
 
-  it('字号落在令牌阶梯上(文案与按钮同为 caption),没有 caption+0.5 这类临时值', () => {
-    const { btns } = render()
-    const span = container.querySelector('span')!
-    expect(span.style.fontSize).toBe(`${fontSize.caption}px`)
-    for (const b of btns) expect(b.style.fontSize).toBe(`${fontSize.caption}px`)
-    // 反面:11px 那个"夹在两档之间"的值不允许再出现
-    expect(span.style.fontSize).not.toBe(`${fontSize.caption + 0.5}px`)
-  })
-
-  it('警示文案走 errorText;确认是危险实底、取消是描边幽灵', () => {
+  it('确认 = danger 变体、取消 = ghost 变体 —— 颜色交给 RESET_CSS 单一处决定', () => {
     const { btns } = render()
     const [ok, cancel] = btns
-    const span = container.querySelector('span')!
-    expect(span.style.color).toBe(lightTheme.errorText)
-    expect(ok.style.backgroundColor).toBe(lightTheme.errorBg)
-    expect(ok.style.color).toBe(lightTheme.errorText)
-    expect(cancel.style.backgroundColor).toBe('transparent')
-    expect(cancel.style.color).toBe(lightTheme.textMuted)
+    expect(ok.getAttribute('data-variant')).toBe('danger')
+    expect(cancel.getAttribute('data-variant')).toBe('ghost')
+    // 两个都是同一款按钮(只有变体不同),全站不再有第二套确认行实现
+    expect(ok.classList.contains('pddcs-btn')).toBe(true)
+    expect(cancel.classList.contains('pddcs-btn')).toBe(true)
   })
 })

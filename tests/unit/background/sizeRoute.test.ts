@@ -222,12 +222,14 @@ describe('collectSizeTableMaterials', () => {
   })
 
   it('多篇被标记 → 全取,按 docId 稳定排序', async () => {
-    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
-    await db.putKbDoc(kbDoc({ docId: 'chima-c', content: 'C 表' }))
-    await db.putKbDoc(kbDoc({ docId: 'chima-a', content: 'A 表' }))
-    await db.putKbDoc(kbDoc({ docId: 'chima-b', content: 'B 表' }))
+    // v3.0 起**写入路径**保证「同一时刻只有一份尺码表」(setKbDocSizeTable 会顶替旧的),
+    // 故这里直接落库造出「多篇并存」的状态 —— 它仍可能出现(旧库升级、导入一份带标记的包),
+    // 读口必须照样按 docId 稳定排序 + 按预算截断地处理
+    const { db, collectSizeTableMaterials } = await fresh()
+    await db.putKbDoc(kbDoc({ docId: 'chima-c', content: 'C 表', isSizeTable: true }))
+    await db.putKbDoc(kbDoc({ docId: 'chima-a', content: 'A 表', isSizeTable: true }))
+    await db.putKbDoc(kbDoc({ docId: 'chima-b', content: 'B 表', isSizeTable: true }))
     await db.putKbDoc(kbDoc({ docId: 'chima-d', content: 'D 表' }))
-    for (const id of ['chima-c', 'chima-a', 'chima-b']) await setKbDocSizeTable(id, true)
 
     expect(await collectSizeTableMaterials()).toEqual(['A 表', 'B 表', 'C 表'])
   })
@@ -262,14 +264,13 @@ describe('collectSizeTableMaterials', () => {
   })
 
   it('多篇时后一篇越界 → 同样按行边界截,不为塞缝发几个残字', async () => {
-    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    // 直接落库造多篇并存(写入路径已保证不会自然出现,见上一条用例的说明)
+    const { db, collectSizeTableMaterials } = await fresh()
     const a = 'A 表'
     const lines = Array.from({ length: 300 }, (_, i) => `第${i}行:身高${150 + i}cm`)
     const b = lines.join('\n')
-    await db.putKbDoc(kbDoc({ docId: 'aa', content: a }))
-    await db.putKbDoc(kbDoc({ docId: 'bb', content: b }))
-    await setKbDocSizeTable('aa', true)
-    await setKbDocSizeTable('bb', true)
+    await db.putKbDoc(kbDoc({ docId: 'aa', content: a, isSizeTable: true }))
+    await db.putKbDoc(kbDoc({ docId: 'bb', content: b, isSizeTable: true }))
 
     const m = await collectSizeTableMaterials()
     expect(m).toHaveLength(2)
@@ -279,24 +280,22 @@ describe('collectSizeTableMaterials', () => {
   })
 
   it('后一篇的剩余额度过小、连一行都放不下 → 丢弃它而非截成几个字符', async () => {
-    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    // 直接落库造多篇并存(写入路径已保证不会自然出现,见上方说明)
+    const { db, collectSizeTableMaterials } = await fresh()
     const a = '甲'.repeat(2900) // 单行 2900 字,先占掉预算
     const b = '乙'.repeat(2000) // 单行 2000 字,剩余 100 字放不下 → 丢
-    await db.putKbDoc(kbDoc({ docId: 'aa', content: a }))
-    await db.putKbDoc(kbDoc({ docId: 'bb', content: b }))
-    await setKbDocSizeTable('aa', true)
-    await setKbDocSizeTable('bb', true)
+    await db.putKbDoc(kbDoc({ docId: 'aa', content: a, isSizeTable: true }))
+    await db.putKbDoc(kbDoc({ docId: 'bb', content: b, isSizeTable: true }))
 
     expect(await collectSizeTableMaterials()).toEqual([a])
   })
 
   it('★ 多篇排序用码点序,与 locale 无关 —— 顺序决定超预算时先截哪篇', async () => {
-    const { db, setKbDocSizeTable, collectSizeTableMaterials } = await fresh()
+    // 直接落库造多篇并存(写入路径已保证不会自然出现,见上方说明)
+    const { db, collectSizeTableMaterials } = await fresh()
     // 码点序:'Z'(U+005A) < 'a'(U+0061) → Zebra 在前;localeCompare 会因大小写折叠给出相反次序
-    await db.putKbDoc(kbDoc({ docId: 'apple', content: '小写表' }))
-    await db.putKbDoc(kbDoc({ docId: 'Zebra', content: '大写表' }))
-    await setKbDocSizeTable('apple', true)
-    await setKbDocSizeTable('Zebra', true)
+    await db.putKbDoc(kbDoc({ docId: 'apple', content: '小写表', isSizeTable: true }))
+    await db.putKbDoc(kbDoc({ docId: 'Zebra', content: '大写表', isSizeTable: true }))
 
     expect(await collectSizeTableMaterials()).toEqual(['大写表', '小写表'])
   })

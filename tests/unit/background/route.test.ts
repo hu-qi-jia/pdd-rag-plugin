@@ -12,6 +12,7 @@ import {
   filterAllowed,
   pickByMargin,
 } from '../../../src/background/route'
+import { LOW_CONFIDENCE_LINE } from '../../../src/shared/constants'
 import type { CategoryRecord } from '../../../src/types/memory'
 import type { RankedSource } from '../../../src/background/retrieval'
 
@@ -122,8 +123,10 @@ describe('decideRoute', () => {
     expect(r.allowed.has('legacy:old')).toBe(true)
   })
 
-  it('阈值边界取含(恰好等于阈值算过)', () => {
-    const r = decideRoute(CATS, { 'preset:order': 0.2 }, 0.2)
+  it('阈值边界取含(恰好等于阈值算过)—— 取值踩在低置信线上,两个边界一起验', () => {
+    // 原来用 0.2 做边界值,而 0.2 现在会被低置信守卫拦下(见下方那一组)。
+    // 换成 0.5 既保住"取含"这条性质,又刚好是守卫的下边界(线是「低于」)
+    const r = decideRoute(CATS, { 'preset:order': LOW_CONFIDENCE_LINE }, LOW_CONFIDENCE_LINE)
     expect(r.kind).toBe('filter')
   })
 
@@ -132,6 +135,50 @@ describe('decideRoute', () => {
     expect(r.kind).toBe('filter')
     if (r.kind !== 'filter') return
     expect(r.allowed.has('preset:size')).toBe(false)
+  })
+})
+
+// ─── 低置信守卫(第六十七轮)──────────────────────────────────────────────────
+//
+// 一个开关同时管"打标"与"检索路由",而默认阈值只有 0.2 —— 7 个类型下均匀分布约 0.14,
+// 一条 0.21 的判定基本是噪声,却会实打实地把记录从其余所有类型的池子里排除掉。
+// 守卫要挡住的就是这个:**弱信号不许产生硬后果**。
+
+describe('decideRoute:低置信守卫', () => {
+  it('★ 最高概率低于复核线 → 不筛,即便它已经过了阈值', () => {
+    // 阈值 0.2,它 0.3 —— 过线了。但 0.3 是噪声级信号,不该拿它收窄池子
+    const r = decideRoute(CATS, { 'preset:order': 0.3 }, 0.2)
+    expect(r.kind).toBe('no-filter')
+  })
+
+  it('★ 弱信号的**尺码**判定也不许跳过检索 —— 两种后果一起挡', () => {
+    // size-only 的后果(完全不检索)比 filter(收窄)更限制用户能搜到什么,
+    // 只挡小的、放过大的说不通
+    const r = decideRoute(CATS, { 'preset:size': 0.3 }, 0.2)
+    expect(r.kind).toBe('no-filter')
+  })
+
+  it('恰好等于复核线 → 正常走(线是「低于」,不是「不高于」)', () => {
+    const r = decideRoute(CATS, { 'preset:order': LOW_CONFIDENCE_LINE }, 0.2)
+    expect(r.kind).toBe('filter')
+  })
+
+  it('信号够强时守卫不介入,既有三种路线逐项不变', () => {
+    expect(decideRoute(CATS, { 'preset:order': 0.9 }, 0.2).kind).toBe('filter')
+    expect(decideRoute(CATS, { 'preset:size': 0.9 }, 0.2).kind).toBe('size-only')
+    expect(decideRoute(CATS, null, 0.2).kind).toBe('no-filter')
+  })
+
+  it('空概率分布 → no-filter(与"全低于阈值"殊途同归)', () => {
+    expect(decideRoute(CATS, {}, 0.2).kind).toBe('no-filter')
+  })
+
+  it('★ 守卫与「低置信」标记共用同一条线 —— 界面说"可能判错了",检索就不该照它收窄', () => {
+    // 断言的是**同源**:两处各写一个字面量迟早会漂移,而漂移的后果是自相矛盾
+    const justBelow = LOW_CONFIDENCE_LINE - 0.01
+    const justAbove = LOW_CONFIDENCE_LINE + 0.01
+    expect(decideRoute(CATS, { 'preset:order': justBelow }, 0.2).kind).toBe('no-filter')
+    expect(decideRoute(CATS, { 'preset:order': justAbove }, 0.2).kind).toBe('filter')
   })
 })
 

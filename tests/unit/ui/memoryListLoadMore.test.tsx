@@ -14,7 +14,7 @@ const { sendMessage } = await import('../../../src/shared/message-passing')
 const mockedSend = vi.mocked(sendMessage)
 
 const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')
-const { lightTheme } = await import('../../../src/ui/theme')
+
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -70,9 +70,9 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     mockedSend.mockResolvedValueOnce(page([makeItem('qa-3'), makeItem('qa-2')], 3, true))
     act(() => {
       root.render(
-        <MemoryListTab
-          tk={lightTheme}
-          retentionDays={90}
+                  <MemoryListTab
+
+
           categories={CATEGORIES}
           onDataChanged={vi.fn()}
         />,
@@ -93,7 +93,7 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     })
 
     expect($('加载更早')).toBeNull()
-    expect(container.textContent).toContain('已显示全部 3 条')
+    expect(container.textContent).toContain('共 3 条')
     expect(container.textContent).toContain('问题qa-1')
   })
 
@@ -101,9 +101,9 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     mockedSend.mockResolvedValueOnce(page([makeItem('qa-1')], 1, false))
     act(() => {
       root.render(
-        <MemoryListTab
-          tk={lightTheme}
-          retentionDays={90}
+                  <MemoryListTab
+
+
           categories={CATEGORIES}
           onDataChanged={vi.fn()}
         />,
@@ -112,6 +112,6 @@ describe('MemoryListTab:加载更早(PM2)', () => {
     await act(async () => {})
 
     expect($('加载更早')).toBeNull()
-    expect(container.textContent).toContain('已显示全部 1 条')
+    expect(container.textContent).toContain('共 1 条')
   })
 })

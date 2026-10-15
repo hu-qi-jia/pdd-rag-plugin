@@ -8,6 +8,7 @@
  */
 import { SELF_TEST_SESSION_KEY, UNCATEGORIZED_FOLDER_ID } from '../shared/constants'
 import type {
+  CategoryRecord,
   FolderRecord,
   GoldenRecord,
   KbDocRecord,
@@ -20,6 +21,7 @@ import type {
 // types 层不再反向依赖 background
 import type {
   ExportEnvelope,
+  ExportedCategoryFields,
   ExportedGolden,
   ExportedKbDoc,
   ExportedKnowledge,
@@ -46,6 +48,28 @@ function stripSettingsSecrets(s: PddSettings): ExportedSettings {
   return safe
 }
 
+/**
+ * 分类四字段的统一摘取点 —— 导出侧与导入侧共用,免得两边各写一遍而漂移。
+ *
+ * 只在**真的有值**时才带上(条件展开),与 `isSizeTable`/`chunkKind` 的写法一致:
+ * 旧导出形状不被凭空补字段,新文件里"没分类"表现为**字段缺席**而不是显式 null。
+ */
+function pickCategoryFields<S extends string>(r: {
+  categoryId?: string | null
+  categorySource?: S
+  categoryAt?: number
+  categoryConfidence?: number
+}): ExportedCategoryFields<S> {
+  return {
+    ...(r.categoryId !== undefined ? { categoryId: r.categoryId } : {}),
+    ...(r.categorySource !== undefined ? { categorySource: r.categorySource } : {}),
+    ...(r.categoryAt !== undefined ? { categoryAt: r.categoryAt } : {}),
+    ...(r.categoryConfidence !== undefined
+      ? { categoryConfidence: r.categoryConfidence }
+      : {}),
+  }
+}
+
 const stripGolden = (g: GoldenRecord): ExportedGolden => ({
   id: g.id,
   folderId: g.folderId,
@@ -55,6 +79,9 @@ const stripGolden = (g: GoldenRecord): ExportedGolden => ({
   hasEmbedding: 0,
   ...(g.sourceRecordId !== undefined ? { sourceRecordId: g.sourceRecordId } : {}),
   ...(g.sourceReplyId !== undefined ? { sourceReplyId: g.sourceReplyId } : {}),
+  // 分类一并往返。漏了它,用户手工摆好的「已指定」会在换机器时静默消失,
+  // 而且因为重新成为补分类候选,还要再烧一轮 jev 额度(见 types/transfer.ts 文件头)
+  ...pickCategoryFields(g),
   createdAt: g.createdAt,
   updatedAt: g.updatedAt,
 })
@@ -68,6 +95,7 @@ const stripQa = (q: QaRecord): ExportedQa => ({
   questionTs: q.questionTs,
   hasEmbedding: 0,
   replyCount: q.replyCount,
+  ...pickCategoryFields(q),
   createdAt: q.createdAt,
   updatedAt: q.updatedAt,
 })
@@ -112,10 +140,17 @@ const stripKbDoc = (d: KbDocRecord): ExportedKbDoc => ({
   updatedAt: d.updatedAt,
 })
 
-/** 构建导出信封;includeMemory=false 时不携带问答/回复字段;知识库(含文档原文)始终携带 */
+/**
+ * 构建导出信封;includeMemory=false 时不携带问答/回复字段;知识库(含文档原文)始终携带。
+ *
+ * `categories` 与 `settings`/`goldens` 同级**始终携带**:记录级 categoryId 是不带
+ * 外键约束的裸 id,类型表缺席时导入端只能把它们全判成悬空。类型表很小(预设 6 条 +
+ * 用户自建),没有理由为它设门控。
+ */
 export function buildExportEnvelope(input: {
   goldens: GoldenRecord[]
   folders: FolderRecord[]
+  categories?: CategoryRecord[]
   knowledge?: KnowledgeRecord[]
   kbDocs?: KbDocRecord[]
   settings: PddSettings
@@ -129,6 +164,7 @@ export function buildExportEnvelope(input: {
     exportedAt: input.exportedAt,
     settings: stripSettingsSecrets(input.settings),
     folders: input.folders,
+    categories: input.categories ?? [],
     goldens: input.goldens.map(stripGolden),
     knowledge: (input.knowledge ?? []).map(stripKnowledge),
     kbDocs: (input.kbDocs ?? []).map(stripKbDoc),
@@ -141,6 +177,92 @@ export function buildExportEnvelope(input: {
 }
 
 // ─── 导入计划 ──────────────────────────────────────────────────────────────────
+
+export interface CategoryImportPlan {
+  /** 需要新建的类型 */
+  toAdd: CategoryRecord[]
+  /** 已在本地命中(按 id 或按名字)、或包内重名而跳过的条数 */
+  skipped: number
+  /**
+   * **导出 id → 本地 id 的映射**。记录级的 categoryId 在落库前必须过一遍它。
+   *
+   * 为什么不能直接用导出 id:自定义类型的主键是本机生成的 uuid,换台机器不可能天然相等。
+   * 不映射的话,导入的记录会挂着一串本地不存在的 id —— 表现是"分类没了"。
+   */
+  idMap: Map<string, string>
+}
+
+/**
+ * 类型表导入计划。三个判据,按优先级:
+ *
+ *  ① **按 id 命中** → 复用本地那条(预置类型走这条:`preset:*` 与 `uncategorized`
+ *     的 id 是写死的,两边必然相等)。
+ *  ② **按名字命中** → 复用本地那条。自定义类型的 id 是 uuid,换机器唯一能对上号的
+ *     就是名字。重名时取先遇到的(existing 顺序即 position 序)。
+ *  ③ **都没有** → 新建,id 原样沿用导出的(保持包内自洽)。
+ *
+ * 包内重名(导出包里两条同名)只新建第一条,后一条**映射到前一条** —— 不在本地
+ * 造出两条同名类型。这不是洁癖:jev 的 `criteria` 以**名字**为键发给模型
+ * (见 jev.ts 的 idByName),同名会让模型在两者之间摇摆,拉低整批判断质量
+ * (设置页「新建类型」的判重提示说的是同一件事)。
+ */
+export function planCategoryImports(
+  incoming: CategoryRecord[],
+  existing: CategoryRecord[],
+): CategoryImportPlan {
+  const byId = new Map(existing.map((c) => [c.id, c]))
+  const byName = new Map<string, CategoryRecord>()
+  for (const c of existing) if (!byName.has(c.name)) byName.set(c.name, c)
+
+  const toAdd: CategoryRecord[] = []
+  const idMap = new Map<string, string>()
+  let skipped = 0
+
+  for (const c of incoming) {
+    const hit = byId.get(c.id) ?? byName.get(c.name)
+    if (hit) {
+      idMap.set(c.id, hit.id)
+      skipped += 1
+      continue
+    }
+    const dup = toAdd.find((x) => x.name === c.name)
+    if (dup) {
+      idMap.set(c.id, dup.id)
+      skipped += 1
+      continue
+    }
+    toAdd.push(c)
+    idMap.set(c.id, c.id)
+  }
+  return { toAdd, skipped, idMap }
+}
+
+/**
+ * 把一条**已入计划**的记录的 categoryId 落到本地真实类型上。
+ *
+ * 悬空(导出时引用的类型既不在地图上、也没被新建)时**四个分类字段一起清掉** ——
+ * 只清 categoryId 会留下"有来源有置信度、却没有类型"的残骸,比没有分类更难排查。
+ * 清成 `null` 而不是 `'uncategorized'`:记录类型里 null 与 'uncategorized' 同义
+ * (见 types/memory.ts),而迁移留下的也是 null,读侧(panel.ts)统一归一。
+ *
+ * 与 folderId 的处理方式一致(见 transfer.ts 里对悬空 folderId 的置 null)——
+ * 这一类"外键在导入后可能悬空"的问题,解在计划之后、落库之前。
+ */
+export function resolveImportedCategory<T extends ExportedCategoryFields<string>>(
+  record: T,
+  idMap: Map<string, string>,
+): void {
+  if (record.categoryId === null || record.categoryId === undefined) return
+  const local = idMap.get(record.categoryId)
+  if (local !== undefined) {
+    record.categoryId = local
+    return
+  }
+  delete record.categoryId
+  delete record.categorySource
+  delete record.categoryAt
+  delete record.categoryConfidence
+}
 
 export interface GoldenImportPlan {
   toAdd: GoldenRecord[]
@@ -199,7 +321,9 @@ export function planGoldenImports(
     }
     ctx.existingKeys.add(key)
     counts.set(g.questionHash, (counts.get(g.questionHash) ?? 0) + 1)
-    // 显式挑字段:导入来源可能携带多余运行时字段(如向量),一律丢弃待重嵌
+    // 显式挑字段:导入来源可能携带多余运行时字段(如向量),一律丢弃待重嵌。
+    // categoryId 这里**原样带过**(还是导出包里的 id),落库前由
+    // resolveImportedCategory 过一遍 idMap 换成本地 id —— 与 folderId 的处理同序
     toAdd.push({
       id: g.id,
       folderId: g.folderId,
@@ -209,6 +333,7 @@ export function planGoldenImports(
       hasEmbedding: 0,
       ...(g.sourceRecordId !== undefined ? { sourceRecordId: g.sourceRecordId } : {}),
       ...(g.sourceReplyId !== undefined ? { sourceReplyId: g.sourceReplyId } : {}),
+      ...pickCategoryFields(g),
       createdAt: g.createdAt,
       updatedAt: g.updatedAt,
     })
@@ -286,6 +411,8 @@ export function planMemoryImports(
       questionTs: q.questionTs,
       hasEmbedding: 0,
       replyCount: q.replyCount,
+      // 同金标准:原样带过,落库前统一过 idMap
+      ...pickCategoryFields(q),
       createdAt: q.createdAt,
       updatedAt: q.updatedAt,
     })

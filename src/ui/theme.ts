@@ -1,204 +1,191 @@
-/** 主题模式;定义在令牌层(theme),上下文与覆盖层共用,避免 UI 层互相倒挂 */
+/**
+ * 主题令牌 — v5.0「暖纸」。
+ *
+ * ── 与 v4.0「无彩黑灰白」的关系:这是一次**有意的反悔** ────────────────────
+ *
+ * v4.0 写了三条纪律,本版推翻了其中两条,第三条(对比度)反而被强化。
+ * 逐条交代,免得后来者以为是随手改的:
+ *
+ * ① **「一套中性,不掺温度」→ 改成整套暖调。**
+ *    v4.0 的理由是"不出现暖灰与冷灰混用"。本版不再混用 —— 是**全部转暖**,
+ *    混用那条纪律仍然成立。动机是把 UI 从"工具感"往"纸感"挪:客服一天要开合
+ *    这个 popup 几百次,纯白面在亮环境下眩光明显。代价是**层阶预算被吃掉**
+ *    (见第 ③ 条)。
+ *
+ * ② **「只有一个面,没有 surface」→ 重新引入 `surface`。**
+ *    v4.0 当时的理由记着用户原话:「由一个一个块组成,有点奇怪」。
+ *    那是针对 v3.0 的 **iOS inset grouped**(灰底 + 白卡,每组独立)。
+ *    本版走的是**另一种**分块:v3.0 是"分组的卡片",本版是"每一行一张卡",
+ *    行距 6px、无分组、无 inset —— 用户看过第六十七轮设计稿后确认要这个。
+ *    ⚠️ 如果将来又想退回连续列表,删掉 `surface` 会牵动 popup-css 的行/卡两条规则,
+ *    不是删一个变量就完事。
+ *
+ * ③ **「三级文字过 AA」→ 保留,而且更严。**
+ *    暖底把这一条逼到了极限:米白底 `#F1EEE8` 亮度只有 0.857(白面是 1.0),
+ *    留给定级灰度对比的空间更少。取值是按 4.5:1 反解出来的,不是挑的好看颜色:
+ *      - `textTertiary` 必须 ≥ 4.5:1 **同时**压在页底与卡片面上(两处都要过);
+ *      - 于是 `textSecondary` 被迫下探到 7.57:1 —— 因为
+ *        `theme-contrast.test.ts` 还要求二级与三级之间拉开 ≥ 1.5。
+ *        **改任何一个都要重跑那组断言**,别凭手感调。
+ *
+ * ── 新增的四个强调色令牌 ──────────────────────────────────────────────────
+ * v4.0 **没有**强调色(只有 danger 是彩色的)。本版引入赭陶一系,四个令牌各司其职,
+ * 不要互相顶替:
+ *   - `accent`      实心填充用(主按钮底、开关选中、滑杆已选段)
+ *   - `onAccent`    压在 accent 上的字
+ *   - `accentText`  强调色**当文字**用(灰标、当前项文字、数值)
+ *   - `accentSoft`  强调色的软底(当前项底、徽章底、整合行动作卡)
+ *
+ * `accent` 与 `accentText` **必须是两个值**:实心底要够浅才压得住白字(4.61:1),
+ * 而当文字要够深才压得住软底(5.92:1)。同一个值做两件事,必有一头不达标 ——
+ * 这是本版算出来的,不是设计偏好。
+ */
 export type ThemeMode = 'light' | 'dark'
 
-/**
- * 设计令牌 — 对齐 Figma 编辑器工具界面配色(与 pddddd 控制台同一体系)。
- *
- * 原则:
- *  - 中性灰画布(#F5F5F5)+ 白色面板,1px 细边框(#E5E5E5),层级靠明度与字重;
- *  - 中性主色:主操作深灰底白字(v2.6.27 用户指定 #45484D,原为近黑 #161616),
- *    正文主文本 v2.6.27 同步软化为 #2B2B2B(原 #161616);
- *    Figma 蓝(#0D99FF)只做焦点、品牌与状态;
- *  - 按钮亮暗规范(2026-09-15 用户指定,参照示例图):两种主题同构 ——
- *    default = 面色底 + 边框,悬浮提亮一档;primary = 主色底白字,悬浮再提亮一档。
- *    浅色主色 v2.6.27 起为**中性深灰(#45484D)**,与深色主色同值 —— 两主题映射完全同构,
- *    不再使用 Figma 蓝(蓝只保留给焦点/开关/滑杆等状态),保证亮暗切换时按钮
- *    遵循同一映射规则,不出现"黑色↔蓝色"式的跳色。
- */
 export interface ThemeTokens {
+  /** 页面底 —— 暖米白纸。卡片与行浮在它上面 */
   bg: string
-  bgSecondary: string
-  bgCard: string
+  /**
+   * **卡片 / 行 / 主面板**的底色。
+   * 比页底亮一档(浅色下是纯白),1.16:1 的面差 —— 不靠阴影就能读出"这是一张卡"。
+   */
+  surface: string
+  /** 控件底(按钮、搜索框、分类 chip)与行悬浮底 */
+  fill: string
+
+  /** 主文本 */
   text: string
-  textMuted: string
+  /** 次级文本:说明、回复正文 */
+  textSecondary: string
+  /**
+   * 三级文本:元信息、计数、时间戳、占位。
+   *
+   * **取值受对比度约束,不是纯手感**:这一档承载的全是 12px 小字,WCAG AA
+   * 要求 ≥ 4.5:1。暖底比白底更难达标 —— 该值对**页底与卡片面同时**满足,
+   * 见 `theme-contrast.test.ts`。改前请先跑那组断言。
+   */
   textTertiary: string
-  border: string
-  borderLight: string
+  /** 禁用态文字 */
+  textDisabled: string
+
+  /**
+   * 卡**内**的分隔线(如展开区里逐条回复之间)。卡与卡之间不用线,用 6px 行距。
+   */
   separator: string
+  /** 卡片描边与控件描边 */
+  border: string
+
+  /**
+   * 中性选中底 / 悬浮底。
+   *
+   * 刻意**不**用 `accentSoft` —— 悬浮是"手滑过",不是"这里被选中了"。
+   * 全屏每处悬浮都泛赭陶色会让强调色失效(强调色一旦到处都是,就不再强调)。
+   */
+  selection: string
+
+  /** 实心块(聊天页 toast、焦点环兜底)。v4.0 的主钮/导航当前项已改走 accent */
+  ink: string
+  /** 压在 `ink` 之上的字色。**必须与 ink 反相**,同色即字消失 */
+  onInk: string
+
+  /** 强调色 —— **实心填充**:主按钮底、开关选中轨、滑杆已选段 */
   accent: string
-  accentHover: string
-  /** 列表/面板行选中底色(中性灰软底;v2.6.14 用户指定弃用蓝色软底;
-   *  v2.6.18 起同时用作候选行悬浮底,左描边令牌 selectedBar 随重设计移除) */
-  selectedBg: string
-  btnBg: string
-  btnBorder: string
-  btnHoverBg: string
-  btnPrimaryBg: string
-  btnPrimaryHover: string
-  btnPrimaryText: string
-  successBg: string
-  successText: string
-  errorBg: string
-  /** 危险钮悬浮底色(比 errorBg 深一档;2026-09-15 设计6) */
-  errorHoverBg: string
-  errorText: string
-  inputBg: string
-  inputBorder: string
-  /** 开关未选中轨道色(比 inputBorder 深一档,可辨但不抢眼;2026-09-15 v2.6.7) */
-  switchTrack: string
-  /** 开关未选中轨道悬浮色 */
-  switchTrackHover: string
-  /**
-   * 控件激活色:开关**选中**轨道、滑杆**已填充**段
-   * (2026-09-16 第四十一轮用户"将开关组件和滑动条组件的颜色修改为灰色和白色")——
-   * 浅色 = 中性深灰(与主按钮同值 #45484D),深色 = 白;原为 accent 蓝,
-   * 自此 accent 在控件里只留给焦点环("蓝只做状态不做大色块"的既定口径)。
-   */
-  controlActive: string
-  /** 控件激活色的悬浮态:浅色再提亮一档;深色已是纯白,反向压暗一档 —— 方向不同,同样"悬浮有反馈" */
-  controlActiveHover: string
-  /**
-   * 控件「柄」底色(开关滑块、滑杆拇指):与激活色**反相**取色 ——
-   * 浅色白柄压在深灰轨道上、深色深灰柄压在白轨道上。
-   * 反相是硬约束而非审美选择:柄与轨道同色即柄消失(深色下"白轨白柄"是已踩过的坑)。
-   */
-  controlKnobBg: string
-  shadow: string
-  /** 滚动条滑块(悬浮显现);暗色下必须是浅色,否则在深底上不可见 */
+  /** 压在 `accent` 上的字 */
+  onAccent: string
+  /** 强调色**当文字**用:灰标、当前项文字、设置页数值。比 accent 更深 */
+  accentText: string
+  /** 强调色的软底:分类 chip 选中、标准回答徽章、AI 整合行 */
+  accentSoft: string
+
+  /** 错误 / 危险。与 accent 同为暖色,故字重与底色都要拉开(见对比度测试) */
+  danger: string
+  /** 危险软底(提示条、失败行) */
+  dangerSoft: string
+
+  /** 滚动条滑块 */
   scrollThumb: string
-  /**
-   * 浮层材料底色(v2.7.0 第四十九轮)—— 聊天页推荐面板的**半透明**底,
-   * 与 `bg` 的区别是"要不要让平台页透过 `backdrop-filter` 的模糊参与成像"。
-   *
-   * 两条硬约束:
-   *  - **不透明度 ≥ 0.75**:再低就是"看得见后面文字"的半透明(用户反馈过的观感),
-   *    材料感来自模糊半径,不靠把面板做虚;
-   *  - **只给浮层用**,popup 是原生窗口、没有"后面",用它是白费一层合成。
-   *  引擎不支持 backdrop-filter 时退回 `bg`(判断在 overlay-css#panelSurface,单点)。
-   */
-  surfaceOverlay: string
-  /** 静默填充(关闭钮、图标钮这类无描边小控件的静止底;比 selectedBg 再轻一档) */
-  fillQuiet: string
-  /** 静默填充的悬浮态(同上,提亮一档) */
-  fillQuietHover: string
-  /**
-   * 知识库绿的动作面(推荐面板「根据知识库内容整合并回复」整行的底色)。
-   *
-   * 为什么不直接用 `semantic.knowledgeBg`:那是**压在实心面上**的软底(白 popup、白卡片),
-   * 一个固定 alpha 就够。而这一行现在压在**浮层材料**上 —— 材料本身是半透明的,
-   * 深色主题下合成出来是中灰而非近黑,同一份 9% 绿在中灰上只剩一点色偏,
-   * "这是本面板唯一的动作"这条就立不住了。故按主题各给一档:
-   * 浅色与 `semantic.knowledgeBg` 同值(白面上原样可用),深色提到能一眼看出是绿。
-   */
-  knowledgeSurface: string
-  /** 知识库动作面的悬浮态(同色加深一档) */
-  knowledgeSurfaceHover: string
 }
 
-/** 浅色 — 工具风:白面板,次级表面 #FAFAFA,悬浮 #EFEFEF,描边 #E5E5E5,主操作深灰底白字 */
+/**
+ * 浅色 —— 暖纸。
+ *
+ * 层级链(全部是实测值,不是估计):主 12.66 / 二级 7.57 / 三级 4.98 / 禁用 2.65。
+ * 三级那 4.98 是**下限附近**的取值 —— 再浅一格就跌破 AA。
+ */
 export const lightTheme: ThemeTokens = {
-  bg: '#ffffff',
-  bgSecondary: '#fafafa',
-  bgCard: '#ffffff',
-  // v2.6.27(第四十轮)用户"主面板的文字颜色换成 #2B2B2B":近黑 #161616 → 略软的深灰
-  text: '#2b2b2b',
-  textMuted: '#5c5c5c',
-  textTertiary: '#8c8c8c',
-  border: '#e5e5e5',
-  borderLight: '#efefef',
-  separator: '#e5e5e5',
-  accent: '#0d99ff',
-  accentHover: '#0b87e0',
-  selectedBg: 'rgba(0,0,0,0.06)',
-  btnBg: '#ffffff',
-  btnBorder: '#d4d4d4',
-  btnHoverBg: '#fafafa',
-  // v2.6.27(第四十轮)用户"按钮的颜色修改为深灰色":近黑 #161616 → 中性深灰
-  // (取深色主题主钮同值,两主题映射到此完全同构);悬浮仍按规范"再提亮一档"
-  btnPrimaryBg: '#45484d',
-  btnPrimaryHover: '#53565b',
-  btnPrimaryText: '#ffffff',
-  successBg: 'rgba(20,174,92,0.09)',
-  successText: '#14ae5c',
-  errorBg: '#fef1ee',
-  errorHoverBg: '#fde3dc',
-  errorText: '#f24822',
-  inputBg: '#ffffff',
-  inputBorder: '#d4d4d4',
-  switchTrack: '#c6c8cc',
-  switchTrackHover: '#b3b6bc',
-  // v2.6.28(第四十一轮)开关/滑杆改灰白:激活色 = 中性深灰(与主钮同值),柄 = 白
-  controlActive: '#45484d',
-  controlActiveHover: '#53565b',
-  controlKnobBg: '#ffffff',
-  // v2.6.16(第二十五轮):柔和双层阴影(近影定轮廓 + 环境影托浮起),ChatGPT 式"轻浮层"。
-  // v2.6.32 起**仅聊天页推荐面板(overlay-css)使用**:popup 是原生窗口,挂阴影只会在
-  // 24px 圆角切出的四角露出一圈渐变(见 DESIGN §九),popup 不再消费本令牌。
-  // v2.7.0(第四十九轮):改"0.5px 亮环 + 近影 + 大范围环境影"三段 —— 毛玻璃面板没有描边,
-  // 那圈 0.5px 环就是它与页面之间唯一的一条硬边(Apple 浮层的做法)
-  shadow: '0 0 0 0.5px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.16)',
-  // v2.7.0(第四十九轮)浮层材料:#fcfcfc 的 0.8 —— 面板不再是"一块白",而是让平台页
-  // 透过 blur(20px) 参与成像的磨砂面。0.8 是本主题"不透明度 ≥ 0.75"下限之上留的余量
-  surfaceOverlay: 'rgba(252,252,252,0.80)',
-  fillQuiet: 'rgba(0,0,0,0.05)',
-  fillQuietHover: 'rgba(0,0,0,0.10)',
-  // 浅色与 semantic.knowledgeBg 同值 —— 白面上的那一档本来就没问题,换的是"谁来决定"
-  knowledgeSurface: 'rgba(20,174,92,0.09)',
-  knowledgeSurfaceHover: 'rgba(20,174,92,0.16)',
-  scrollThumb: 'rgba(0,0,0,0.16)',
+  bg: '#F1EEE8',
+  surface: '#FFFFFF',
+  fill: '#F5F1EA',
+
+  text: '#2B2825',
+  // 7.57:1。不是"好看的深灰",是被三级(4.98)和"级差 ≥1.5"两条一起逼出来的
+  textSecondary: '#4F4A44',
+  // 4.98:1(页底)/ 5.77:1(卡片面)。两项都必须在线上
+  textTertiary: '#6B655C',
+  textDisabled: '#9B9285',
+
+  separator: '#E8E2D6',
+  border: '#DCD4C6',
+
+  selection: '#EFE9E0',
+
+  // 近黑而非纯黑:按下/悬浮还要有"再深一点"的余地
+  ink: '#2B2825',
+  onInk: '#FBF8F5',
+
+  accent: '#B4553A',
+  // 4.61:1 于 accent 实心底上 —— 与 accentText 分家,见文件头
+  onAccent: '#FBF8F5',
+  // 5.92:1 于 accentSoft 上、6.92:1 于白卡上
+  accentText: '#93412C',
+  accentSoft: '#F7EBE5',
+
+  danger: '#A0342A',
+  dangerSoft: '#FAEAE7',
+
+  scrollThumb: 'rgba(43,40,37,0.24)',
 }
 
-/** 深色 — 画布 #1E1F21,表面 #2C2C2C;主按钮中性深灰白字(面色系提亮一档,悬浮再提亮) */
+/**
+ * 深色 —— 暖褐。
+ *
+ * 不是浅色反相,而是同一套规则换一组取值:底面暖黑、`ink` 翻成暖白、
+ * `accent` 提亮到能在暗底上做文字(6.20:1)。于是所有"实心块 + 反相字"的部件
+ * 自动成立,不必为主题写分支。
+ *
+ * 注意 `accentText` 与 `accent` **在深色下取值相同**:暗底上强调色本来就够亮,
+ * 做填充(要压深色字)与做文字(要压暗底)都够格,不必再分两档 ——
+ * 浅色下分家是**被对比度逼的**,不是为了对称。
+ */
 export const darkTheme: ThemeTokens = {
-  bg: '#1e1f21',
-  bgSecondary: '#1a1b1d',
-  bgCard: '#2c2c2c',
-  text: '#e6e6e6',
-  textMuted: '#9b9da2',
-  textTertiary: '#6f7175',
-  border: '#3b3d40',
-  borderLight: 'rgba(255,255,255,0.06)',
-  separator: 'rgba(255,255,255,0.10)',
-  accent: '#4cb3ff',
-  accentHover: '#6bc4ff',
-  selectedBg: 'rgba(255,255,255,0.10)',
-  btnBg: '#2c2c2c',
-  btnBorder: '#3b3d40',
-  btnHoverBg: '#383b3d',
-  // v2.6 按钮亮暗规范:深色主按钮 = 面色系(#2C2C2C)提亮一档的中性深灰 + 白字,
-  // 悬浮再提亮一档。历史沿革:近白底黑字过亮(2026-09-15"暗色模式下为白色")
-  // → Figma 蓝底白字(与界面中性色系脱节,2026-09-15 示例图定稿改灰)
-  btnPrimaryBg: '#45484d',
-  btnPrimaryHover: '#53565b',
-  btnPrimaryText: '#ffffff',
-  successBg: 'rgba(10,207,131,0.14)',
-  successText: '#0acf83',
-  errorBg: 'rgba(255,114,98,0.14)',
-  errorHoverBg: 'rgba(255,114,98,0.22)',
-  errorText: '#ff7262',
-  inputBg: '#2c2c2c',
-  inputBorder: '#3b3d40',
-  switchTrack: 'rgba(255,255,255,0.16)',
-  switchTrackHover: 'rgba(255,255,255,0.24)',
-  // v2.6.28(第四十一轮)开关/滑杆改灰白:激活色 = 白(与浅色主题反相),柄 = 卡片面色系深灰
-  // (#2c2c2c 比未选中轨道 rgba(255,255,255,.16)→≈#4e4e4e 更暗,未选中态也能看清柄;
-  //  若改白,白柄压白轨 = 柄消失)
-  controlActive: '#ffffff',
-  controlActiveHover: '#e3e5e9',
-  controlKnobBg: '#2c2c2c',
-  // 与浅色同构的"亮环 → 近影 → 环境影"三段,仅加大不透明度保深底可辨;
-  // 深底上的环取**白**而非黑 —— 黑环在深色页面上等于没画
-  shadow:
-    '0 0 0 0.5px rgba(255,255,255,0.10), 0 2px 8px rgba(0,0,0,0.40), 0 12px 40px rgba(0,0,0,0.55)',
-  // 深色材料:Apple 深色浮层的 #1c1c1e,0.78(同样守住"不透明度 ≥ 0.75"下限)
-  surfaceOverlay: 'rgba(28,28,30,0.78)',
-  fillQuiet: 'rgba(255,255,255,0.10)',
-  fillQuietHover: 'rgba(255,255,255,0.18)',
-  // 深色面板压在浅色平台页上合成出的是**中灰**(0.78×28 + 0.22×255 ≈ 78),不是近黑 ——
-  // 9% 的绿到那上面只剩一点色偏,故提亮到 0.22 / 悬浮 0.30
-  knowledgeSurface: 'rgba(20,174,92,0.22)',
-  knowledgeSurfaceHover: 'rgba(20,174,92,0.30)',
-  scrollThumb: 'rgba(255,255,255,0.24)',
+  bg: '#1A1714',
+  surface: '#232019',
+  fill: '#2B2721',
+
+  text: '#F2EDE4',
+  textSecondary: '#B5AC9E',
+  // 5.33:1(页底)/ 4.85:1(卡片面)。暗底上卡片反而更亮,故卡面才是卡口
+  textTertiary: '#958B7D',
+  textDisabled: '#5C554B',
+
+  separator: '#332E27',
+  border: '#423B31',
+
+  selection: '#332C25',
+
+  ink: '#F2EDE4',
+  onInk: '#1A1714',
+
+  accent: '#E08A6B',
+  // 6.53:1 于 accent 上
+  onAccent: '#2A1710',
+  accentText: '#E08A6B',
+  accentSoft: '#2E211B',
+
+  danger: '#E08A80',
+  dangerSoft: '#3A2320',
+
+  scrollThumb: 'rgba(242,237,228,0.28)',
 }
 
 export function getThemeTokens(theme: ThemeMode): ThemeTokens {

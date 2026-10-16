@@ -24,8 +24,8 @@ const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const CATEGORIES: PanelCategory[] = [
-  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
-  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, position: 9999 },
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, route: 'retrieve', position: 1 },
+  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, route: 'retrieve', position: 9999 },
 ]
 
 const withReply = (goldenId?: string): MemoryListItem => ({

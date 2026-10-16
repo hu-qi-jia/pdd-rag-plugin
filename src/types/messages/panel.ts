@@ -105,6 +105,15 @@ export interface PanelCategory {
   kind: 'preset' | 'custom' | 'uncategorized'
   /** true = 参与类型过滤(与"是 jev 的选项"是同一个集合) */
   filterable: boolean
+  /**
+   * 类型的作用域(与 `filterable` 分工不同,别混用):
+   *  - `filterable` 管「是不是 jev 的选项」——决定进不进分类选项集;
+   *  - `route` 管「记录级可见 + 查询时怎么走」——`'retrieve'` 走类型检索,
+   *    历史与标准回答可复用;`'size'` 是查询级专用(答案依赖买家个体参数),
+   *    记录级永不会有这个标签,也不走检索池。
+   * 面板据此把 `route === 'size'` 的类型从「历史问答 / 标准回答」两页隐藏掉。
+   */
+  route: 'retrieve' | 'size'
   position: number
 }
 

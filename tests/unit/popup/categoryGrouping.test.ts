@@ -12,7 +12,7 @@ const cat = (
   name: string,
   position: number,
   kind: PanelCategory['kind'] = 'preset',
-): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', position })
+): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', route: 'retrieve', position })
 
 const item = (id: string, categoryId: string) => ({ id, categoryId })
 

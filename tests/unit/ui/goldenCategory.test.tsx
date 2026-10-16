@@ -25,13 +25,14 @@ const { FoldersTab } = await import('../../../src/popup/FoldersTab')
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const CATEGORIES: PanelCategory[] = [
-  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
-  { id: 'preset:logistics', name: '物流', kind: 'preset', filterable: true, position: 2 },
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, route: 'retrieve', position: 1 },
+  { id: 'preset:logistics', name: '物流', kind: 'preset', filterable: true, route: 'retrieve', position: 2 },
   {
     id: 'uncategorized',
     name: '未分类',
     kind: 'uncategorized',
     filterable: false,
+    route: 'retrieve',
     position: 9999,
   },
 ]
@@ -170,7 +171,7 @@ describe('标准回答页 v3.0 · 分类导航', () => {
   it('选中空的自定义类型:给一行说明,不留白', async () => {
     panelData.categories = [
       ...CATEGORIES,
-      { id: 'custom:inv', name: '发票', kind: 'custom', filterable: true, position: 5 },
+      { id: 'custom:inv', name: '发票', kind: 'custom', filterable: true, route: 'retrieve', position: 5 },
     ]
     panelData.goldens = [golden('g1', { categoryId: 'preset:size' })]
     await render()

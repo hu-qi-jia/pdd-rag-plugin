@@ -259,6 +259,7 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
           name: c.name,
           kind: c.kind,
           filterable: c.filterable,
+          route: c.route,
           position: c.position,
         })),
       };

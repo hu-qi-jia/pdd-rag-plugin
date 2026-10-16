@@ -29,9 +29,9 @@ const { FoldersTab, ICON_SIZE } = await import('../../../src/popup/FoldersTab')
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const CATEGORIES: PanelCategory[] = [
-  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
-  { id: 'preset:logistics', name: '物流', kind: 'preset', filterable: true, position: 2 },
-  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, position: 9999 },
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, route: 'retrieve', position: 1 },
+  { id: 'preset:logistics', name: '物流', kind: 'preset', filterable: true, route: 'retrieve', position: 2 },
+  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, route: 'retrieve', position: 9999 },
 ]
 
 const golden = (id: string, overrides: Partial<PanelGolden> = {}): PanelGolden => ({

@@ -20,7 +20,7 @@ const { MemoryListTab } = await import('../../../src/popup/MemoryListTab')
 
 // 第五十七轮 Task 5 起条目按类型分区;用非未分类的类型,分组默认展开,不影响本页分页断言
 const CATEGORIES: PanelCategory[] = [
-  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, position: 1 },
+  { id: 'preset:size', name: '尺码', kind: 'preset', filterable: true, route: 'retrieve', position: 1 },
 ]
 
 function makeItem(id: string): MemoryListItem {

@@ -40,6 +40,7 @@ import {
   criteriaOverlapsPresets,
   filterByCategory,
   orderGoldensByRecency,
+  recordLevelCategories,
 } from './logic'
 import { hashText } from '../shared/text'
 import {
@@ -111,9 +112,11 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
   const activeCategory = categories.find((c) => c.id === activeCat)
   const canManageCat = activeCategory?.kind === 'custom'
 
+  // 「移到其他类型」的选择器同样只给记录级类型:尺码推荐没有存档记录可归属,
+  // 摆进去只会造出一条永远无法检索的孤儿标答(它与导航同口径,见 recordLevelCategories)
   const categoryOptions = useMemo(
     () =>
-      categoryOrder(categories).map((c) => (
+      categoryOrder(recordLevelCategories(categories)).map((c) => (
         <option key={c.id} value={c.id}>
           {c.name}
         </option>

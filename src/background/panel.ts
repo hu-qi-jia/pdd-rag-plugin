@@ -156,6 +156,7 @@ export async function getPanelData(
       name: c.name,
       kind: c.kind,
       filterable: c.filterable,
+      route: c.route,
       position: c.position,
     })),
     legacyDocs,

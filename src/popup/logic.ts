@@ -190,6 +190,17 @@ export function categoryOrder(categories: PanelCategory[]): PanelCategory[] {
 }
 
 /**
+ * 记录级可见的类型:排除 route='size'(尺码只参与意图识别,不该有存档记录)。
+ *
+ * 判据刻意用**黑名单**(`!== 'size'`)而不是白名单(`=== 'retrieve'`):
+ * DTO 与测试桩可能缺 route 字段,白名单会把它们**全部**滤掉 ——
+ * 类型导航会静默变成一片空白,且不报错。黑名单缺字段时最多多出一个桶。
+ */
+export function recordLevelCategories(categories: PanelCategory[]): PanelCategory[] {
+  return categories.filter((c) => c.route !== 'size')
+}
+
+/**
  * 按问题类型分桶(记忆列表面板)。
  *
  * 三条不变量:
@@ -204,8 +215,11 @@ export function groupByCategory<T extends { categoryId: string }>(
   items: T[],
   categories: PanelCategory[],
 ): Array<CategoryBucket<T>> {
+  // 两个循环必须用**同一份**可见数组:只滤一处会出现"建了桶却不产出"
+  // (第二处 buckets.get(尺寸 id) 取到 undefined,直接崩)或反向的计数错位。
+  const visible = recordLevelCategories(categories)
   const buckets = new Map<string, CategoryBucket<T>>()
-  for (const c of categoryOrder(categories)) {
+  for (const c of categoryOrder(visible)) {
     if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
     buckets.set(c.id, { category: c, items: [] })
   }
@@ -218,6 +232,7 @@ export function groupByCategory<T extends { categoryId: string }>(
     name: UNCATEGORIZED_CATEGORY_NAME,
     kind: 'uncategorized',
     filterable: false,
+    route: 'retrieve',
     position: UNCATEGORIZED_CATEGORY_POSITION,
   }
   const uncategorized: T[] = []
@@ -228,7 +243,7 @@ export function groupByCategory<T extends { categoryId: string }>(
   }
 
   const out: Array<CategoryBucket<T>> = []
-  for (const c of categoryOrder(categories)) {
+  for (const c of categoryOrder(visible)) {
     if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
     const bucket = buckets.get(c.id)!
     if (bucket.items.length > 0) out.push(bucket)
@@ -264,12 +279,19 @@ export interface CatNavEntry {
  *  ② 「未分类」恒最后;
  *  ③ **计数为 0 的类型照样产出** —— 与 groupByCategory"空组不产出"不同,
  *     这里是刻意的:类别是固定位置,不能今天消失、明天跳回来。
+ *
+ * 注意:`route='size'`(尺码推荐)不在可见集合里 —— 它只参与查询级意图识别,
+ * 记录级永不会有这个标签,留在导航上就是一个永不消失的空桶。判据见
+ * `recordLevelCategories`(黑名单,缺 route 字段的多出一个桶也好过整片空白)。
  */
 export function catNavItems<T extends { categoryId: string }>(
   shown: T[],
   categories: PanelCategory[],
 ): CatNavEntry[] {
-  const known = new Set(categories.map((c) => c.id))
+  // known 与 categoryOrder 必须用**同一份**可见数组:只滤一处会让计数与显示错位 ——
+  // 某个桶被计数却在导航上不产出,或反过来。
+  const visible = recordLevelCategories(categories)
+  const known = new Set(visible.map((c) => c.id))
   const counts = new Map<string, number>()
   let uncategorized = 0
   for (const it of shown) {
@@ -279,7 +301,7 @@ export function catNavItems<T extends { categoryId: string }>(
   }
 
   const out: CatNavEntry[] = [{ id: ALL_CATEGORY_ID, label: '全部', count: shown.length }]
-  for (const c of categoryOrder(categories)) {
+  for (const c of categoryOrder(visible)) {
     if (c.id === UNCATEGORIZED_CATEGORY_ID) continue
     out.push({ id: c.id, label: c.name, count: counts.get(c.id) ?? 0 })
   }

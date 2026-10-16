@@ -4,6 +4,8 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  ALL_CATEGORY_ID,
+  catNavItems,
   filterQaRecords,
   remainingDays,
   buildFolderTree,
@@ -18,6 +20,7 @@ import {
   type PanelGolden,
   type FolderNode,
 } from '../../../src/popup/logic'
+import type { PanelCategory } from '../../../src/types/messages'
 import {
   UNCATEGORIZED_CATEGORY_ID,
   UNCATEGORIZED_FOLDER_ID,
@@ -259,5 +262,34 @@ describe('criteriaOverlapsPresets:与预置类型含义相近的提示', () => {
 
   it('空白说明 → 不触发(空描述本身由后台硬拦截)', () => {
     expect(criteriaOverlapsPresets('   ')).toBe(false)
+  })
+})
+
+// 类型重制:尺码推荐是**查询级专用**(route='size'),记录级打标不会产出这个标签,
+// 所以它在「历史问答」「标准回答」两页的类型导航上永远是个空桶 —— 用户明确不要。
+// 判据刻意用**黑名单**(!== 'size')而不是白名单(=== 'retrieve'):DTO 与测试桩可能
+// 缺 route 字段,白名单会把它们**全部**滤掉,类型导航会静默变成一片空白且不报错。
+describe('类型导航只显示记录级类型(隐藏尺码推荐)', () => {
+  const cats = [
+    { id: 'preset:attribute', name: '商品信息', kind: 'preset', filterable: true, position: 0, route: 'retrieve' },
+    { id: 'preset:size', name: '尺码推荐', kind: 'preset', filterable: true, position: 8, route: 'size' },
+    { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, position: 9999, route: 'retrieve' },
+  ] as PanelCategory[]
+
+  it('导航里不出现尺码推荐', () => {
+    const items = catNavItems([], cats)
+    expect(items.map((i) => i.id)).not.toContain('preset:size')
+  })
+
+  it('★ 缺 route 字段的类型仍然显示(判据是黑名单,不是白名单)', () => {
+    const dto = [{ id: 'c1', name: '自定义', kind: 'custom', filterable: true, position: 9 }] as PanelCategory[]
+    expect(catNavItems([], dto).map((i) => i.id)).toContain('c1')
+  })
+
+  it('★ 带尺码标签的记录计进「未分类」—— 全部 = 各组之和,条目不丢', () => {
+    const shown = [{ categoryId: 'preset:size' }, { categoryId: 'preset:attribute' }]
+    const items = catNavItems(shown, cats)
+    expect(items.find((i) => i.id === ALL_CATEGORY_ID)!.count).toBe(2)
+    expect(items.find((i) => i.id === UNCATEGORIZED_CATEGORY_ID)!.count).toBe(1)
   })
 })

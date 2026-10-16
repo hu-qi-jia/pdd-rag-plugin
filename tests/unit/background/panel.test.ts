@@ -350,6 +350,7 @@ describe('面板回带分类', () => {
         'kind',
         'name',
         'position',
+        'route',
       ])
     }
   })

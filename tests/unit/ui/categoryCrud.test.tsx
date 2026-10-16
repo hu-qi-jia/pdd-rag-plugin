@@ -25,10 +25,10 @@ const { lightTheme } = await import('../../../src/ui/theme')
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const CATEGORIES: PanelCategory[] = [
-  { id: 'preset:size', name: '尺码推荐', kind: 'preset', filterable: true, position: 0 },
-  { id: 'cat-1', name: '发票', kind: 'custom', filterable: true, position: 6 },
-  { id: 'cat-2', name: '催件', kind: 'custom', filterable: true, position: 7 },
-  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, position: 9999 },
+  { id: 'preset:size', name: '尺码推荐', kind: 'preset', filterable: true, route: 'retrieve', position: 0 },
+  { id: 'cat-1', name: '发票', kind: 'custom', filterable: true, route: 'retrieve', position: 6 },
+  { id: 'cat-2', name: '催件', kind: 'custom', filterable: true, route: 'retrieve', position: 7 },
+  { id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false, route: 'retrieve', position: 9999 },
 ]
 
 const golden = (id: string, overrides: Partial<PanelGolden> = {}): PanelGolden => ({

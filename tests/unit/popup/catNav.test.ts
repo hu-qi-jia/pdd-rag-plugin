@@ -15,7 +15,7 @@ const cat = (
   name: string,
   position: number,
   kind: PanelCategory['kind'] = 'preset',
-): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', position })
+): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', route: 'retrieve', position })
 
 const CATS = [
   cat('a', '尺码', 1),

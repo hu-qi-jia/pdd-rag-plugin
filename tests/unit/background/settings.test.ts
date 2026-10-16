@@ -145,7 +145,7 @@ describe('问题分类设置', () => {
     expect(s.jevApiKey).toBe('')
     expect(s.jevModel).toBe('jev-latest')
     expect(s.jevTimeoutMs).toBe(3000)
-    expect(s.classifyProbThreshold).toBe(0.2)
+    expect(s.classifyProbThreshold).toBe(0.5)
   })
 
   it('六个字段都能存能读(漏 clamp 会在这里露馅)', async () => {
@@ -192,8 +192,8 @@ describe('问题分类设置', () => {
     expect((await loadSettings()).classifyProbThreshold).toBe(0)
   })
 
-  it('阈值是非数字脏值 → 回退默认 0.2,而不是最宽松的 0', async () => {
+  it('阈值是非数字脏值 → 回退默认 0.5,而不是最宽松的 0', async () => {
     store['pddcs:settings'] = { ...DEFAULT_SETTINGS, classifyProbThreshold: 'abc' }
-    expect((await loadSettings()).classifyProbThreshold).toBe(0.2)
+    expect((await loadSettings()).classifyProbThreshold).toBe(0.5)
   })
 })

@@ -22,7 +22,7 @@ beforeEach(async () => {
 })
 
 describe('categories 种子', () => {
-  it('种下 6 个预置 + 未分类', async () => {
+  it('种下 9 个预置 + 未分类', async () => {
     await testDb.ensurePresetCategories()
     const all = await testDb.listCategories()
     expect(all.length).toBe(PRESET_CATEGORIES.length + 1)

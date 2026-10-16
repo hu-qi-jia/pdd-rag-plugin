@@ -141,8 +141,8 @@ describe('classifyRecord 门禁', () => {
             answers: {
               category: {
                 type: 'choice',
-                choice: '订单物流',
-                probabilities: { 订单物流: 0.91, 尺码推荐: 0.09 },
+                choice: '发货与物流',
+                probabilities: { 发货与物流: 0.91, 尺码推荐: 0.09 },
                 confidence: 0.85,
               },
             },

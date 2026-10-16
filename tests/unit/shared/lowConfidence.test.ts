@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
   LOW_CONFIDENCE_LINE,
   isLowConfidenceCategory,
+  DEFAULT_SETTINGS,
 } from '../../../src/shared/constants'
 
 describe('isLowConfidenceCategory', () => {
@@ -45,5 +46,9 @@ describe('isLowConfidenceCategory', () => {
 
   it('概率是 0 也算低置信(0 是合法取值,不是"没有值")', () => {
     expect(isLowConfidenceCategory({ categorySource: 'jev', categoryConfidence: 0 })).toBe(true)
+  })
+
+  it('★ 复核线必须严格高于默认阈值 —— 取等或更低会让这个功能静默失效', () => {
+    expect(LOW_CONFIDENCE_LINE).toBeGreaterThan(DEFAULT_SETTINGS.classifyProbThreshold)
   })
 })

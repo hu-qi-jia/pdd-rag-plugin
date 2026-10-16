@@ -325,7 +325,7 @@ describe('searchSuggestions 的类型路由', () => {
       categoryId: 'preset:price',
       replyText: '这个价格已经是最低了哦。',
     })
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.9 })))
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.9 })))
     await saveSettings({ classifyEnabled: true, jevApiKey: 'sk-test' })
 
     const out = await searchSuggestions('能开发票吗?')
@@ -353,8 +353,8 @@ describe('searchSuggestions 的类型路由', () => {
       categoryId: 'preset:price',
       replyText: '这个价格已经是最低了哦。',
     })
-    // jev 误判成订单物流(池子非空,但最高余弦 0.6 明显低于全池的 1.0)
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.9 })))
+    // jev 误判成发货与物流(池子非空,但最高余弦 0.6 明显低于全池的 1.0)
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.9 })))
     await saveSettings({ classifyEnabled: true, jevApiKey: 'sk-test' })
 
     const out = await searchSuggestions('能开发票吗?')
@@ -446,8 +446,8 @@ describe('searchSuggestions 的类型路由', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    // 一单两意:订单 0.52 / 尺码 0.43,都过 0.2 阈值
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.52, 尺码推荐: 0.43 })))
+    // 一单两意:发货与物流 0.7 / 尺码 0.6,都过半且高于复核线(0.65),不会被守卫降级为 no-filter
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.7, 尺码推荐: 0.6 })))
     await saveSettings({
       classifyEnabled: true,
       jevApiKey: 'sk-test',
@@ -474,7 +474,7 @@ describe('searchSuggestions 的类型路由', () => {
       categoryId: 'preset:order',
       replyText: '48 小时内发货。',
     })
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.52, 尺码推荐: 0.43 })))
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.7, 尺码推荐: 0.6 })))
     await saveSettings({
       classifyEnabled: true,
       jevApiKey: 'sk-test',
@@ -584,7 +584,7 @@ describe('searchSuggestions 的类型路由', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 订单物流: 0.9 })))
+    vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.9 })))
     await saveSettings({
       classifyEnabled: true,
       jevApiKey: 'sk-test',

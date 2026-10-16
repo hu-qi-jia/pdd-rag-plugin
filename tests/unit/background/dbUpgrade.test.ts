@@ -246,7 +246,7 @@ describe('v7 → v8 旧文件夹迁移', () => {
     const fresh = new PddDatabase()
     await fresh.open()
     await fresh.ensurePresetCategories()
-    expect(await fresh.categories.count()).toBe(7)
+    expect(await fresh.categories.count()).toBe(10)
     fresh.close()
   })
 })

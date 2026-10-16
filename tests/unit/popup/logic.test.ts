@@ -249,7 +249,7 @@ describe('criteriaOverlapsPresets:与预置类型含义相近的提示', () => {
   })
 
   it('直接抄预置原文的一个子串 → 触发(短串是预置描述的子集,这正是包含度能识别的形态)', () => {
-    expect(criteriaOverlapsPresets('询问发货时间、催发货、快递公司、运单号')).toBe(true)
+    expect(criteriaOverlapsPresets('催发货、用哪家快递、要运单号')).toBe(true)
   })
 
   it('太短的说明不判定:一两个 bigram 偶然全中不算"含义相近"', () => {

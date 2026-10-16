@@ -172,7 +172,7 @@ describe('设置页 · 概率阈值滑杆', () => {
     const s = probe('概率阈值')
     expect(s.min).toBe(0)
     expect(s.max).toBe(1)
-    expect(s.shown).toBe(DEFAULT_SETTINGS.classifyProbThreshold) // 默认 0.20
+    expect(s.shown).toBe(DEFAULT_SETTINGS.classifyProbThreshold) // 默认 0.5
 
     await drag(s.input, '0')
     expect(probe('概率阈值').shown).toBe(0) // 即时反馈

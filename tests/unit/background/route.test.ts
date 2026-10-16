@@ -87,11 +87,12 @@ describe('decideRoute', () => {
   })
 
   it('★ 多意图:概率 ≥ 阈值的所有类型都进集合,不是只取胜者', () => {
-    // {订单物流: 0.52, 尺码推荐: 0.43, 价格优惠: 0.03},阈值 0.2
-    // → 集合 = {订单物流, 尺码推荐}(价格 0.03 不进)
+    // {订单物流: 0.7, 尺码推荐: 0.68, 价格优惠: 0.03},阈值 0.2
+    // → 集合 = {订单物流, 尺码推荐}(价格 0.03 不进)。
+    // 两个都取在复核线(0.65)之上,否则低置信守卫会先一步把整次判断降级为 no-filter。
     const r = decideRoute(
       CATS,
-      { 'preset:order': 0.52, 'preset:size': 0.43, 'preset:price': 0.03 },
+      { 'preset:order': 0.7, 'preset:size': 0.68, 'preset:price': 0.03 },
       0.2,
     )
     expect(r.kind).toBe('filter')
@@ -104,7 +105,7 @@ describe('decideRoute', () => {
   })
 
   it('★ {尺码推荐, 订单物流} → filter(不是 size-only) —— 买家一次问了两件事', () => {
-    const r = decideRoute(CATS, { 'preset:size': 0.6, 'preset:order': 0.5 }, 0.2)
+    const r = decideRoute(CATS, { 'preset:size': 0.7, 'preset:order': 0.68 }, 0.2)
     expect(r.kind).toBe('filter')
   })
 
@@ -131,7 +132,7 @@ describe('decideRoute', () => {
   })
 
   it('尺码类型(route=size)即使被选中也不会进池', () => {
-    const r = decideRoute(CATS, { 'preset:size': 0.5, 'preset:order': 0.5 }, 0.2)
+    const r = decideRoute(CATS, { 'preset:size': 0.7, 'preset:order': 0.7 }, 0.2)
     expect(r.kind).toBe('filter')
     if (r.kind !== 'filter') return
     expect(r.allowed.has('preset:size')).toBe(false)

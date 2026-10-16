@@ -339,9 +339,9 @@ describe('面板回带分类', () => {
     await db.ensurePresetCategories()
 
     const out = await getPanelData({ type: 'GET_PANEL_DATA' })
-    expect(out.categories).toHaveLength(7)
-    expect(out.categories[0].id).toBe('preset:size')
-    expect(out.categories[6].id).toBe(UNCATEGORIZED_CATEGORY_ID)
+    expect(out.categories).toHaveLength(10)
+    expect(out.categories[0].id).toBe('preset:attribute')
+    expect(out.categories[9].id).toBe(UNCATEGORIZED_CATEGORY_ID)
     // 面板 DTO 不带 criteria(那是喂给 jev 的,面板用不上)
     for (const c of out.categories) {
       expect(Object.keys(c).sort()).toEqual([
@@ -359,7 +359,7 @@ describe('面板回带分类', () => {
     await db.ensurePresetCategories()
 
     const out = await getPanelData({ type: 'GET_PANEL_DATA' })
-    expect(out.categories).toHaveLength(7)
+    expect(out.categories).toHaveLength(10)
   })
 })
 

@@ -4,7 +4,7 @@
  * 面板不持有任务:补分类跑在 SW 里,弹窗关掉连接就没了。这里留一份模块级单例状态,
  * 面板用 `GET_BACKFILL_STATE` 轮询读回 —— 关/开弹窗都能如实反映,也不必处理端口生命周期。
  *
- * 分工:门禁(`classifyEnabled` + `isJevConfigured` + 有可问类型)只在这里判一次,
+ * 分工:门禁(`classifyEnabled` + `isJevConfigured` + 有可问类型[记录级])只在这里判一次,
  * 是唯一入口 —— `runBackfill` 明确约定"调用方负责门禁",自己不再重复判。任一条不成立
  * 就直接返回、**一次 fetch 都不发**(ADR-0007:未配置时扩展保持完全本地)。
  */
@@ -100,7 +100,9 @@ export async function startBackfill(
     if (!settings.classifyEnabled) return refuse('自动分类未开启')
     const config = jevConfigFromSettings(settings)
     if (!isJevConfigured(config)) return refuse('分类接口未配置')
-    const options = classifiableCategories(await db.listCategories())
+    // 门禁③用**记录级**作用域:必须与 runBackfill 取选项集的口径一致,
+    // 否则门禁说"有类型可问",真正跑起来却一个选项都没有(尺码不参与打标)。
+    const options = classifiableCategories(await db.listCategories(), 'record')
     if (options.length === 0) return refuse('没有可用于分类的问题类型')
 
     // 总数与快照同口径:manual 在快照阶段已排除,不计入

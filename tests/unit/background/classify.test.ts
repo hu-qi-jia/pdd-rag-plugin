@@ -48,18 +48,45 @@ function makeCat(over: Partial<CategoryRecord> & { id: string }): CategoryRecord
 }
 
 describe('classifiableCategories', () => {
-  it('只取 filterable=true 的 —— 它和"是 jev 的选项"是同一个集合', () => {
-    const cats = [
+  // 作用域用例共用的三类:记录级可打的、查询级专有的(尺码)、永远不是选项的(未分类)
+  const cats = [
+    makeCat({ id: 'preset:order', name: '订单物流', route: 'retrieve' }),
+    makeCat({ id: 'preset:size', name: '尺码推荐', route: 'size' }),
+    makeCat({ id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false }),
+  ]
+
+  it('query:只取 filterable=true —— 查询级与改前逐字节相同', () => {
+    const mixed = [
       makeCat({ id: 'preset:order', name: '订单物流' }),
       makeCat({ id: 'uncategorized', name: '未分类', kind: 'uncategorized', filterable: false }),
       makeCat({ id: 'legacy:f1', name: '双十一', kind: 'custom', filterable: false }),
     ]
-    expect(classifiableCategories(cats).map((c) => c.id)).toEqual(['preset:order'])
+    expect(classifiableCategories(mixed, 'query').map((c) => c.id)).toEqual(['preset:order'])
   })
 
   it('只带 id/name/criteria,不带 kind/route 之类的本地字段', () => {
-    const out = classifiableCategories([makeCat({ id: 'a', name: '甲', criteria: '甲乙丙' })])
+    const out = classifiableCategories(
+      [makeCat({ id: 'a', name: '甲', criteria: '甲乙丙' })],
+      'query',
+    )
     expect(out[0]).toEqual({ id: 'a', name: '甲', criteria: '甲乙丙' })
+  })
+
+  it("record:排除 route='size' —— 尺码不该有存档记录", () => {
+    expect(classifiableCategories(cats, 'record').map((c) => c.id)).toEqual(['preset:order'])
+  })
+
+  it('query:包含 route=size —— 意图识别要用它', () => {
+    expect(classifiableCategories(cats, 'query').map((c) => c.id)).toEqual([
+      'preset:order',
+      'preset:size',
+    ])
+  })
+
+  it('两个作用域都不含 filterable=false 的(未分类永远不是选项)', () => {
+    for (const scope of ['record', 'query'] as const) {
+      expect(classifiableCategories(cats, scope).map((c) => c.id)).not.toContain('uncategorized')
+    }
   })
 })
 

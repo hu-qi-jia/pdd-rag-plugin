@@ -36,7 +36,9 @@ const CONFIGURED: PddSettings = {
   jevModel: 'jev-latest',
 }
 
-const CATS = [{ id: 'preset:order', name: '订单物流', criteria: '发货时间、催发货…', filterable: true }]
+// 门禁③(有可问类型)按**记录级**作用域取集:route 必须给全,
+// 漏了它这条会被当成"没有可问类型"而拒绝,现象伪装成产品 bug。
+const CATS = [{ id: 'preset:order', name: '订单物流', criteria: '发货时间、催发货…', route: 'retrieve', filterable: true }]
 
 function items(n: number): Array<{ id: string; question: string }> {
   return Array.from({ length: n }, (_, i) => ({ id: `qa-${i}`, question: `问题${i}` }))

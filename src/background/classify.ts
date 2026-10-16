@@ -5,6 +5,9 @@
  * 门禁先于一切 IO:总开关关、未配 key、无类型可问 —— 任一条不成立就**一次 fetch 都不发**。
  * 这是 ADR-0007 里"未配置时扩展保持完全本地"的落点。
  *
+ * **作用域**:同一份门禁服务两条路径,但选项集不同 —— 记录级(捕获/金标打标、批量补分类)
+ * 取 `route='retrieve'`;查询级(意图识别)才含 `route='size'`。见 `classifiableCategories`。
+ *
  * 数据边界(ADR-0007,修订 ADR-0006):外发内容仅限问题文本、类型名/判定说明与请求参数;
  * 回复正文与标准回答正文永不出本机 —— 它们根本不在这条链路的入参里,是结构性保证。
  */
@@ -20,10 +23,26 @@ import {
 } from './jev'
 import type { CategoryRecord, PddSettings } from '../types/memory'
 
-/** 可作为 jev 选项的类型。与"参与类型过滤"是同一个集合(filterable=true) */
-export function classifiableCategories(cats: CategoryRecord[]): JevCategoryOption[] {
+/** 打标作用域:`'record'` = 记录级(打标/补分类),`'query'` = 查询级(意图识别) */
+export type ClassifyScope = 'record' | 'query'
+
+/**
+ * 可作为 jev 选项的类型。
+ *
+ * `'query'`(意图识别):`filterable=true` 即可 —— 与加作用域之前逐字节相同。
+ * `'record'`(捕获/金标打标、批量补分类):还要 `route === 'retrieve'`。
+ * 尺码(`route='size'`)的答案取决于买家个体参数、历史回复不可复用,
+ * 天生**不可能有有用的存档记录** —— 记录级少一个选项,好过事后清理错标。
+ *
+ * 用现成的 `route` 字段而不是新增"是否记录级"字段:`route='size'` 的语义本就是
+ * "答案不可复用",两者是同一件事;加字段只会多一处要同步的真相(spec M4)。
+ */
+export function classifiableCategories(
+  cats: CategoryRecord[],
+  scope: ClassifyScope,
+): JevCategoryOption[] {
   return cats
-    .filter((c) => c.filterable)
+    .filter((c) => c.filterable && (scope === 'query' || c.route === 'retrieve'))
     .map((c) => ({ id: c.id, name: c.name, criteria: c.criteria }))
 }
 
@@ -50,10 +69,14 @@ export function pickRecordCategory(
  * 门禁顺序(与 classifyRecord 一致,三处共用同一份实现 —— 免得两条路径漂移):
  *   ① 总开关 classifyEnabled;② 配置齐全 isJevConfigured;③ 有可问类型。
  * 任一条不成立就**一次 fetch 都不发**(ADR-0007 的"未配置保持完全本地")。
+ *
+ * `scope` **不给默认值**:记录级与查询级的选项集不同,默认值会让"忘传"的调用点
+ * 静默退回旧的一集合行为 —— 那正是本任务要消灭的缺陷(spec 6.1)。
  */
 async function classifyGated(
   question: string,
   settings: PddSettings,
+  scope: ClassifyScope,
 ): Promise<Record<string, number> | null> {
   try {
     // 门禁①:总开关
@@ -63,7 +86,7 @@ async function classifyGated(
     if (!isJevConfigured(config)) return null
 
     const cats = await db.listCategories()
-    const options = classifiableCategories(cats)
+    const options = classifiableCategories(cats, scope)
     // 门禁③:有选项可问
     if (options.length === 0) return null
 
@@ -85,7 +108,7 @@ export async function classifyRecord(
 ): Promise<{ categoryId: string; confidence: number } | null> {
   try {
     const settings = await loadSettings()
-    const probabilities = await classifyGated(question, settings)
+    const probabilities = await classifyGated(question, settings, 'record')
     if (probabilities === null) return null
     return pickRecordCategory(probabilities, settings.classifyProbThreshold)
   } catch {
@@ -95,9 +118,10 @@ export async function classifyRecord(
 
 /**
  * 查询时的分类(第五十八轮 · 检索路由)—— 与 classifyRecord **同一套门禁**,
- * 区别只在于返回**整份概率分布**:路由要的是"哪些类型过了线"(多意图取并集),
- * 不是"哪一个赢了"。`null` = 没判出来(未配置 / 无可问类型 / 超时 / 报错),
- * 调用方据此走"不筛"路线 —— 分类失败绝不能阻塞检索。
+ * 区别有二:① 返回**整份概率分布**(路由要的是"哪些类型过了线"、多意图取并集,
+ * 不是"哪一个赢了");② 选项集走**查询级** —— 含 `route='size'`,这正是把尺码
+ * 问题导向"尺码表 + LLM"之路的那个选项。`null` = 没判出来(未配置 / 无可问类型 /
+ * 超时 / 报错),调用方据此走"不筛"路线 —— 分类失败绝不能阻塞检索。
  *
  * settings 由调用方传入:检索链路已经读过一次,没必要为门禁再读一遍存储。
  */
@@ -105,7 +129,7 @@ export async function classifyForQuery(
   question: string,
   settings: PddSettings,
 ): Promise<Record<string, number> | null> {
-  return classifyGated(question, settings)
+  return classifyGated(question, settings, 'query')
 }
 
 /** 补分类进度。total 是**待办条数**(不含跳过的),设置页按钮上的文案与它同源 */
@@ -186,7 +210,9 @@ export async function runBackfill(opts: {
 }): Promise<BackfillProgress> {
   const settings = await loadSettings()
   const config = opts.deps?.config ?? jevConfigFromSettings(settings)
-  const options = opts.deps?.categories ?? classifiableCategories(await db.listCategories())
+  // 记录级作用域:与 backfillState 的启动门禁同口径 —— 否则门禁说"有类型可问",
+  // 跑起来却一个选项都没有(尺码不该被打标,这里必须排除它)。
+  const options = opts.deps?.categories ?? classifiableCategories(await db.listCategories(), 'record')
   const threshold = opts.deps?.threshold ?? settings.classifyProbThreshold
   const snapshot = opts.deps?.snapshot ?? (() => db.snapshotBackfillCandidates())
   const writeHistory = opts.deps?.writeHistory ?? ((id, hit) => db.updateQaCategory(id, hit))

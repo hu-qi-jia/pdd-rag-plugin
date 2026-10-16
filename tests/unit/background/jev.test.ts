@@ -95,6 +95,9 @@ describe('classifyQuestion', () => {
     expect(body.state).toBe('165 穿多大')
     expect(body.questions.category.type).toBe('choice')
     expect(Object.keys(body.questions.category.criteria)).toEqual(['订单物流', '尺码推荐'])
+    // 「其他」是兜底出口:不给出口,模型会本能回避它,缺出口这个病根原样保留
+    expect(body.questions.category.instructions).toContain('其他')
+    expect(body.questions.category.instructions).toContain('都不属于')
     // 外发只有问题文本与选项描述,不含任何回复内容
     expect(JSON.stringify(body)).not.toContain('answer')
   })

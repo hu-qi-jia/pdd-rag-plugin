@@ -51,8 +51,14 @@ export function systemOneUrl(baseUrl: string): string {
 /**
  * 问题 id(`category`)只是回传用的字典键 —— 官方明确它不会发给模型,
  * 语义要写在 instructions 里。
+ *
+ * 「其他」是兜底出口,与它的 criteria(「仅仅因为你没把握而选它是错的」)配套成对 ——
+ * 一个开出口,一个防泛滥,缺一则失衡:不给出口,模型会本能回避兜底项,
+ * 无关消息就被硬塞进业务类。
+ * 记录级与查询级共用这一句:选项表由 criteria 决定,不由指令决定。
  */
-const INSTRUCTIONS = '这是买家发来的消息。判断它属于哪一类问题。'
+const INSTRUCTIONS =
+  '这是买家发来的消息。判断它属于哪一类问题；如果都不属于（例如招呼语、闲聊、与交易无关的内容），选「其他」。'
 
 /** 概率最高者的 id;并列取先遇到的(与 jev 平局取第一的口径一致) */
 export function argmaxId(probabilities: Record<string, number>): string {

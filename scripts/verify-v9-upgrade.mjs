@@ -429,13 +429,19 @@ check(
   `criteria=${JSON.stringify(upgradedById.get('preset:other')?.criteria ?? '')}`,
 )
 
-// 严格大于:类型 updatedAt 必须 > 挂在它上面的存量记录 categoryAt。
-// 相等是陷阱(v8 迁移刻意取等,好让存量不重跑),这一轮要的恰恰相反。
+// 恰好等于「存量最大 categoryAt + 1」—— 比原来那条"严格大于"更强:
+//   · 严格大于放行 `max + 1000` 之类的固定偏移实现,那种写法在存量时间戳继续变大时会漏;
+//   · 取等(`max + 0`)正是本轮要消灭的陷阱(v8 迁移刻意取等,好让存量不重跑)。
+// 存量最大 categoryAt 就是那条**未来**时间戳(夹具里只有它晚于"现在"),故期望 = futureAt + 1。
 const futureRec = raw.qaRecords.find((r) => r.id === 'qa-future')
+const futureStamp = seeded.futureAt + 1
 check(
-  '★ 类型 updatedAt 严格大于存量 categoryAt(含那条未来时间戳)',
-  futureRec != null && upgradedById.get('preset:order').updatedAt > futureRec.categoryAt,
-  `updatedAt=${upgradedById.get('preset:order')?.updatedAt} vs categoryAt=${futureRec?.categoryAt}`,
+  '★ 类型 updatedAt 恰为存量最大 categoryAt + 1(那条未来时间戳 + 1)',
+  futureRec != null &&
+    futureRec.categoryAt === seeded.futureAt &&
+    upgradedById.get('preset:order').updatedAt === futureStamp,
+  `updatedAt=${upgradedById.get('preset:order')?.updatedAt} vs 期望 ${futureStamp}` +
+    `(未来时间戳=${seeded.futureAt} · 读回 categoryAt=${futureRec?.categoryAt})`,
 )
 check(
   '存量记录的标签与原文一条都没被改写(迁移改的是类型行)',

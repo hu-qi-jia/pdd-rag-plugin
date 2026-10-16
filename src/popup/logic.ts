@@ -201,6 +201,26 @@ export function recordLevelCategories(categories: PanelCategory[]): PanelCategor
 }
 
 /**
+ * 读侧**唯一**的「哪些 categoryId 算一个真实存在的分类」判据。
+ *
+ * 取 `recordLevelCategories` 的 id 集合(黑名单排除 `route='size'`):`preset:size`
+ * 是查询级专用,**记录级永不会有这个标签** —— 于是 `categoryId === 'preset:size'`
+ * 的存量残影(升级前打上的旧标签)既不在任何分类桶里(尺码桶不再渲染),又不该凭空
+ * 消失,只能落进「未分类」。
+ *
+ * 读侧三处(`catNavItems` / `filterByCategory` / `groupByCategory`)必须同源:
+ * 前两处直接用本函数;`groupByCategory` 用它的桶表(`recordLevelCategories` 的另一份
+ * 等价表述)。各判各的就会出现"导航写「未分类 N」、点进去只有 N−k 条",而那些记录在
+ * **任何**分类下都找不到(只剩「全部」)—— 这正是 `preset:size` 进来后暴露过的那种对不上。
+ *
+ * 注:`uncategorized` 自身也在这份集合里(它 `route='retrieve'`),所以"显式未分类"
+ * 的条目还要在调用处单独放行(见 `filterByCategory`)。
+ */
+export function knownCategoryIds(categories: PanelCategory[]): Set<string> {
+  return new Set(recordLevelCategories(categories).map((c) => c.id))
+}
+
+/**
  * 按问题类型分桶(记忆列表面板)。
  *
  * 三条不变量:
@@ -217,6 +237,8 @@ export function groupByCategory<T extends { categoryId: string }>(
 ): Array<CategoryBucket<T>> {
   // 两个循环必须用**同一份**可见数组:只滤一处会出现"建了桶却不产出"
   // (第二处 buckets.get(尺寸 id) 取到 undefined,直接崩)或反向的计数错位。
+  // 桶表就是"哪些 id 算分类"的另一份表述 —— 与 `knownCategoryIds` 同源(都取
+  // `recordLevelCategories`),所以 `preset:size` 的残影在这里也自然落进未分类。
   const visible = recordLevelCategories(categories)
   const buckets = new Map<string, CategoryBucket<T>>()
   for (const c of categoryOrder(visible)) {
@@ -288,10 +310,11 @@ export function catNavItems<T extends { categoryId: string }>(
   shown: T[],
   categories: PanelCategory[],
 ): CatNavEntry[] {
-  // known 与 categoryOrder 必须用**同一份**可见数组:只滤一处会让计数与显示错位 ——
-  // 某个桶被计数却在导航上不产出,或反过来。
+  // known 与 categoryOrder 必须用**同一份**可见集:两者都走 `recordLevelCategories`
+  // (`knownCategoryIds` 内部也是它),同一份判据、同一次黑名单 —— 只滤一处会让计数与
+  // 显示错位:某个桶被计数却在导航上不产出,或反过来。
   const visible = recordLevelCategories(categories)
-  const known = new Set(visible.map((c) => c.id))
+  const known = knownCategoryIds(categories)
   const counts = new Map<string, number>()
   let uncategorized = 0
   for (const it of shown) {
@@ -314,8 +337,16 @@ export function catNavItems<T extends { categoryId: string }>(
 }
 
 /**
- * 按选中的分类过滤。与 `catNavItems` 共用同一条"什么算未分类"的判据 ——
- * 两处若各判各的,导航上写「未分类 3」、点进去却是 2 条。
+ * 按选中的分类过滤。与 `catNavItems` 共用同一条"什么算未分类"的判据
+ * (`knownCategoryIds`,取自 `recordLevelCategories`)—— 两处若各判各的,导航上写
+ * 「未分类 3」、点进去却是 2 条。
+ *
+ * "不在已知 id 里"包含两类,都并进未分类:
+ *  ① 类型表里根本没有的 categoryId(旧自定义类型被删掉了);
+ *  ② **在类型表里、却不在可见集里**的 id —— 今天只有 `preset:size`:它 route='size',
+ *     记录级永不打这个标签,而那些旧标签(升级前打的)必须在某处能被翻出来。
+ *     若 known 取未过滤的 `categories`,这类记录会被 `!known.has(...)` 判为"已知"
+ *     而不并进未分类,于是它们在**任何**分类下都不出现(尺码桶不再渲染),只剩「全部」。
  */
 export function filterByCategory<T extends { categoryId: string }>(
   shown: T[],
@@ -324,9 +355,10 @@ export function filterByCategory<T extends { categoryId: string }>(
 ): T[] {
   if (categoryId === ALL_CATEGORY_ID) return shown
   if (categoryId === UNCATEGORIZED_CATEGORY_ID) {
-    // 注意 `uncategorized` **本身也在类型表里** —— 只判 `!known.has(id)` 会把它自己
-    // 筛掉,于是导航写「未分类 2」、点进去只剩幽灵类型那 1 条(catNav.test 钉着这条)
-    const known = new Set(categories.map((c) => c.id))
+    // 注意 `uncategorized` **本身也在 known 里**(它 route='retrieve',黑名单不滤它)——
+    // 只判 `!known.has(id)` 会把它自己筛掉,于是导航写「未分类 2」、点进去只剩幽灵类型
+    // 那 1 条(catNav.test 钉着这条),故显式放行它自己。
+    const known = knownCategoryIds(categories)
     return shown.filter(
       (it) => !known.has(it.categoryId) || it.categoryId === UNCATEGORIZED_CATEGORY_ID,
     )

@@ -104,7 +104,8 @@ export function decideRoute(
     .filter(([, p]) => p >= threshold)
     .map(([id]) => id)
   // 全低于阈值 → 判不准,别乱筛。
-  // 阈值被调到 0.5 以上时这条才可能命中(守卫只保证最高的一条 ≥ 0.5)
+  // 阈值被调到 0.65 以上时这条才可能命中(上面的守卫保证最高的一条 ≥ 0.65,
+  // 即 LOW_CONFIDENCE_LINE —— 守的是**最高那条**,不是每一条)
   if (picked.length === 0) return { kind: 'no-filter' }
 
   const byId = new Map(categories.map((c) => [c.id, c]))

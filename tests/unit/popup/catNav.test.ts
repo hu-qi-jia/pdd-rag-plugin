@@ -15,12 +15,18 @@ const cat = (
   name: string,
   position: number,
   kind: PanelCategory['kind'] = 'preset',
-): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', route: 'retrieve', position })
+  route: PanelCategory['route'] = 'retrieve',
+): PanelCategory => ({ id, name, kind, filterable: kind !== 'uncategorized', route, position })
 
 const CATS = [
-  cat('a', '尺码', 1),
+  cat('a', '咨询', 1),
   cat('b', '物流', 2),
   cat('c', '售后', 3),
+  // 查询级专用类型(recordLevelCategories 的黑名单把它滤掉):记录级永不打这个标签,
+  // 于是挂在这个 id 上的存量残影必须落进「未分类」——它就是本文件用来钉"两边判据必须
+  // 同源"的那条。不给它 route='size',这层就永远测不到(旧桩把「尺码」写成 retrieve,
+  // 于是尺码既是可见类型又是被隐藏类型,矛盾在夹具里被悄悄抹平了)。
+  cat('d', '尺码推荐', 4, 'preset', 'size'),
   cat('uncategorized', '未分类', 9999, 'uncategorized'),
 ]
 
@@ -67,24 +73,38 @@ describe('filterByCategory', () => {
     item('2', 'b'),
     item('3', 'uncategorized'),
     item('4', 'ghost'),
+    item('5', 'd'),
   ]
 
   it('「全部」原样返回', () => {
-    expect(filterByCategory(items, ALL_CATEGORY_ID, CATS)).toHaveLength(4)
+    expect(filterByCategory(items, ALL_CATEGORY_ID, CATS)).toHaveLength(5)
   })
 
   it('按类型过滤', () => {
     expect(filterByCategory(items, 'a', CATS).map((x) => x.id)).toEqual(['1'])
   })
 
-  it('未分类含「显式未分类」与「类型表里没有的 id」两类', () => {
-    expect(filterByCategory(items, 'uncategorized', CATS).map((x) => x.id)).toEqual(['3', '4'])
+  it('未分类含「显式未分类」「类型表里没有的 id」「可见集里没有的 id(尺码)」三类', () => {
+    expect(filterByCategory(items, 'uncategorized', CATS).map((x) => x.id)).toEqual([
+      '3',
+      '4',
+      '5',
+    ])
   })
 
-  it('与 catNavItems 同口径:导航计数 = 点进去看到的条数', () => {
+  it('与 catNavItems 同口径:导航计数 = 点进去看到的条数(含 route=size 的残影)', () => {
     const nav = catNavItems(items, CATS)
     for (const entry of nav) {
       expect(filterByCategory(items, entry.id, CATS)).toHaveLength(entry.count)
     }
+    // 单钉一条:挂在 preset:size('d')上的记录(5)只可能落进「未分类」——
+    // 它不在可见集里(尺码导航项根本不产出),两边判据不同源时这里就是"导航 3、点进去 2"。
+    const unc = nav.find((e) => e.id === 'uncategorized')
+    expect(unc?.count).toBe(3)
+    expect(filterByCategory(items, 'uncategorized', CATS).map((x) => x.id)).toEqual([
+      '3',
+      '4',
+      '5',
+    ])
   })
 })

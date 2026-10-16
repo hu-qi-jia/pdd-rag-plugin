@@ -293,7 +293,7 @@ export class PddDatabase extends Dexie {
   }
 
   /**
-   * 确保 6 个预置类型 + 未分类存在(固定 id,幂等)。
+   * 确保 9 个预置类型 + 未分类存在(固定 id,幂等)。
    *
    * 已存在的一律不覆盖 —— 用户可能已经调过 position。预置的**内容**
    * (name/criteria/route)按设计 D3 不可改,所以不存在"用户改过要保留"的情形;

@@ -159,10 +159,9 @@ describe('classifyRecord 门禁', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('开着且配好 → 发一次请求,返回类型与该标签的概率', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
+  it('开着且配好 → 发一次请求,返回类型与该标签的概率;请求体不含尺码', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: RequestInit) =>
         new Response(
           JSON.stringify({
             answers: {
@@ -176,14 +175,25 @@ describe('classifyRecord 门禁', () => {
           }),
           { status: 200 },
         ),
-      ),
     )
+    vi.stubGlobal('fetch', fetchMock)
     await saveSettings({ classifyEnabled: true, jevApiKey: 'sk-test' })
     const classifyRecord = await freshClassify()
     expect(await classifyRecord('快递到哪了')).toEqual({
       categoryId: 'preset:order',
       confidence: 0.91,
     })
+
+    // 记录级作用域的**端到端**落点:选项集由 classifiableCategories(cats,'record') 算出、
+    // 再由 jev 拼进请求体。这里不看中间函数,直接读**真要外发的那份 body** ——
+    // 尺码(route='size')的名不该出现在 criteria 的 key 里(它是查询级专用的选项)。
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    const optionNames = Object.keys(body.questions.category.criteria)
+    expect(optionNames).not.toContain('尺码推荐')
+    // 反向对照:同一份 body 里确实有记录级选项。少了这行,上一个断言在**空对象**上也会绿
+    // (选项集为空时形状不变,只是没有 key)。
+    expect(optionNames).toContain('发货与物流')
   })
 
   it('jev 报错 → 返回 null,不抛错(单条失败不能打断调用方)', async () => {

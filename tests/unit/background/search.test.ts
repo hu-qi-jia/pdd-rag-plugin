@@ -446,7 +446,9 @@ describe('searchSuggestions 的类型路由', () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    // 一单两意:发货与物流 0.7 / 尺码 0.6,都过半且高于复核线(0.65),不会被守卫降级为 no-filter
+    // 一单两意:发货与物流 0.7 / 尺码 0.6。低置信守卫读的是**最高的那一条**
+    // (0.7 ≥ 0.65 复核线)就放行 —— 被并集选中的尺码只有 0.6,**并不需要每条都过线**。
+    // 若按逐条判,这条混合意图会被降级成 no-filter(尺码那 0.6 拖垮整条)。
     vi.stubGlobal('fetch', vi.fn(async () => jevResponse({ 发货与物流: 0.7, 尺码推荐: 0.6 })))
     await saveSettings({
       classifyEnabled: true,

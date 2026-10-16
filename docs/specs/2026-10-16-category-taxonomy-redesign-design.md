@@ -135,7 +135,8 @@
 
 ### 4.3 「尺码推荐」：查询级保留，记录级与两个页面不可见（U7 + M4）
 
-`preset:size` **一个字段都不改**：`kind='preset'`、`filterable=true`、`route='size'`、原 criteria、原 position。
+`preset:size` **除 position 与 `updatedAt` 外一个字段都不改**：`kind='preset'`、`filterable=true`、`route='size'`、原 criteria、原 name。
+（position 由 0 排到 **8** —— 见 §5.3 ④；`updatedAt` 顶新是为了让它名下的存量标签重判。原书写"原 position 不改"与 §5.3④ 自相矛盾，以 §5.3④ 为准。）
 它继续是「意图识别」的选项，于是"买家问尺码 → 走尺码表整篇 + LLM 生成"这条路由**完好无损**。
 
 变的是**谁能看见它**：

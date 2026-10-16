@@ -1,8 +1,8 @@
 /**
  * P3 端到端合成验收(设计文档 §11 P3 验收链的数据层等价演练):
  *   合成捕获 → 设金(幂等)→ 重嵌 → 检索命中金标准 → 编辑+重嵌 → 检索命中新版 →
- *   仅改答案不重嵌 → 文件夹 CRUD+迁移 → 导出 v2 → 幂等再导入(全跳过)→ 坏版本拒绝 →
- *   FILL_INPUT 无聊天页报错 → 清理测试数据(不污染真实库)。
+ *   仅改答案不重嵌 → 面板回带 → 导出 v2(含 folders,取内建「未分类」)→ 幂等再导入(全跳过)→
+ *   坏版本拒绝 → FILL_INPUT 无聊天页报错 → 清理测试数据(不污染真实库)。
  * 用法:node scripts/verify-p3.mjs
  * 2026-09-16 工程审查②:样板抽至 lib.mjs,路径相对化
  */
@@ -159,17 +159,20 @@ check('改成与历史重复问题被拒?否——历史问答不算金标准冲
 const emptyEdit = await send('UPDATE_GOLDEN', { id: goldenId, question: '   ' })
 check('空问题编辑被拒', !!emptyEdit.error, emptyEdit.error ?? '')
 
-// ── 6. 文件夹 CRUD + 迁移 ──
-const folder = await send('CREATE_FOLDER', { name: 'P3验收夹', parentId: null })
-check('新建根文件夹', !!folder.id, `id=${folder.id}`)
-const sub = await send('CREATE_FOLDER', { name: 'P3验收子夹', parentId: folder.id })
-check('新建子文件夹', !!sub.id)
-const deep = await send('CREATE_FOLDER', { name: '三层夹', parentId: sub.id })
-check('三层被拒(最多两层)', !!deep.error, deep.error ?? '')
-const moved = await send('UPDATE_GOLDEN', { id: goldenId, folderId: folder.id })
+// ── 6. 文件夹:内建「默认文件夹」仍在,且随导出信封往返 ──
+//
+// 第五十七轮把「回复文件夹」的 UI 换成了问题类型,第六十轮把随之失去调用方的
+// CREATE_FOLDER / RENAME_FOLDER / DELETE_FOLDER / FLATTEN_FOLDERS 四个消息处理器一并删除
+// (它们当时已只剩这个脚本在调 —— 测的是没有入口的功能)。
+// 这里保留的是**数据面**的验收:folders 表本身没删(旧备份导入与 v8 迁移的 folderId→categoryId
+// 映射还依赖它),SW 启动时的 ensurePresetFolders 仍会补种内建的「默认文件夹」。
 const panelAfter = await send('GET_PANEL_DATA')
 const gAfter = (panelAfter.goldens ?? []).find((x) => x.id === goldenId)
-check('金标准迁移到新文件夹', moved.id === goldenId && gAfter?.folderId === folder.id, `folderId=${gAfter?.folderId}`)
+check(
+  '面板回带标准回答(数据面不再有文件夹字段的写入入口)',
+  gAfter?.id === goldenId,
+  `id=${gAfter?.id}`,
+)
 
 // ── 7. 导出 v2 + 幂等再导入 + 坏版本拒绝 ──
 const exp = await send('EXPORT_DATA', { includeMemory: true })
@@ -178,7 +181,7 @@ check(
   '导出信封 v2(金标准/文件夹/问答齐全)',
   env?.version === '2.0' &&
     (env.goldens ?? []).some((g) => g.id === goldenId) &&
-    (env.folders ?? []).some((f) => f.id === folder.id) &&
+    (env.folders ?? []).some((f) => f.id === 'uncategorized') &&
     (env.qaRecords ?? []).some((q) => q.sessionKey === SESS),
   `goldens=${env?.goldens?.length} folders=${env?.folders?.length} qa=${env?.qaRecords?.length}`,
 )
@@ -208,9 +211,7 @@ const cleaned = await sw.evaluate(async (sess) => {
   return qaIds.length
 }, SESS)
 await send('DELETE_GOLDEN', { id: goldenId })
-if (sub.id) await send('DELETE_FOLDER', { id: sub.id })
-if (folder.id) await send('DELETE_FOLDER', { id: folder.id })
-check('清理:测试问答/金标准/文件夹已删除', cleaned === 1, `qa=${cleaned}`)
+check('清理:测试问答/金标准已删除', cleaned === 1, `qa=${cleaned}`)
 
 const failed = results.filter((r) => !r.ok)
 console.log(`\n=== P3 合成验收:${results.length - failed.length}/${results.length} 通过 ===`)

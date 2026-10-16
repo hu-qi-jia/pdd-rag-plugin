@@ -5,6 +5,61 @@
 > 上游 Personal AI Memory 的历史变更见 `docs/upstream-CHANGELOG.md`(Apache 2.0);
 > 逐轮开发明细见 `docs/工作状态-2026-09-08.md` 与 git log(每轮均有 docs+test 提交)。
 
+## 未发布 — 工程结构整理(删死代码与失效脚本、目录收敛、仓库根清仓)
+
+> 一轮纯结构梳理,**不改任何行为**:对外契约、存储 schema、检索与分类逻辑一字未动,
+> 单测从 965 降到 948 是被删掉的死代码连带删掉的那 17 条,**没有一条既有断言被放宽**。
+> 判据是"有没有调用方"与"跑不跑得通",不是"看着像没用"。
+
+### 变更
+
+- **删除「回复文件夹」消息层的死代码。** 第五十七轮把文件夹 CRUD 的 UI 整体换成了问题类型,
+  但 SW 侧的路由(`CREATE_FOLDER` / `RENAME_FOLDER` / `DELETE_FOLDER` / `FLATTEN_FOLDERS`)、
+  `background/panel.ts` 的四个 handler、`types/messages` 的八条消息类型/db 的四个写方法、
+  以及 `popup/logic.ts` 的 `buildFolderTree` 全部留了下来 —— 全仓 grep 不到任何一个发送方
+  (唯一的调用者是验收脚本 `shots-tabs.mjs`,它自身也已失效)。**为什么留着是危险的**:
+  `db.deleteFolder` 会把名下标准回答的 `folderId` 清成 null,是一段有副作用、能编译、能通过类型检查,
+  却永远不会被触发的代码;下次有人照着它改东西,改的是一条死路。
+  **保留不动的是数据面**:`folders` 表、`FolderRecord`、`golden.folderId`、`ensurePresetFolders`、
+  `listFolders` —— 它们服务于旧备份导入与 v8 迁移的 `folderId → categoryId` 映射,设计文档 §10.5 明确不删。
+- **随之更新了 CI 验收脚本 `verify-p3.mjs`(必须点名的一处)。** 删完上面那些,它当场从 21/21 掉到
+  16/21 —— 掉的五条**正是**「新建根文件夹/子文件夹/三层被拒/金标准迁移到新文件夹/导出信封含该文件夹」。
+  也就是说:那四个处理器此前**唯一**的调用方就是这个脚本自己,**它测的是一个没有任何入口的功能**
+  (`docs/plans/2026-10-11-question-classification-ui.md` 当时写的保留条件是"若还有别的调用方",
+  而这里唯一的"别的调用方"就是测试自己)。已把该段改为仍然为真的数据面断言 ——
+  导出信封里 `folders` 仍在(取内建「默认文件夹」,由 `ensurePresetFolders` 补种)。
+  改完 `verify-p3` **18/18**。**这是本轮唯一一处动了测试覆盖的地方,单独列出以便复核。**
+- **删除九个已失效/一次性的验收脚本。** 分三类:
+  - **断言的是已退役的设计**(4 个):`verify-ai-button-geometry`(断言按钮 26px/6px/12.5px,
+    暖纸 v5.0 已是 34px/13px/13px,实测 7/13)、`verify-ai-popup`(断言 v3.0 的分隔线分层,已跑崩)、
+    `verify-ai-integrate`(42/52,十条失败全是 v3.0 的字号/底色档位)、`verify-settings-ui`
+    (选择器 `input[placeholder="sk-…"]` 在加了 jev Key 之后命中两个元素,已跑不通)。
+    **为什么删而不是留着**:一个长期红灯且只有重写才能变绿的脚本,比没有脚本更糟 —— 它让人以为覆盖还在。
+  - **一次性的环境修复/度量**(4 个):`repair-ext`、`repair-ext2`(修本机调试 profile 里扩展被禁用)、
+    `measure-clip-pixels.py`(量已退役的弹窗裁切形状)、`e2e-self-check`(依赖外部 `:9222` 调试 Chrome,
+    与 `e2e-capture` 职责重叠且更弱)。
+  - **截图脚本**(1 个):`shots-tabs.mjs` —— 与"验证不截图"的既定口径冲突。
+  保留的 11 个验收脚本 + 4 个工具链脚本全部仍可运行;CI 硬编码的四个 `verify-*` 一个没动。
+- **目录收敛:`docs/superpowers/plans/` → `docs/plans/`。** 原路径的 `superpowers` 中间层是工具名,
+  对读者无信息量,还与仓库根那个 gitignore 的 `.superpowers/`(技能工作区)同名易混;8 处引用一并改写。
+  同时**删除 14 个无人引用的图标重导出**(`src/ui/icons.tsx` 攒了一堆文件夹图标等,
+  与 README 写明的"任何目录都不做杂物抽屉"相抵触)。
+- **仓库根清仓(均为 gitignore 的产物,不入库)**:两份 17MB 的旧发布 zip(v0.11.0 / v0.15.1,
+  `pnpm release` 可重新生成)、一个 10MB 的一次性诊断 profile(`.diag-fresh-profile/`)、
+  `logs/` 下的旧构建日志与截图残渣。
+- **文档事实性修正**(三处与代码不符,不属于纯结构,单独列出以便复核):
+  `CONTEXT.md` 的「回复文件夹」词条仍在描述已下线的两级文件夹、且「知识库」还标着"(v1 未启用)";
+  `README.md` 的合规边界仍写"**唯一**的外发通道(ADR-0006)",而 ADR-0007 之后已经有第二条外发通道
+  (问题类型自动分类)—— 隐私声明写错是不该留的,已按 ADR-0006/0007 改写。README 的项目结构段同步到现状。
+
+### 验收
+
+- `tsc --noEmit` **0 错**;`vitest run` **948/948(72 文件)**;`npm run build` 成功,
+  模型随包拷贝(`build/chrome-mv3-prod/model/Xenova/bge-small-zh-v1.5/`)。
+- 四个 CI 数据层 e2e 在本机无头重跑全绿:`verify-kb` **19/19**、`verify-p3` **18/18**
+  (改动见上)、`verify-golden-multi` **17/17**、`verify-settings` 通过。
+- **未做**:真机抽查(第五十九轮那份「开始分类所有历史」)不在本轮范围。
+
 ## 未发布 — 问题类型重制(记录级 6→8 + 尺码转查询级专用 + 两条阈值常量)
 
 > 上承第五十六~五十八轮的问题自动分类。六个预置类型在真实导出(68 条问答)上暴露"缺桶 → 强塞":
@@ -12,7 +67,7 @@
 > 本次按行业骨架把**记录级**类型改为八条并加一个「其他」出口,同时把**记录级**与**查询级**
 > 的选项集分开 —— 让「尺码推荐」不再被当成一个存得住记录的桶。
 > 设计:`docs/specs/2026-10-16-category-taxonomy-redesign-design.md`;
-> 计划:`docs/superpowers/plans/2026-10-16-category-taxonomy-redesign.md`。
+> 计划:`docs/plans/2026-10-16-category-taxonomy-redesign.md`。
 
 ### 变更
 

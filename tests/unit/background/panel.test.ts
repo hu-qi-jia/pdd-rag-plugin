@@ -197,68 +197,6 @@ describe('clearMemoryData:清空问答记忆(2026-09-15 PM6a)', () => {
   })
 })
 
-describe('flattenFolders:遗留子文件夹一键拍平(2026-09-15 PM7)', () => {
-  async function freshFlatten() {
-    vi.resetModules()
-    const { flattenFolders } = await import('../../../src/background/panel')
-    const { db } = await import('../../../src/background/db')
-    return { flattenFolders, db }
-  }
-
-  async function addFolder(db: Awaited<ReturnType<typeof freshFlatten>>['db'], over: { id: string; parentId: string | null }) {
-    await db.folders.add({
-      id: over.id,
-      parentId: over.parentId,
-      name: over.id,
-      position: 0,
-      createdAt: Date.now(),
-    })
-  }
-
-  it('子夹金标准上移父根夹,子夹删除;根夹与其金标准不动', async () => {
-    const { flattenFolders, db } = await freshFlatten()
-    await addFolder(db, { id: 'fd-root1', parentId: null })
-    await addFolder(db, { id: 'fd-root2', parentId: null })
-    await addFolder(db, { id: 'fd-sub', parentId: 'fd-root1' })
-    await db.goldens.add(makeGolden({ id: 'g-sub', folderId: 'fd-sub' }))
-    await db.goldens.add(makeGolden({ id: 'g-root1', folderId: 'fd-root1' }))
-    await db.goldens.add(makeGolden({ id: 'g-root2', folderId: 'fd-root2' }))
-
-    const out = await flattenFolders({ type: 'FLATTEN_FOLDERS' })
-    expect(out.success).toBe(true)
-    expect(out.flattened).toBe(1)
-
-    const folderIds = (await db.folders.toArray()).map((f) => f.id).sort()
-    expect(folderIds).toEqual(['fd-root1', 'fd-root2'])
-    expect((await db.goldens.get('g-sub'))?.folderId).toBe('fd-root1')
-    expect((await db.goldens.get('g-root1'))?.folderId).toBe('fd-root1')
-    expect((await db.goldens.get('g-root2'))?.folderId).toBe('fd-root2')
-  })
-
-  it('父夹已失联的遗留子夹:金标准归「默认文件夹」(folderId=null),子夹删除', async () => {
-    const { flattenFolders, db } = await freshFlatten()
-    await addFolder(db, { id: 'fd-orphan', parentId: 'fd-gone' })
-    await db.goldens.add(makeGolden({ id: 'g-1', folderId: 'fd-orphan' }))
-
-    const out = await flattenFolders({ type: 'FLATTEN_FOLDERS' })
-    expect(out.success).toBe(true)
-    expect(out.flattened).toBe(1)
-    expect(await db.folders.count()).toBe(0)
-    expect((await db.goldens.get('g-1'))?.folderId).toBeNull()
-  })
-
-  it('无遗留子夹时:flattened=0,不动任何数据', async () => {
-    const { flattenFolders, db } = await freshFlatten()
-    await addFolder(db, { id: 'fd-root', parentId: null })
-    await db.goldens.add(makeGolden({ id: 'g-1', folderId: 'fd-root' }))
-
-    const out = await flattenFolders({ type: 'FLATTEN_FOLDERS' })
-    expect(out).toEqual({ success: true, flattened: 0 })
-    expect(await db.folders.count()).toBe(1)
-    expect((await db.goldens.get('g-1'))?.folderId).toBe('fd-root')
-  })
-})
-
 // ─── 分类字段回带(第五十七轮) ────────────────────────────────────────────────────
 //
 // 这一组钉的是"出口归一":库里的 categoryId 可能是 undefined / null / 具体 id 三种形态,

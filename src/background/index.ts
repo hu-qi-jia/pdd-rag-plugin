@@ -51,13 +51,9 @@ import {
 } from "./goldens";
 import {
   clearMemoryData,
-  createFolder,
-  deleteFolder,
   deleteQa,
-  flattenFolders,
   getMemoryList,
   getPanelData,
-  renameFolder,
   updateGoldenCategory,
 } from "./panel";
 import { createCategory, deleteCategory, renameCategory } from "./categories";
@@ -333,12 +329,6 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
     }),
   ),
 
-  FLATTEN_FOLDERS: route(
-    "FLATTEN_FOLDERS",
-    (message) => flattenFolders(message),
-    (err) => ({ success: false, flattened: 0, error: String(err) }),
-  ),
-
   CREATE_KB: route(
     "CREATE_KB",
     (message) => createKnowledge(message.payload),
@@ -390,24 +380,6 @@ const handlers: { [K in ExtensionMessage["type"]]: Handler<K> } = {
       await deleteGolden(message.payload.id);
       return { success: true };
     },
-    (err) => ({ success: false, error: String(err) }),
-  ),
-
-  CREATE_FOLDER: route(
-    "CREATE_FOLDER",
-    (message) => createFolder(message),
-    (err) => ({ error: String(err) }),
-  ),
-
-  RENAME_FOLDER: route(
-    "RENAME_FOLDER",
-    (message) => renameFolder(message),
-    (err) => ({ success: false, error: String(err) }),
-  ),
-
-  DELETE_FOLDER: route(
-    "DELETE_FOLDER",
-    (message) => deleteFolder(message),
     (err) => ({ success: false, error: String(err) }),
   ),
 

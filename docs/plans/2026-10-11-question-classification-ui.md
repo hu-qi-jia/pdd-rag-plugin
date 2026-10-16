@@ -9,7 +9,7 @@
 **Tech Stack:** TypeScript、React 18、Plasmo MV3、Dexie、Vitest 3 + happy-dom（**无 @testing-library**，UI 测试用手动 DOM + `react-dom/client`）。
 
 **Spec:** `docs/specs/2026-10-11-question-classification-design.md`
-**上一份计划:** `docs/superpowers/plans/2026-10-11-question-classification-foundation.md`（已落地，HEAD 起点 `db0fc67`）
+**上一份计划:** `docs/plans/2026-10-11-question-classification-foundation.md`（已落地，HEAD 起点 `db0fc67`）
 
 ## Global Constraints
 
@@ -947,4 +947,4 @@ git commit -m "feat: 问题类型的新建/改名/删除(唯一性校验 + 删�
 - 类型可新建/改名/删除，重名与改删预置都被挡住
 - **检索行为与改动前完全一致** —— 分类结果还没进入检索管线
 
-下一份计划：`docs/superpowers/plans/2026-10-11-question-classification-routing.md`（检索路由与尺码路由）。
+下一份计划：`docs/plans/2026-10-11-question-classification-routing.md`（检索路由与尺码路由）。

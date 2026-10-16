@@ -1,5 +1,6 @@
 /**
- * 面板纯逻辑(popup 的 Model 层):记忆列表关键词筛选 / 剩余保留天数 / 两层文件夹树构建。
+ * 面板纯逻辑(popup 的 Model 层):记忆列表关键词筛选 / 使用统计派生 / 剩余保留天数 /
+ * 按问题类型分区与类型导航。
  * 设计依据:设计文档 §7(面板结构)。纯函数,无 chrome/DB 依赖,便于单测。
  * (2026-09-16 工程审查③-V6:自 utils/panelLogic.ts 迁入 popup/,与 background/panel.ts
  *  的命名撞车解除 —— 后者是 SW 侧 DB 读取,本文件是 UI 侧纯逻辑)
@@ -15,10 +16,8 @@ import {
   UNCATEGORIZED_CATEGORY_ID,
   UNCATEGORIZED_CATEGORY_NAME,
   UNCATEGORIZED_CATEGORY_POSITION,
-  UNCATEGORIZED_FOLDER_ID,
-  UNCATEGORIZED_FOLDER_NAME,
 } from '../shared/constants'
-import type { PanelCategory, PanelFolder, PanelGolden, PanelKnowledge } from '../types/messages'
+import type { PanelCategory, PanelGolden } from '../types/messages'
 
 /**
  * 注:`chunkOrdinal` / `firstChunkIds` 两个 helper 已随 v3.0 一起删除。
@@ -30,7 +29,7 @@ import type { PanelCategory, PanelFolder, PanelGolden, PanelKnowledge } from '..
  *  与本处无关,未受影响。)
  */
 
-export type { PanelCategory, PanelFolder, PanelGolden }
+export type { PanelCategory, PanelGolden }
 
 /** 记忆列表关键词筛选:归一化包含匹配;空关键词返回全量 */
 export function filterQaRecords<T extends { question: string }>(items: T[], keyword: string): T[] {
@@ -86,71 +85,6 @@ export function remainingDays(questionTs: number, now: number, retentionDays: nu
   return Math.max(0, Math.ceil(remainMs / 86_400_000))
 }
 
-/** 文件夹树节点:金标准挂在自己归属的夹上 */
-export interface FolderNode {
-  folder: PanelFolder
-  children: FolderNode[]
-  goldens: PanelGolden[]
-}
-
-const byPosition = (a: FolderNode, b: FolderNode): number =>
-  a.folder.position - b.folder.position ||
-  a.folder.name.localeCompare(b.folder.name, 'zh-Hans-CN')
-
-/**
- * 构建两层文件夹树(根层 + 一层子夹)。
- * 兜底规则:
- *  - 金标准 folderId 为 null 或指向不存在的夹 → 归入"默认文件夹"节点;
- *  - "默认文件夹"夹缺失(理论上 ensurePresetFolders 保证存在)→ 合成兜底节点;
- *  - 子夹 parentId 悬空 → 当根层展示。
- */
-export function buildFolderTree(folders: PanelFolder[], goldens: PanelGolden[]): FolderNode[] {
-  const nodes = new Map<string, FolderNode>()
-  for (const f of folders) {
-    nodes.set(f.id, { folder: f, children: [], goldens: [] })
-  }
-  let uncIsSynthetic = false
-  if (!nodes.has(UNCATEGORIZED_FOLDER_ID)) {
-    uncIsSynthetic = true
-    nodes.set(UNCATEGORIZED_FOLDER_ID, {
-      folder: {
-        id: UNCATEGORIZED_FOLDER_ID,
-        parentId: null,
-        name: UNCATEGORIZED_FOLDER_NAME,
-        position: 0,
-      },
-      children: [],
-      goldens: [],
-    })
-  }
-
-  const roots: FolderNode[] = []
-  for (const f of folders) {
-    const node = nodes.get(f.id)!
-    const parent = f.parentId !== null ? nodes.get(f.parentId) : undefined
-    if (parent && f.parentId !== f.id) parent.children.push(node)
-    else roots.push(node)
-  }
-
-  for (const g of goldens) {
-    const target =
-      g.folderId !== null ? nodes.get(g.folderId) : undefined
-    ;(target ?? nodes.get(UNCATEGORIZED_FOLDER_ID)!).goldens.push(g)
-  }
-
-  // 合成兜底节点(库中实际无"默认文件夹"夹)仅在确有孤儿金标准要收纳时才入根层
-  const uncNode = nodes.get(UNCATEGORIZED_FOLDER_ID)!
-  if (uncIsSynthetic && uncNode.goldens.length > 0) roots.push(uncNode)
-
-  roots.sort(byPosition)
-  for (const node of nodes.values()) node.children.sort(byPosition)
-  // 同一问题的多条标准回答(每问上限见 MAX_GOLDENS_PER_QUESTION)按设置时间倒序:
-  // 最近设置的靠前,与聊天页候选顺序同一口径
-  for (const node of nodes.values()) {
-    node.goldens = orderGoldensByRecency(node.goldens)
-  }
-  return roots
-}
 
 /**
  * 同问题的多条标准回答按 updatedAt 倒序(最近设置靠前);

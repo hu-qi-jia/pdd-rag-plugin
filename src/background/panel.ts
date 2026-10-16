@@ -1,21 +1,21 @@
 /**
- * 面板数据编排(P3):记忆列表 / 面板数据拉取 / 文件夹 CRUD。
- * 树构建等纯逻辑见 popup/logic.ts;本文件只做 DB 读取与形状组装。
+ * 面板数据编排(P3):记忆列表 / 面板数据拉取 / 标准回答的类型改派。
+ * 树与分组等纯逻辑见 popup/logic.ts;本文件只做 DB 读取与形状组装。
+ *
+ * 第五十七轮把「回复文件夹」的 CRUD 整体换成了「问题类型」(categories),UI 侧与其
+ * 消息处理器一并移除;`folders` 表本身仍保留(旧备份导入与 `folderId` 回滚用,见
+ * 设计文档 §10.5),但面板已不再对它做任何写入。
  */
 import { db } from "./db";
-import { UNCATEGORIZED_CATEGORY_ID, UNCATEGORIZED_FOLDER_ID } from '../shared/constants';
+import { UNCATEGORIZED_CATEGORY_ID } from '../shared/constants';
 import type {
   ClearMemoryDataRequest,
-  CreateFolderRequest,
-  DeleteFolderRequest,
   DeleteQaRequest,
-  FlattenFoldersRequest,
   GetPanelDataRequest,
   GetPanelDataResponse,
   GetMemoryListRequest,
   MemoryListItem,
   MemoryReplyItem,
-  RenameFolderRequest,
   UpdateGoldenCategoryRequest,
 } from "../types/messages";
 
@@ -189,79 +189,4 @@ export async function updateGoldenCategory(
   if (!g) return { success: false, error: "标准回答不存在" };
   await db.setGoldenCategoryManual(id, categoryId);
   return { success: true };
-}
-
-// ─── 文件夹 CRUD ───────────────────────────────────────────────────────────────
-
-const newId = (prefix: string): string =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-export async function createFolder(
-  message: CreateFolderRequest,
-): Promise<{ id?: string; error?: string }> {
-  const name = (message.payload.name ?? "").trim();
-  if (!name) return { error: "文件夹名不能为空" };
-  const parentId = message.payload.parentId ?? null;
-
-  if (parentId) {
-    const parent = await db.folders.get(parentId);
-    if (!parent) return { error: "父文件夹不存在" };
-    if (parent.parentId !== null) return { error: "最多两层,子文件夹下不能再建" };
-  }
-
-  const siblings = (await db.listFolders()).filter(
-    (f) => (f.parentId ?? null) === parentId,
-  );
-  const id = newId("fd");
-  await db.addFolder({
-    id,
-    parentId,
-    name,
-    position: siblings.length,
-    createdAt: Date.now(),
-  });
-  return { id };
-}
-
-export async function renameFolder(
-  message: RenameFolderRequest,
-): Promise<{ success: boolean; error?: string }> {
-  const name = (message.payload.name ?? "").trim();
-  if (!name) return { success: false, error: "文件夹名不能为空" };
-  if (message.payload.id === UNCATEGORIZED_FOLDER_ID) {
-    return { success: false, error: "预置文件夹不可重命名" };
-  }
-  try {
-    await db.renameFolder(message.payload.id, name);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-export async function deleteFolder(
-  message: DeleteFolderRequest,
-): Promise<{ success: boolean; error?: string }> {
-  if (message.payload.id === UNCATEGORIZED_FOLDER_ID) {
-    return { success: false, error: "预置文件夹不可删除" };
-  }
-  try {
-    // 其下金标准移出(folderId→null,展示时归"默认文件夹"),不删数据
-    await db.deleteFolder(message.payload.id);
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-/** 遗留子文件夹一键拍平(PM7):金标准上移父夹,删除子夹 */
-export async function flattenFolders(
-  _message: FlattenFoldersRequest,
-): Promise<{ success: boolean; flattened: number; error?: string }> {
-  try {
-    const flattened = await db.flattenSubfolders();
-    return { success: true, flattened };
-  } catch (err) {
-    return { success: false, flattened: 0, error: String(err) };
-  }
 }

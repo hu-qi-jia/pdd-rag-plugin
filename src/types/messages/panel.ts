@@ -203,46 +203,6 @@ export interface DeleteGoldenResponse {
   payload: { success: boolean; error?: string }
 }
 
-export interface CreateFolderRequest {
-  type: 'CREATE_FOLDER'
-  payload: { name: string; parentId: string | null }
-}
-
-export interface CreateFolderResponse {
-  type: 'CREATE_FOLDER_RESPONSE'
-  payload: { id?: string; error?: string }
-}
-
-export interface RenameFolderRequest {
-  type: 'RENAME_FOLDER'
-  payload: { id: string; name: string }
-}
-
-export interface RenameFolderResponse {
-  type: 'RENAME_FOLDER_RESPONSE'
-  payload: { success: boolean; error?: string }
-}
-
-export interface DeleteFolderRequest {
-  type: 'DELETE_FOLDER'
-  payload: { id: string }
-}
-
-export interface DeleteFolderResponse {
-  type: 'DELETE_FOLDER_RESPONSE'
-  payload: { success: boolean; error?: string }
-}
-
-/** 遗留子文件夹一键拍平(PM7):金标准上移父夹,删除子夹 */
-export interface FlattenFoldersRequest {
-  type: 'FLATTEN_FOLDERS'
-}
-
-export interface FlattenFoldersResponse {
-  type: 'FLATTEN_FOLDERS_RESPONSE'
-  payload: { success: boolean; flattened: number; error?: string }
-}
-
 // ─── 问题类型的 CRUD(第五十七轮 Task 7)───────────────────────────────────────
 //
 // 预置类型与未分类不可改名/删(设计 D3);新建恒 filterable=true、恒要求 criteria 非空。

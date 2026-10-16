@@ -35,10 +35,6 @@ import type {
   UpdateGoldenRequest,
   UpdateGoldenCategoryRequest,
   DeleteGoldenRequest,
-  CreateFolderRequest,
-  RenameFolderRequest,
-  DeleteFolderRequest,
-  FlattenFoldersRequest,
   CreateCategoryRequest,
   RenameCategoryRequest,
   DeleteCategoryRequest,
@@ -74,10 +70,6 @@ export type ExtensionMessage =
   | UpdateGoldenRequest
   | UpdateGoldenCategoryRequest
   | DeleteGoldenRequest
-  | CreateFolderRequest
-  | RenameFolderRequest
-  | DeleteFolderRequest
-  | FlattenFoldersRequest
   | CreateCategoryRequest
   | RenameCategoryRequest
   | DeleteCategoryRequest
@@ -113,10 +105,6 @@ import type {
   UpdateGoldenResponse,
   UpdateGoldenCategoryResponse,
   DeleteGoldenResponse,
-  CreateFolderResponse,
-  RenameFolderResponse,
-  DeleteFolderResponse,
-  FlattenFoldersResponse,
   CreateCategoryResponse,
   RenameCategoryResponse,
   DeleteCategoryResponse,
@@ -152,10 +140,6 @@ export type ExtensionMessageResponse =
   | UpdateGoldenResponse
   | UpdateGoldenCategoryResponse
   | DeleteGoldenResponse
-  | CreateFolderResponse
-  | RenameFolderResponse
-  | DeleteFolderResponse
-  | FlattenFoldersResponse
   | CreateCategoryResponse
   | RenameCategoryResponse
   | DeleteCategoryResponse

@@ -2801,4 +2801,4 @@ git commit -m "feat: SW 启动种下预置问题类型 + ADR-0007(外发扩到�
 - 设置页可以手动触发一次性补分类（UI 是下一份计划的事，本计划只到 `runBackfill` 这一层）
 - **检索行为与改动前完全一致** —— 分类结果还没进入检索管线
 
-下一份计划：`docs/superpowers/plans/2026-10-11-question-classification-ui.md`（面板与设置页）；再下一份：检索路由与尺码路由。
+下一份计划：`docs/plans/2026-10-11-question-classification-ui.md`（面板与设置页）；再下一份：检索路由与尺码路由。

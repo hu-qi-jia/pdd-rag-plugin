@@ -1054,45 +1054,14 @@ export class PddDatabase extends Dexie {
   }
 
   // ─── 回复文件夹(folders) ──────────────────────────────────────────────────────
+  //
+  // 第五十七轮起 folders 已被 categories 取代,UI 与消息层的文件夹 CRUD 一并移除;
+  // 本表只保留**读**能力 + 种子,服务于两件事:导入旧备份(信封里带 folders)、
+  // 以及 v8 迁移把 folderId 映射成 categoryId。**不再有任何写入口**
+  // (唯一例外是 ensurePresetFolders 补种「默认文件夹」,addGolden 拿它当初始落点)。
 
   async listFolders(): Promise<FolderRecord[]> {
     return this.folders.toArray();
-  }
-
-  async addFolder(record: FolderRecord): Promise<string> {
-    await this.folders.add(record);
-    return record.id;
-  }
-
-  async renameFolder(id: string, name: string): Promise<void> {
-    await this.folders.update(id, { name });
-  }
-
-  async deleteFolder(id: string): Promise<void> {
-    await this.transaction("rw", this.folders, this.goldens, async () => {
-      await this.goldens.where("folderId").equals(id).modify({ folderId: null });
-      await this.folders.delete(id);
-    });
-  }
-
-  /**
-   * 遗留子文件夹一键拍平(PM7;UI 已只建一级文件夹,存量子夹给出清入口):
-   * 子夹内金标准上移到父根夹(父夹失联则归「默认文件夹」),随后删除子夹。返回拍平数。
-   * folderId 不参与检索缓存,无需失效。
-   */
-  async flattenSubfolders(): Promise<number> {
-    const all = await this.folders.toArray();
-    const known = new Set(all.map((f) => f.id));
-    const subs = all.filter((f) => f.parentId !== null);
-    if (subs.length === 0) return 0;
-    await this.transaction("rw", this.folders, this.goldens, async () => {
-      for (const sub of subs) {
-        const target = sub.parentId !== null && known.has(sub.parentId) ? sub.parentId : null;
-        await this.goldens.where("folderId").equals(sub.id).modify({ folderId: target });
-        await this.folders.delete(sub.id);
-      }
-    });
-    return subs.length;
   }
 
   // ─── 保留期清理(TTL) ───────────────────────────────────────────────────────────

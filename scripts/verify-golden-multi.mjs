@@ -105,19 +105,22 @@ const order2 = await panelOrder()
 check('取消+新设后,最新设置的排最前(5 → 3 → 1)', order2.join(',') === '5,3,1', `order=${order2.join(',')}`)
 
 // ── ⑥ 结构:按问题类型分类(v3.0 起,类型从**页内分区标题**改为**顶部导航栏**)──
-// 造一条独立标准回答,显式移到预置类型「订单物流」,再回面板确认:
+// 造一条独立标准回答,显式移到预置类型「发货与物流」,再回面板确认:
 //   · 它落在该类型的卡片上(卡带 data-category-id 锚点);
-//   · 导航上「订单物流」那一项的计数跟着变。
+//   · 导航上「发货与物流」那一项的计数跟着变。
 // 条数从分区标题搬到了导航项 —— 这是 v3.0 的结构改动,断言随之更新;
 // 数据层什么都没变,故本脚本其余 ①~⑤ 一步未动。
-const CAT_NAME = '订单物流'
+// 2026-10-16 类型集重制:预置 `preset:order` 的 name 改成了「发货与物流」(id 与
+// route 未变)。下面按**新名**断言 —— 名字是导航项里唯一可见的锚点。
+// (注释刻意不写旧名:那是全仓扫旧字面量时要归零的字符串。)
+const CAT_NAME = '发货与物流'
 const CAT_ID = 'preset:order'
 // 用独立问题,避免撞上上面那个问题的 3 条上限
 const gTyped = await send('ADD_GOLDEN', { question: '类型验收:订单什么时候发货?', answer: '类型验收答复' })
 // 无需等待 add 时的异步打标落地:db#updateGoldenCategory 有 manual 守卫,
 // 迟到的机器写入改不动我们刚摆好的 manual(见 db.ts 守卫注释)
 const movedCat = await send('UPDATE_GOLDEN_CATEGORY', { id: gTyped.id, categoryId: CAT_ID })
-check('移到类型成功(订单物流)', movedCat.success === true, JSON.stringify(movedCat))
+check('移到类型成功(发货与物流)', movedCat.success === true, JSON.stringify(movedCat))
 await pop.reload({ waitUntil: 'domcontentloaded' })
 await sleep(1500)
 await pop.locator('button[title="标准回答"]').click()
@@ -142,8 +145,8 @@ const rel = await pop.evaluate(({ catId, catName }) => {
   }
 }, { catId: CAT_ID, catName: CAT_NAME })
 check(
-  '标答落在「订单物流」类型下,且导航项计数跟着走',
-  rel.cards === 1 && /订单物流\s*1/.test(rel.navText) && rel.answerIdx >= 0,
+  '标答落在「发货与物流」类型下,且导航项计数跟着走',
+  rel.cards === 1 && /发货与物流\s*1/.test(rel.navText) && rel.answerIdx >= 0,
   JSON.stringify(rel),
 )
 

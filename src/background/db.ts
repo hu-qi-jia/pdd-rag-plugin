@@ -155,6 +155,116 @@ export class PddDatabase extends Dexie {
           await tx.table("goldens").update(g.id, patch);
         }
       });
+
+    // 问题类型重制(八记录级 + 尺码查询级专用):把存量库的类型行对账到新的
+    // `PRESET_CATEGORIES`。
+    //
+    // `ensurePresetCategories` 只增不改 —— 它 bulkGet 缺哪条补哪条,已存在的行一个字段
+    // 都不碰。于是常量改了名、换了判据,存量行仍持旧名、旧 criteria、旧位置,库里还缺
+    // 三条新类型,而**没有别的路径会去对账**。这一步就是那个对账。
+    this.version(9)
+      .stores({})
+      .upgrade(async (tx) => {
+        const categories = tx.table("categories");
+        const now = Date.now();
+
+        // ① 先取时间戳 —— 必须**严格大于**存量记录的 categoryAt,两张表都要看。
+        //    v8 迁移**刻意**把类型的 updatedAt 与标答的 categoryAt 写成同一个 Date.now(),
+        //    让两者相等:那是有意的,为了不把迁移来的标答判成"待重跑"。
+        //    这一次要的恰恰相反 —— 判据换了,旧标签就作废了,必须重判。而
+        //    `isBackfillCandidate` 的判据是 `(categoryAt ?? 0) < updatedAt`,取等时 `<`
+        //    不成立 → **一条都不会重跑** → 界面上列着新类型,存量记录却仍按旧标准归着类。
+        //    没有任何报错,纯粹静默失效。故取 max(now, 存量最大值 + 1)。
+        //    goldens 也必须读:v8 只把落在**用户自建夹**里的标答标成 manual,而标在类型上
+        //    的标答同样带 categoryAt —— 漏读它算出的 stamp 就可能不够大。
+        let maxCategoryAt = 0;
+        const [qas, goldens, all] = await Promise.all([
+          tx.table("qaRecords").toArray(),
+          tx.table("goldens").toArray(),
+          categories.toArray(),
+        ]);
+        for (const r of [...qas, ...goldens] as Array<{ categoryAt?: number }>) {
+          const at = r.categoryAt;
+          if (typeof at === "number" && at > maxCategoryAt) maxCategoryAt = at;
+        }
+        const stamp = Math.max(now, maxCategoryAt + 1);
+
+        // ② 名称唯一性守卫 —— 必须在写预置**之前**跑。
+        //    类型名是 jev 选项表的主键(criteria 以名为 key、id 也按名反查,见 jev.ts),
+        //    同名会让后一行**静默**覆盖前一行的映射。`createCategory` 正为此硬拦重名,但
+        //    **迁移路径不经过它**:v8 从用户文件夹名造 `legacy:*` 时既不查重、criteria 还是
+        //    空串。所以用户只要有个叫「其他」的旧文件夹,新增的 preset:other 就会多出一个
+        //    同名的空判据兄弟,而那行空串会把出口的描述顶掉 —— 出口等于又被堵上。
+        //    让开的是**旧行**(新预置的名字由 U2 定死),只在名字后加后缀,其余原样保留;
+        //    后缀本身(用户在设置页能看到「其他(旧)」)就是留下的事实记录。
+        //    护住的是**全部**九个预置名而不只是新增的三条:改名同样会撞(用户有个叫
+        //    「退换货」的文件夹时撞上改名后的 preset:aftersale),撞了是同一种静默覆盖,
+        //    而"全表名称唯一"是硬约束,不因撞的是谁而分强弱。
+        const presetNames = new Set(PRESET_CATEGORIES.map((p) => p.name));
+        const usedNames = new Set((all as CategoryRecord[]).map((c) => c.name));
+        for (const c of all as CategoryRecord[]) {
+          if (c.kind === "preset" || c.kind === "uncategorized") continue;
+          if (!presetNames.has(c.name)) continue;
+          let n = 0;
+          // 极端情况:库里已有「其他(旧)」→ 继续往后排,否则改名本身又造出一对同名
+          let name = `${c.name}(旧)`;
+          while (usedNames.has(name)) name = `${c.name}(旧${++n + 1})`;
+          usedNames.add(name);
+          await categories.update(c.id, { name });
+        }
+
+        // ③ 九个预置:改名 + 换判据 + 定位置 + 顶时间戳,一次做完。
+        //    名称与判据**从常量读**,不在迁移里重抄一份 —— 常量是唯一事实源,重抄就是给
+        //    "两处不一致"留门(判据改了、迁移漏改,用户库里就永远是旧判据)。
+        //    位置取数组下标:前八条记录级排 0..7,preset:size 在末位(8)。
+        //    已存在的行走 update —— **不许动 createdAt**,那是"用户库里这个类型多会儿建的";
+        //    缺席的行(手工修过的库可能缺预置)走 put 补齐,而**不能用 add**:它在升级事务里
+        //    抛错会让整个库打不开 —— 一次迁移失败 = 扩展直接废掉,比缺一行严重得多。
+        const presentIds = new Set((all as CategoryRecord[]).map((c) => c.id));
+        for (let i = 0; i < PRESET_CATEGORIES.length; i++) {
+          const def = PRESET_CATEGORIES[i];
+          if (!presentIds.has(def.id)) {
+            await categories.put({
+              id: def.id,
+              name: def.name,
+              criteria: def.criteria,
+              kind: "preset" as const,
+              route: def.route,
+              filterable: true,
+              position: i,
+              createdAt: now,
+              updatedAt: stamp,
+            });
+            continue;
+          }
+          await categories.update(def.id, {
+            name: def.name,
+            criteria: def.criteria,
+            kind: "preset",
+            route: def.route,
+            filterable: true,
+            position: i,
+            updatedAt: stamp,
+          });
+        }
+
+        // ④ 非预置、非未分类的行整体让到预置段之后(position >= 9),保持原有相对顺序。
+        //    不让会出乱子:老自定义类型的 position 来自**旧的** `PRESET_CATEGORIES.length`
+        //    (6),而预置段现在涨到 9 —— 6/7/8 那些行会与预置行**同值**,同值时
+        //    `listCategories` 按 id 排,而 `cat:…`/uuid 排在 `preset:…` 之前,于是自定义
+        //    类型会插进 售前→售中→售后 这段内部,把分段打乱。
+        //    排序口径与 listCategories 一致(先 position 后 id),"保序"才是用户看到的那个序。
+        const others = (all as CategoryRecord[])
+          .filter((c) => c.kind !== "preset" && c.kind !== "uncategorized")
+          .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+        for (let i = 0; i < others.length; i++) {
+          await categories.update(others[i].id, { position: PRESET_CATEGORIES.length + i });
+        }
+
+        // ⑤ **一个都不删**:preset:size 保留(它是查询级专用,不是废弃类型),旧类型行也
+        //    保留 —— 删行会把它上面挂着的 categoryId 变成悬空标签,而悬空标签在按类型过滤
+        //    的检索里两边都不在,那些记录会被静默排除。记录本身一条都不改写。
+      });
   }
 
   // ─── 初始化/预置 ──────────────────────────────────────────────────────────────

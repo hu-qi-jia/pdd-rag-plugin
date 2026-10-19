@@ -110,13 +110,29 @@ export function ConfirmRow({
   text,
   onOk,
   onCancel,
+  fullWidth = false,
 }: {
   text: string
   onOk: () => void
   onCancel: () => void
+  /**
+   * 独占整行。用在**横向 flex + flex-wrap**的容器里(如尺码表状态条):
+   * 默认的 `flex: 1` 展开成 `flex-basis: 0`,父容器不会让它换行,只把剩余的那点
+   * 宽度分给它 —— 确认文案被挤成一字一列。`flex-basis: 100%` 强制它落到下一行。
+   */
+  fullWidth?: boolean
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap', flex: 1 }}>
+    <div
+      data-fullwidth={fullWidth ? 'true' : undefined}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing.md,
+        flexWrap: 'wrap',
+        flex: fullWidth ? '1 1 100%' : 1,
+      }}
+    >
       <span style={{ flex: 1, minWidth: 0, fontSize: fontSize.cap, color: 'var(--pddcs-danger)' }}>
         {text}
       </span>

@@ -194,6 +194,8 @@ describe('知识库页:尺码表改成上传入口(v3.0)', () => {
     expect(
       mockedSend.mock.calls.filter((c) => (c[0] as { type: string }).type === 'SET_KB_SIZE_TABLE'),
     ).toHaveLength(0)
+    // 状态条是 flex-wrap 容器:确认条必须独占整行,否则文案被剩余宽度挤成一字一列
+    expect(sizeLine()!.querySelector('[data-fullwidth="true"]')).toBeTruthy()
 
     await act(async () => {
       textBtn('确认')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))

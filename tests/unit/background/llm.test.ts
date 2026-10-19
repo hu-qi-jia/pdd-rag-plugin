@@ -99,6 +99,37 @@ describe('buildMessages', () => {
   })
 })
 
+describe('buildMessages:尺码来源(2026-10-19)', () => {
+  const msgs = buildMessages('身高170 体重55kg 穿什么码', ['尺码表\nM: 155-163cm 90-110斤'], 'size')
+  const sys = msgs.find((m) => m.role === 'system')!.content
+  const user = msgs.find((m) => m.role === 'user')!.content
+
+  it('★ 要求直接给出具体尺码,不许用「联系客服」代替回答', () => {
+    expect(sys).toContain('具体尺码')
+    expect(sys).toContain('建议联系客服确认')
+    expect(sys).toMatch(/明确写了/)
+  })
+
+  it('★ 说清身高超出建议区间 ≠ 超出尺码表范围(实测把 170cm/55kg 推去转人工)', () => {
+    expect(sys).toContain('以体重为主')
+    expect(sys).toMatch(/即使身高超出/)
+    expect(sys).toMatch(/不要因此改口/)
+  })
+
+  it('仍然只依据尺码表,并保留哨兵', () => {
+    expect(sys).toContain('只依据')
+    expect(sys).toContain(NO_ANSWER_SENTINEL)
+    // 买家没给身高体重时先问,不凭空推荐
+    expect(sys).toMatch(/没有提供身高或体重/)
+  })
+
+  it('user 消息把材料标为尺码表,不是知识库资料', () => {
+    expect(user).toContain('【尺码表】')
+    expect(user).not.toContain('【知识库资料】')
+    expect(user).toContain('身高170 体重55kg 穿什么码')
+  })
+})
+
 describe('integrateReply', () => {
   it('SSE 增量回调 + 拼接完整文本', async () => {
     vi.stubGlobal(
@@ -143,6 +174,21 @@ describe('integrateReply', () => {
     for (const banned of ['reason', 'thinking', 'think', 'effort', 'budget']) {
       expect(keys).not.toContain(banned)
     }
+  })
+
+  it('DeepSeek 端点:显式关闭 thinking(V4 默认开启,思维链会吃光 max_tokens)', async () => {
+    const f = mockFetch(sseStream([delta('x'), '[DONE]']))
+    vi.stubGlobal('fetch', f)
+    await integrateReply({
+      query: 'q',
+      materials: ['m'],
+      config: { ...CONFIG, baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' },
+      onDelta: () => {},
+    })
+
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.thinking).toEqual({ type: 'disabled' })
   })
 
   it('HTTP 非 2xx → 归一为错误,不外泄响应体细节', async () => {

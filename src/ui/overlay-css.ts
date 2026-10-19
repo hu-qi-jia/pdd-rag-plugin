@@ -50,8 +50,11 @@ export const ROW_GAP_Y = spacing.sm
 export const PANEL_PAD_X = ROW_INSET_X + ROW_PAD_X
 /** 发丝线缩进量(面板里行文字的左缘) */
 export const HAIR_IN = ROW_PAD_X
-/** 类别灰标的水平内边距(v4.0 起是 0:方括号紧贴文字) */
-export const BADGE_PAD_X = 0
+/** 类别标签:矩形 chip 的水平内边距(2026-10-19 从方括号改为矩形标签) */
+export const BADGE_PAD_X = 6
+/** 类别标签:矩形 chip 的高度与圆角。圆角取 4 —— 是矩形,不是胶囊 */
+export const BADGE_H = 18
+export const BADGE_RADIUS = 4
 
 /**
  * 半透明材料上的**悬浮**填充 —— 不能用不透明令牌,否则玻璃被踩成实心板。
@@ -145,8 +148,11 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   transition: background-color .18s cubic-bezier(.32,.72,0,1), color .18s; }
 .pddcs-popup-close:hover { background: ${t.hover}; color: ${tk.text}; }
 
-/* 滚动中段:唯一滚动容器。scrollbar-gutter 留槽位 —— 展开/收起不该让宽度抖 */
-.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto; scrollbar-gutter: stable;
+/* 滚动中段:唯一滚动容器。
+   **不留 scrollbar-gutter**:留槽会在这条带底色的面板里空出一条 6px 的竖带,
+   选中行的软底到不了右缘,看起来像卡片右侧缺了一块(用户实测反馈)。代价是
+   滚动条出现/消失时内容宽度会变 6px —— 面板只在行数超出时才滚,比常驻一条空带可接受。 */
+.pddcs-popup-body { flex: 1 1 auto; overflow-y: auto;
   padding: ${spacing.xs}px 0 ${spacing.md}px; }
 
 /* ── 候选行:通铺 + **缩进**发丝线 ─────────────────────────────────────────── */
@@ -168,13 +174,19 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-cand-selected { box-shadow: inset 3px 0 0 ${tk.accent}; }
 
 .pddcs-cand-top { display: flex; align-items: center; gap: 7px; margin-bottom: ${ROW_GAP_Y}px; }
-/* 类别灰标 = 方括号终端记法。无彩主题下不靠颜色区分,靠**明度与字重** */
-.pddcs-tag { display: inline-flex; align-items: baseline; padding: 0 ${BADGE_PAD_X}px;
-  font-family: ${fontFamilyMono}; font-size: ${panelType.meta.size}px; font-weight: 600;
-  color: ${tk.textTertiary}; white-space: nowrap; }
-.pddcs-tag::before { content: "["; opacity: .5; }
-.pddcs-tag::after { content: "]"; opacity: .5; }
-.pddcs-tag[data-tone='strong'] { color: ${tk.text}; }
+/* 类别标签 = **矩形 chip**(2026-10-19)。
+   方括号终端记法([历史])在用户实测里不够像"标签",只够像正文里的注记;改成带底色的
+   矩形块后,三类来源各自成块,扫读时先看到色块再看到字。
+   圆角取 4px 而不是控件档 13px:这是"标签",不是按钮,也不做成胶囊。 */
+.pddcs-tag { display: inline-flex; align-items: center; height: ${BADGE_H}px;
+  padding: 0 ${BADGE_PAD_X}px; border-radius: ${BADGE_RADIUS}px;
+  font-family: ${fontFamily}; font-size: ${panelType.meta.size}px; font-weight: 600;
+  line-height: 1; white-space: nowrap; color: ${tk.textTertiary}; }
+/* 三类来源各一套"底色 + 文字色":标准回答 = 赭陶、知识库 = 绿、历史 = 中性灰。
+   底色都用各自的 soft 档,字色用同色系的深/亮档 —— 不靠明度排序,三类同时可读。 */
+.pddcs-tag[data-kind='golden'] { color: ${tk.accentText}; background: ${tk.accentSoft}; }
+.pddcs-tag[data-kind='knowledge'] { color: ${tk.infoText}; background: ${tk.infoSoft}; }
+.pddcs-tag[data-kind='history'] { color: ${tk.textSecondary}; background: ${tk.selection}; }
 .pddcs-fold { font-family: ${fontFamilyMono}; color: ${tk.textTertiary};
   font-size: ${panelType.meta.size}px; line-height: 1; white-space: nowrap;
   font-variant-numeric: tabular-nums; }

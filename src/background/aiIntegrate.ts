@@ -82,6 +82,8 @@ export async function handleAiIntegrate(
     query: payload.query,
     materials,
     config,
+    // 材料来源同时决定提示词:尺码路由必须直接给码,不能套用知识库的保守口径
+    source: payload.source ?? 'knowledge',
     onDelta: forward,
   })
 

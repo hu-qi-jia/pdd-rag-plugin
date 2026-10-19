@@ -6,7 +6,9 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
+  BADGE_H,
   BADGE_PAD_X,
+  BADGE_RADIUS,
   HAIR_IN,
   PANEL_PAD_X,
   POPUP_W,
@@ -148,21 +150,50 @@ describe('buildOverlayCss:★ 键盘面板的悬浮守卫仍在', () => {
   })
 })
 
-describe('buildOverlayCss:无彩与灰标', () => {
-  it('★ 方括号灰标:无内边距、无底色,括号由伪元素画', () => {
+describe('buildOverlayCss:来源标签(矩形 chip)', () => {
+  it('★ 矩形标签:有底色、有圆角、有内边距,**不再画方括号**', () => {
     const tag = block(light, '.pddcs-tag {')
     expect(tag).toContain(`padding: 0 ${BADGE_PAD_X}px`)
-    expect(tag).not.toContain('background')
-    expect(light).toContain('.pddcs-tag::before { content: "[";')
-    expect(light).toContain('.pddcs-tag::after { content: "]";')
+    expect(tag).toContain(`height: ${BADGE_H}px`)
+    expect(tag).toContain(`border-radius: ${BADGE_RADIUS}px`)
+    // 底色由三条 data-kind 规则分别给(见下一条),这里不再要求基类带背景
+    // 用户明确要"矩形标签,不是 [历史] 这种"
+    expect(light).not.toContain('.pddcs-tag::before')
+    expect(light).not.toContain('.pddcs-tag::after')
   })
 
-  it('★ 无彩:产物里没有任何彩色(除唯一的语义红)', () => {
-    for (const css of [light]) {
-      expect(css).not.toContain('#14ae5c') // 知识库绿
-      expect(css).not.toContain('#0d99ff') // Figma 蓝
-      expect(css).not.toContain('#8a6a16') // 琥珀
-    }
+  it('★ 三类来源各有"底色 + 文字色",且三者两两可分', () => {
+    // 2026-10-19 用户实测要求:三个标签要在扫一眼时分得清,不再靠逐字读
+    expect(block(light, ".pddcs-tag[data-kind='golden'] {")).toContain(
+      `color: ${lightTheme.accentText}`,
+    )
+    expect(block(light, ".pddcs-tag[data-kind='golden'] {")).toContain(
+      `background: ${lightTheme.accentSoft}`,
+    )
+    expect(block(light, ".pddcs-tag[data-kind='knowledge'] {")).toContain(
+      `color: ${lightTheme.infoText}`,
+    )
+    expect(block(light, ".pddcs-tag[data-kind='knowledge'] {")).toContain(
+      `background: ${lightTheme.infoSoft}`,
+    )
+    expect(block(light, ".pddcs-tag[data-kind='history'] {")).toContain(
+      `color: ${lightTheme.textSecondary}`,
+    )
+    expect(block(light, ".pddcs-tag[data-kind='history'] {")).toContain(
+      `background: ${lightTheme.selection}`,
+    )
+    // 三个背景色必须两两不同 —— 否则"不同颜色"只是字面上的
+    expect(
+      new Set([lightTheme.accentSoft, lightTheme.infoSoft, lightTheme.selection]).size,
+    ).toBe(3)
+  })
+
+  it('★ 不再有 v3.0 的单一 data-tone 规则(形态与配色均按来源)', () => {
+    expect(light).not.toContain(".pddcs-tag[data-tone='strong']")
+    // 旧版三个色值也不该借尸还魂
+    expect(light).not.toContain('#14ae5c') // 知识库绿
+    expect(light).not.toContain('#0d99ff') // Figma 蓝
+    expect(light).not.toContain('#8a6a16') // 琥珀
   })
 
   it('已设标准的星走强调色(v4.0 是主文本色 —— 那时除 danger 外全无彩)', () => {
@@ -219,10 +250,11 @@ describe('buildOverlayCss:其他', () => {
     expect(hover).toContain(lightTheme.onAccent)
   })
 
-  it('滚动容器留槽位 —— 展开/收起不该让宽度抖', () => {
-    // 注意 `.pddcs-popup-body` 有两条规则(细滚动条生成器 + 真正的容器规则),
-    // 这里要的是后者,故按"同一条规则内含 scrollbar-gutter"匹配
-    expect(light).toMatch(/\.pddcs-popup-body \{[^}]*scrollbar-gutter: stable/)
+  it('★ 滚动容器**不留槽位** —— 留槽会在带底色的面板右侧空出一条竖带', () => {
+    // 2026-10-19 用户实测:选中行的软底到不了右缘,看起来像卡片缺了一块。
+    // 代价是滚动条出现/消失时内容宽度会变 6px;面板只在行数超出时才滚,
+    // 常驻空带比这点抖动更糟。
+    expect(light).not.toMatch(/\.pddcs-popup-body \{[^}]*scrollbar-gutter/)
   })
 
   it('键帽:控件档圆角 + 等宽(与设置页那枚键帽同源)', () => {

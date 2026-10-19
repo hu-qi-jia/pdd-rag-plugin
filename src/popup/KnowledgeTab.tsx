@@ -415,6 +415,7 @@ export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<v
           {!confirmUnsetSize && <span className="sp" />}
           {confirmUnsetSize ? (
             <ConfirmRow
+              fullWidth
               text="取消标记后该文档恢复参与向量检索?"
               onOk={() => void unsetSizeTable()}
               onCancel={() => setConfirmUnsetSize(false)}

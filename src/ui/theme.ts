@@ -97,6 +97,17 @@ export interface ThemeTokens {
   /** 强调色的软底:分类 chip 选中、标准回答徽章、AI 整合行 */
   accentSoft: string
 
+  /**
+   * 「知识库」来源标签的文字色(绿)。
+   *
+   * 推荐回复面板按来源给三个色:标准回答 = `accentText`(赭陶)、知识库 = 本令牌、
+   * 历史 = `textTertiary`(中性灰)。绿不是为了装饰 —— 三类标签并排时,颜色比
+   * 逐字读「标准回答 / 知识库 / 历史」快得多。取值同样受 4.5:1 约束。
+   */
+  infoText: string
+  /** 知识库标签的矩形底色,与 `infoText` 成对使用 */
+  infoSoft: string
+
   /** 错误 / 危险。与 accent 同为暖色,故字重与底色都要拉开(见对比度测试) */
   danger: string
   /** 危险软底(提示条、失败行) */
@@ -140,6 +151,10 @@ export const lightTheme: ThemeTokens = {
   accentText: '#93412C',
   accentSoft: '#F7EBE5',
 
+  // 6.08:1 于白卡、5.48:1 于页底 —— 只用作 12px 标签文字
+  infoText: '#356B4A',
+  infoSoft: '#E7F0E9',
+
   danger: '#A0342A',
   dangerSoft: '#FAEAE7',
 
@@ -181,6 +196,10 @@ export const darkTheme: ThemeTokens = {
   onAccent: '#2A1710',
   accentText: '#E08A6B',
   accentSoft: '#2E211B',
+
+  // 8.06:1 于面板面 —— 暗底上提亮一档,与琥珀、灰都拉得开
+  infoText: '#93C2A1',
+  infoSoft: '#22302A',
 
   danger: '#E08A80',
   dangerSoft: '#3A2320',

@@ -5,6 +5,58 @@
 > 上游 Personal AI Memory 的历史变更见 `docs/upstream-CHANGELOG.md`(Apache 2.0);
 > 逐轮开发明细见 `docs/工作状态-2026-09-08.md` 与 git log(每轮均有 docs+test 提交)。
 
+## 未发布 — 推荐回复面板与尺码直答(来源标签着色、去掉右侧空带、尺码必须报码)
+
+> 2026-10-19 第二轮(第六十二轮)。三处用户实测反馈,不改数据面与网络边界。
+
+### 变更
+
+- **推荐回复面板右侧的空带**。滚动中段 `.pddcs-popup-body` 原本 `scrollbar-gutter: stable`,
+  即使没有滚动条也常驻一条 6px 槽位 —— 选中行的软底到不了右缘,看起来像卡片右侧缺了一块。
+  现已移除;代价是滚动条出现/消失时内容宽度变 5~6px,只在行数超出时才发生。
+- **三类来源标签改为矩形 chip**。`badge()` 不再只给标准回答加 `data-tone="strong"`,改为按来源写
+  `data-kind`;标签从方括号终端记法(`[历史]`)改为**有底色的小矩形**:圆角 4px、18px 高、
+  左右 6px 内边距。标准回答 = 强调色软底 + `accentText`,知识库 = 新增令牌
+  `infoSoft` + `infoText`(绿),历史 = `selection` + `textSecondary`(中性灰)。
+  `infoText` 浅色 `#356B4A`(白卡 6.08:1)、深色 `#93C2A1`(面板面 8.06:1)。
+- **尺码路由换用专用系统提示词**。此前尺码生成复用知识库提示词,其"判断不了就用更保守的说法"
+  退化成「建议联系客服确认」——实测 170cm/55kg 明明体重落在 M 码,却因身高超出 M 的
+  建议身高区间被推去转人工。新增 `SIZE_SYSTEM_PROMPT`:要求直接报出具体尺码;
+  明确"身高超出建议区间不等于超出尺码表范围",以体重为主;仅当尺码表**明确写了**
+  超出范围时才可建议联系客服;缺身高/体重时先问,不凭空推荐。`integrateReply` 按
+  `source` 选择提示词,尺码测试样本也同步补了这条冲突规则。
+
+### 验收
+
+- `tsc --noEmit` **0 错**;`vitest run` **954/954(72 文件)**;`npm run build` 成功,
+  模型随包拷贝(`build/chrome-mv3-prod/model/Xenova/bge-small-zh-v1.5/`)。
+- 新增回归断言:三条 `data-kind` 规则各有一套"底色 + 文字色"、标签不再画方括号、且产物不再含
+  scrollbar-gutter;尺码提示词含"具体尺码 / 即使身高超出 / 以体重为主"且仍保留哨兵;
+  `source='size'` 的请求体确认带的是尺码提示词与「【尺码表】」材料标题。
+
+## 未发布 — 尺码整合修复(DeepSeek 思考模式导致空结果 + 取消标记确认条挤压)
+
+> 第六十一轮。两处用户实测问题,均不改变数据面与既有契约。
+
+### 修复
+
+- **「根据尺码表整合」报「整合结果为空,请重试」**(模型明明已配置)。根因是 DeepSeek 自 V4 起
+  **默认开启思考模式**(effort 默认 high):思维链走 `reasoning_content`,与最终正文共用
+  `max_tokens`;256 token 的预算被思维链吃光后 `content` 始终为空,流里没有任何 `delta.content`,
+  调用层只能归一成 `empty`。现在对 DeepSeek 端点(按 baseUrl / model 识别)显式发送
+  `thinking: { type: 'disabled' }`;其它 OpenAI 兼容服务**不发**该字段(对未知字段的宽容度不一,
+  全局发送会把别的接口打成 400)。知识库整合与尺码整合共用同一条调用路径,一并修复。
+- **取消尺码表标记时,确认文案被挤成一字一列**。尺码表状态条是 `flex-wrap` 容器,
+  `ConfirmRow` 默认的 `flex: 1` 展开为 `flex-basis: 0`,父容器不会让它换行,只把剩余宽度分给它。
+  `ConfirmRow` 新增 `fullWidth` 选项(`flex: 1 1 100%`),尺码表状态条传入;其它调用点行为不变。
+
+### 验收
+
+- `tsc --noEmit` **0 错**;`vitest run` **949/949(72 文件)**;`npm run build` 成功,
+  模型随包拷贝(`build/chrome-mv3-prod/model/Xenova/bge-small-zh-v1.5/`)。
+- 新增两条回归断言:DeepSeek 请求体带 `thinking: disabled`(通用端点仍不带);
+  取消标记的确认条带 `data-fullwidth="true"`。
+
 ## 未发布 — 工程结构整理(删死代码与失效脚本、目录收敛、仓库根清仓)
 
 > 一轮纯结构梳理,**不改任何行为**:对外契约、存储 schema、检索与分类逻辑一字未动,

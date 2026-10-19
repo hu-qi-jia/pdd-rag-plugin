@@ -63,6 +63,8 @@ const CSS_VARS: Record<keyof ThemeTokens, string> = {
   onAccent: '--pddcs-on-accent',
   accentText: '--pddcs-accent-text',
   accentSoft: '--pddcs-accent-soft',
+  infoText: '--pddcs-info-text',
+  infoSoft: '--pddcs-info-soft',
   danger: '--pddcs-danger',
   dangerSoft: '--pddcs-danger-soft',
   scrollThumb: '--pddcs-scroll-thumb',

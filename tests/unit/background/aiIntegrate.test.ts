@@ -191,6 +191,10 @@ describe('材料来源分叉(第五十八轮):source 缺省即知识库', () => 
     const body = String((f.mock.calls[0][1] as RequestInit).body)
     expect(body).toContain('165cm/M 170cm/L')
     expect(body).toContain('165 穿多大')
+    // ★ 尺码来源必须换用尺码提示词:直接报码,不许把买家推去联系客服
+    const parsed = JSON.parse(body) as { messages: { role: string; content: string }[] }
+    expect(parsed.messages[0].content).toContain('具体尺码')
+    expect(parsed.messages[1].content).toContain('【尺码表】')
     // 知识库候选 k1 的正文一个字节都不该在这条请求里
     expect(body).not.toContain('常见问答 · 防水吗')
   })

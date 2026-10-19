@@ -475,16 +475,17 @@ function movePanelSelection(delta: number): boolean {
 }
 
 /**
- * 类别灰标(v3.0:方括号终端记法)。
+ * 类别标签(2026-10-19:矩形 chip;此前是方括号终端记法 `[历史]`)。
  *
- * v2.6 是软底胶囊徽标:标准回答 = 琥珀软底金字、知识库 = 绿软底绿字、历史 = 中性灰底。
- * v3.0 只剩一个语义色(琥珀),绿已退役;而「[标准回答]」这样的方括号写法本身就够读了 ——
- * 一行里挂三四个彩色软底块,读起来像三种不同的东西,其实都是同一句话的一部分。
+ * v2.6 是三色软底胶囊,v3.0 收成方括号 + 单一琥珀色,2026-10-19 用户先要求分色、
+ * 再明确"要矩形标签,不是 [历史] 这种" —— 于是回到**有底色的小矩形**:圆角 4px,
+ * 标准回答 = 赭陶、知识库 = 绿、历史 = 中性灰。数据侧只暴露 `data-kind`,
+ * 配色全部收在 overlay-css。
  */
 function badge(kind: Suggestion['kind']): HTMLSpanElement {
   const b = document.createElement('span')
   b.className = 'pddcs-tag'
-  if (kind === 'golden') b.dataset.tone = 'strong'
+  b.dataset.kind = kind
   b.textContent = kindLabel(kind)
   return b
 }

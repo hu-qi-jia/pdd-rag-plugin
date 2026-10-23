@@ -208,6 +208,38 @@ describe('知识库页:尺码表改成上传入口(v3.0)', () => {
   })
 })
 
+describe('知识库页:可下载模板', () => {
+  it('工具栏提供知识库模板与尺码表模板入口', async () => {
+    await renderTab([])
+    expect(textBtn('知识库模板')).toBeTruthy()
+    expect(textBtn('尺码表模板')).toBeTruthy()
+  })
+
+  it('点击模板后在本地生成下载,不发送后台消息', async () => {
+    await renderTab([])
+    const createObjectURL = vi.fn(() => 'blob:template')
+    const originalCreate = URL.createObjectURL
+    const originalRevoke = URL.revokeObjectURL
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const sendsBeforeClick = mockedSend.mock.calls.length
+
+    try {
+      await act(async () => {
+        textBtn('知识库模板')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(createObjectURL).toHaveBeenCalledOnce()
+      expect(click.mock.instances[0]).toHaveProperty('download', '客服知识库模板.md')
+      expect(mockedSend).toHaveBeenCalledTimes(sendsBeforeClick)
+    } finally {
+      URL.createObjectURL = originalCreate
+      URL.revokeObjectURL = originalRevoke
+      click.mockRestore()
+    }
+  })
+})
+
 describe('尺码行的门禁', () => {
   const base = {
     aiIntegrateEnabled: true,

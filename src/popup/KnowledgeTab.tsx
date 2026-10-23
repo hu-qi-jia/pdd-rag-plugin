@@ -1,7 +1,7 @@
 /**
  * 知识库页 — v4.0「Codex × iOS · 黑灰白」
  *
- * 结构:工具栏(新建条目 / 上传 .md / 上传尺码表)→ 尺码表状态条 → 搜索 → 条目卡流。
+ * 结构:工具栏(新建条目 / 上传 .md / 上传尺码表)→ 模板下载 → 尺码表状态条 → 搜索 → 条目卡流。
  *
  * 尺码表走**上传入口**,不再有"每块一个开关":
  * 它本来是文档级标记(落在 kbDocs),而一篇文档会切成许多块 —— v2.6 为了让开关
@@ -42,6 +42,7 @@ import {
 import { fontSize, size, spacing } from '../ui/design'
 import {
   CopyIcon,
+  DownloadIcon,
   EyeIcon,
   EyeOffIcon,
   FillIcon,
@@ -50,6 +51,11 @@ import {
   UploadIcon,
 } from '../ui/icons'
 import { legacyDocNotice } from './logic'
+import {
+  downloadKnowledgeTemplate,
+  knowledgeTemplateFile,
+  sizeTableTemplateFile,
+} from './knowledgeTemplates'
 
 export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<void> | void }) {
   const [items, setItems] = useState<PanelKnowledge[]>([])
@@ -376,6 +382,35 @@ export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<v
               </span>
             </Btn>
           </Toolbar>
+          {/* 模板下载是次级操作：用文字链，不另起一行按钮 —— 它只是"给一份可编辑的起点"，
+              不该和三个上传按钮抢同一档视觉重量，也不该多占 40px 高度 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacing.xxl,
+              padding: `0 ${spacing.xxl}px ${spacing.md}px`,
+            }}
+          >
+            <button
+              type="button"
+              className="pddcs-linkbtn"
+              title="下载知识库 Markdown 模板，编辑后通过「上传 .md」导入"
+              onClick={() => downloadKnowledgeTemplate(knowledgeTemplateFile())}
+            >
+              <DownloadIcon size={12} strokeWidth={2} />
+              知识库模板
+            </button>
+            <button
+              type="button"
+              className="pddcs-linkbtn"
+              title="下载尺码表 Markdown 模板，填写后通过「上传尺码表」导入"
+              onClick={() => downloadKnowledgeTemplate(sizeTableTemplateFile())}
+            >
+              <DownloadIcon size={12} strokeWidth={2} />
+              尺码表模板
+            </button>
+          </div>
         </div>
       )}
 

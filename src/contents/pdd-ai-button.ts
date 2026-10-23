@@ -479,7 +479,7 @@ function movePanelSelection(delta: number): boolean {
  *
  * v2.6 是三色软底胶囊,v3.0 收成方括号 + 单一琥珀色,2026-10-19 用户先要求分色、
  * 再明确"要矩形标签,不是 [历史] 这种" —— 于是回到**有底色的小矩形**:圆角 4px,
- * 标准回答 = 赭陶、知识库 = 绿、历史 = 中性灰。数据侧只暴露 `data-kind`,
+ * 标准回答 = 靛蓝、知识库 = 绿、历史 = 中性灰。数据侧只暴露 `data-kind`,
  * 配色全部收在 overlay-css。
  */
 function badge(kind: Suggestion['kind']): HTMLSpanElement {

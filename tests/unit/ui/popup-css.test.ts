@@ -130,6 +130,16 @@ describe('popup-css:当前项 = 强调色,不是黑白反转', () => {
     expect(rule).not.toContain('var(--pddcs-on-ink)')
   })
 
+  it('★ 默认钮落在卡片里必须看得见 —— fill 底之外还要有描边', () => {
+    // 设置页的分区卡片本身就是 fill 底;只靠底色填充的默认钮落在卡里等于隐形
+    const rule = POPUP_CSS.slice(
+      POPUP_CSS.indexOf(".pddcs-btn[data-variant='default'] {"),
+      POPUP_CSS.indexOf('}', POPUP_CSS.indexOf(".pddcs-btn[data-variant='default'] {")),
+    )
+    expect(rule).toContain('background: var(--pddcs-fill)')
+    expect(rule).toContain('border-color: var(--pddcs-border)')
+  })
+
   it('ink 与 onInk 反相是硬约束(同色即字消失)—— 两个主题下都成立', () => {
     // ink 现在只服务聊天页 toast,但反相这条约束不因此放松
     expect(lightTheme.ink).not.toBe(lightTheme.onInk)

@@ -36,7 +36,7 @@ jobs:
         run: pnpm build
 
   # 数据层 e2e:真实扩展上下文(SW + offscreen 本地推理)跑纯数据断言,
-  # 不截图不验 UI 像素;模型经 hf-mirror 下载(约 25MB)+ WASM 推理,给足超时。
+  # 不截图不验 UI 像素;模型随构建产物内置,WASM 推理在数据层验收中运行。
   e2e:
     name: Data-layer E2E · verify-*
     runs-on: ubuntu-latest

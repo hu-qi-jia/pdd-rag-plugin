@@ -1,5 +1,5 @@
 /**
- * popup 全局样式表(v5.0「暖纸」)。
+ * popup 全局样式表(v5.1「石墨蓝灰」)。
  *
  * 为什么是一个**独立模块**而不是 `popup/index.tsx` 里的一个常量:
  * v3.0 起状态色全部收进了 CSS(内联样式表达不了 `:hover`),于是"开关选中是强调色"
@@ -26,6 +26,7 @@ import {
   fontFamily,
   fontFamilyMono,
   fontSize,
+  fontWeight,
   formGap,
   listGap,
   motion,
@@ -37,7 +38,10 @@ import { lightTheme } from './theme'
 import { thinScrollbarCss } from './scrollbar'
 
 export const POPUP_CSS = `
-html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}); }
+html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg});
+  font-family: ${fontFamily}; }
+/* 原生控件不继承字体,单独接上 —— 否则输入框/按钮会退回 Times,与周围字体打架 */
+button, input, textarea, select { font-family: inherit; }
 * { box-sizing: border-box; }
 
 /* 焦点环 —— 唯一允许"环套控件"的地方。走强调色:v5.0 起 accent 与两种主题的
@@ -63,14 +67,17 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
 .pddcs-btn:disabled { opacity: .4; cursor: not-allowed; }
 /* 主钮 = 强调色底。一页只有一个(标准回答页的「新建类型」、知识库页的「新建条目」)
    ⚠️ 用 onAccent 而不是 onInk:两个令牌在浅色下取值相同、深色下**不同**
-   (onAccent #2A1710 / onInk #1A1714)。混用会在深色主题下留下说不清的色差 */
+   (onAccent #10151C / onInk #16181B)。混用会在深色主题下留下说不清的色差 */
 .pddcs-btn[data-variant='primary'] {
   background: var(--pddcs-accent); color: var(--pddcs-on-accent);
 }
 .pddcs-btn[data-variant='primary']:not(:disabled):hover { opacity: .88; }
-/* 默认 = 填充式控件(iOS 的做法:用底色而不是描边说"我能点") */
+/* 默认 = 填充式控件(iOS 的做法:用底色而不是描边说"我能点")。
+   ⚠️ 必须带描边:设置页的分区卡片本身就是 fill 底,只靠底色填充的按钮落在卡里
+   等于隐形(旧版「导入 JSON」「重置统计」就是这样,读起来像两段文字) */
 .pddcs-btn[data-variant='default'] {
   background: var(--pddcs-fill); color: var(--pddcs-text);
+  border-color: var(--pddcs-border);
 }
 .pddcs-btn[data-variant='default']:not(:disabled):hover {
   background: var(--pddcs-selection);
@@ -90,6 +97,41 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
   background: var(--pddcs-fill); color: var(--pddcs-text);
 }
 .pddcs-btn-sm { height: ${controlH.inline}px; padding: 0 ${spacing.xl}px; font-size: ${fontSize.cap}px; }
+
+/* 次级文字链：模板下载这类"给个起点"的动作,不占一个按钮的高度与重量 */
+.pddcs-linkbtn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0;
+  border: 0; background: none; font: inherit;
+  font-size: ${fontSize.cap}px; line-height: 1.4;
+  color: var(--pddcs-text-secondary); cursor: pointer;
+  transition: color .18s;
+}
+.pddcs-linkbtn:hover { color: var(--pddcs-accent-text); text-decoration: underline; }
+
+/* 文字档位：整组是一条控件（轨道 + 滑块），不给每个按钮各长一张卡片。
+   轨道**必须描边**：白卡上 fill 与 surface 只差 1.09:1，不描边就散成一排裸字。 */
+.pddcs-choice {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px; flex-shrink: 0;
+  border-radius: ${radius.control}px;
+  background: var(--pddcs-fill);
+  box-shadow: inset 0 0 0 1px var(--pddcs-border),
+              inset 0 1px 2px color-mix(in srgb, var(--pddcs-text) 6%, transparent);
+}
+.pddcs-choice > button {
+  min-width: 36px; height: ${controlH.inline}px; padding: 0 ${spacing.lg}px;
+  border: 0; border-radius: ${radius.control}px;
+  background: transparent; color: var(--pddcs-text-secondary);
+  font: inherit; font-size: ${fontSize.cap}px; cursor: pointer;
+  transition: background-color .18s cubic-bezier(.32,.72,0,1), color .18s, box-shadow .18s;
+}
+.pddcs-choice > button:hover { color: var(--pddcs-text); background: var(--pddcs-selection); }
+.pddcs-choice > button[data-active='true'] {
+  /* 选中走 accentSoft + accentText（设计规范第③条：选中是淡底，不是实心块）。
+     对比度 5.92:1，两种主题共用同一对令牌。 */
+  background: var(--pddcs-accent-soft);
+  color: var(--pddcs-accent-text); font-weight: ${fontWeight.medium};
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--pddcs-ink) 10%, transparent);
+}
 
 /* ── 图标钮:28×28,图标 16 居中 → 盒内左右各留 6px ─────────────────────────
    那个 6px 是有用的:操作行要"图标对齐正文竖线"时,margin-left:-6px 正好抵消它 */
@@ -378,6 +420,84 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
   overflow: hidden;
 }
 
+/* 设置页的分页导航复用 .pddcs-catnav:七个固定项一屏排下,chip 内边距收窄一档 */
+.pddcs-settings-nav .pddcs-catnav > button { padding: 0 ${spacing.lg}px; gap: 4px; }
+
+/* ── 设置页 v2:分区头(图标 + 标题 + 概要) ──────────────────────────────────
+   旧版是一行 12px 小灰字,分组标题与行标签的层级几乎一样 —— 一屏扫下去
+   分不出"这是第几组"。新版标题回到 15px/600,前面一枚强调色图标,右侧一句
+   概要说明这组能干什么。 */
+.pddcs-section { scroll-margin-top: ${controlH.form + spacing.md}px; }
+.pddcs-sect-head {
+  display: flex; align-items: center; gap: ${spacing.md}px;
+  padding: ${spacing.xxl + 6}px ${listGap.inset}px ${spacing.md}px;
+}
+.pddcs-section:first-of-type .pddcs-sect-head { padding-top: ${spacing.sm}px; }
+.pddcs-sect-head .ic {
+  width: ${controlH.inline}px; height: ${controlH.inline}px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: ${radius.control}px;
+  background: var(--pddcs-accent-soft); color: var(--pddcs-accent-text);
+}
+.pddcs-sect-head .t { font-size: ${fontSize.body}px; font-weight: 600; color: var(--pddcs-text); }
+.pddcs-sect-head .s {
+  margin-left: auto; font-size: ${fontSize.cap}px; color: var(--pddcs-text-tertiary);
+  text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 卡内的子分组标题(相似度阈值 / 数据保留) */
+.pddcs-subgroup {
+  padding: ${spacing.xl}px ${spacing.xxl}px ${spacing.xs}px;
+  font-size: ${fontSize.cap}px; font-weight: 600;
+  color: var(--pddcs-text-tertiary); letter-spacing: .02em;
+}
+
+/* 堆叠式字段:标签一行,控件下一行占满宽度 */
+.pddcs-field-stack {
+  display: flex; align-items: center; gap: ${spacing.md}px;
+  margin-top: ${formGap.labelControl}px;
+}
+
+/* ── 设置页 v2:操作条 ──────────────────────────────────────────────────────
+   一条规则贯穿全页:**说明/结论贴左,按钮贴右,主按钮在最右**。
+   按钮组用 margin-left:auto 钉住,结论再长也推不动它 —— 位置稳定,手就不用重新找。 */
+.pddcs-actionbar {
+  display: flex; align-items: center; gap: ${spacing.xl}px;
+  padding: ${spacing.xl}px ${spacing.xxl}px; min-height: 58px;
+}
+.pddcs-actionbar .status {
+  flex: 1; min-width: 0;
+  font-size: ${fontSize.cap}px; line-height: 1.6; color: var(--pddcs-text-tertiary);
+}
+.pddcs-actionbar .status > span { display: block; }
+.pddcs-actionbar .status > span + span { margin-top: 3px; }
+.pddcs-actionbar .btns {
+  margin-left: auto; flex-shrink: 0;
+  display: flex; align-items: center; gap: ${spacing.md}px;
+}
+
+/* 整行说明:颜色由 tone 决定,不再每处内联一套 */
+.pddcs-srow[data-tone='danger'] { color: var(--pddcs-danger); }
+.pddcs-srow[data-tone='danger'] .n,
+.pddcs-srow[data-tone='danger'] .d { color: var(--pddcs-danger); }
+.pddcs-srow[data-tone='muted'] { color: var(--pddcs-text-tertiary); }
+
+/* ── 设置页 v2:指标瓦片(使用统计) ────────────────────────────────────────
+   五六个"数字 + 名字"逐行排会吃掉半屏;两列瓦片一眼扫完。
+   瓦片之间用 1px 缝 + 卡片底色画出格线,不额外描边。 */
+.pddcs-metrics {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1px; background: var(--pddcs-separator);
+}
+.pddcs-metric { background: var(--pddcs-fill); padding: ${spacing.xl}px ${spacing.xxl}px; }
+.pddcs-metric[data-wide='true'] { grid-column: 1 / -1; }
+.pddcs-metric .k { font-size: ${fontSize.cap}px; color: var(--pddcs-text-tertiary); }
+.pddcs-metric .v {
+  margin-top: 3px;
+  font-family: ${fontFamilyMono}; font-variant-numeric: tabular-nums;
+  font-size: ${fontSize.body}px; font-weight: 600; color: var(--pddcs-text);
+}
+
 /* 设置行:标签在左、控件在右;也用来装"只有内容"的行(提示句、按钮组、说明段) */
 .pddcs-srow { --hair-in: ${spacing.xxl}px;
   display: flex; align-items: center; gap: ${spacing.xl}px;
@@ -396,6 +516,38 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
 /* 按钮组 + 就地结论:一行装不下可以折行(折行后仍在同一套内边距与发丝线里) */
 .pddcs-srow-wrap { flex-wrap: wrap; }
 .pddcs-srow-label { flex: 1; min-width: 0; }
+/* ── 悬浮说明(ⓘ)──────────────────────────────────────────────────────────
+   气泡向上展开:这一块通常在卡片最后一行,向下会被卡片的 overflow:hidden 裁掉。
+   宽 252 是量出来的 —— 卡片正文宽 343,气泡左对齐在标题后面时不会越出右缘。 */
+.pddcs-hint {
+  position: relative; display: inline-flex; align-items: center;
+  margin-left: 6px; color: var(--pddcs-text-tertiary); cursor: help;
+  vertical-align: -2px;
+}
+.pddcs-hint:hover, .pddcs-hint:focus-visible { color: var(--pddcs-text); }
+.pddcs-hint .bubble {
+  position: absolute; left: -8px; bottom: calc(100% + 8px); z-index: 4;
+  width: 252px; padding: ${spacing.md}px ${spacing.lg}px;
+  border-radius: ${radius.control}px;
+  background: var(--pddcs-surface); color: var(--pddcs-text-secondary);
+  border: 1px solid var(--pddcs-border);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--pddcs-ink) 18%, transparent);
+  font-size: ${fontSize.cap}px; line-height: 1.55; font-weight: 400;
+  opacity: 0; visibility: hidden; transform: translateY(2px);
+  transition: opacity .16s, transform .16s, visibility .16s;
+  pointer-events: none;
+}
+.pddcs-hint:hover .bubble,
+.pddcs-hint:focus-visible .bubble {
+  opacity: 1; visibility: visible; transform: none;
+}
+
+/* 块式行的"标题 + 行内动作"顶栏:标题占满、按钮贴右;下面的说明因此能占满整行 */
+.pddcs-srow-lead {
+  display: flex; align-items: center; gap: ${spacing.xl}px;
+  margin-bottom: ${formGap.labelControl}px;
+}
+.pddcs-srow-lead .n { flex: 1; min-width: 0; }
 .pddcs-srow-label .n { display: block; font-size: ${fontSize.body}px; color: var(--pddcs-text); }
 /* 标签 → 说明的间距取 formGap.labelDesc(4),不是凭手感写的 2 ——
    同一件事的两个值会让「统一的设置页行距」从内部裂开 */
@@ -445,14 +597,40 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
 }
 .pddcs-slider::-moz-range-track { height: 4px; border-radius: ${radius.pill}px; background: transparent; }
 
-/* ── 提示条 ──────────────────────────────────────────────────────────────── */
-.pddcs-notice { position: sticky; top: 0; z-index: 3;
-  background: var(--pddcs-bg); padding: ${spacing.md}px ${spacing.xxl}px 0; }
-.pddcs-notice-body { padding: ${spacing.lg}px ${spacing.xl}px;
-  border-radius: ${radius.control}px; font-size: ${fontSize.sub}px; line-height: 1.55;
-  word-break: break-word; }
-.pddcs-notice-body[data-ok='true'] { background: var(--pddcs-fill); color: var(--pddcs-text); }
-.pddcs-notice-body[data-ok='false'] { background: var(--pddcs-danger-soft); color: var(--pddcs-danger); }
+/* ── 提示条:浮起的小卡片 ───────────────────────────────────────────────────
+   旧版是一条通栏底色 + 贴边文字,读起来像"页面多了一段"。改成居中浮起的一块:
+   宽度跟着文字走、有阴影与描边,滚动时压在内容上方 —— 它本来就该像 tooltip,
+   而不是像正文。ok 用 info(本调色板里唯一的正向语义色),失败用 danger。
+
+   **height: 0 是重点**:提示条不能占版面 —— 否则它一出现就把下面的分区整体下推,
+   读起来像"窗口被挤了一下"。零高度 + align-items:flex-start + overflow:visible,
+   sticky 仍然生效,但它在文档流里不占任何空间。 */
+.pddcs-notice { position: sticky; top: 0; height: 0; z-index: 3;
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow: visible; pointer-events: none; }
+.pddcs-notice-body {
+  pointer-events: auto; max-width: 100%; text-align: left;
+  margin-top: ${spacing.md}px;
+  padding: ${spacing.sm}px ${spacing.xl}px;
+  border-radius: ${radius.control}px; border: 1px solid transparent;
+  font-size: ${fontSize.sub}px; line-height: 1.5; font-weight: ${fontWeight.medium};
+  word-break: break-word;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--pddcs-ink) 16%, transparent);
+  animation: pddcs-notice-in ${motion.fast};
+}
+@keyframes pddcs-notice-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .pddcs-notice-body { animation: none; } }
+.pddcs-notice-body[data-ok='true'] {
+  background: var(--pddcs-info-soft); color: var(--pddcs-info-text);
+  border-color: color-mix(in srgb, var(--pddcs-info-text) 24%, transparent);
+}
+.pddcs-notice-body[data-ok='false'] {
+  background: var(--pddcs-danger-soft); color: var(--pddcs-danger);
+  border-color: color-mix(in srgb, var(--pddcs-danger) 24%, transparent);
+}
 
 /* ── 左侧图标栏:选中 = 强调色软底 + 强调色图标 ─────────────────────────────
    v4.0 是"墨底白字"的反转块。改走软底的理由与分类 chip 同一条:

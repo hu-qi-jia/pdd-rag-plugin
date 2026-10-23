@@ -123,7 +123,7 @@ describe('既有设置项不受影响(回归)', () => {
     }
     const s = await loadSettings()
     expect(s.simThreshold).toBe(1)
-    expect(s.retentionDays).toBe(30)
+    expect(s.retentionDays).toBe(7)
     expect(s.autoReplyHotkey).toEqual({ ctrl: false, alt: false, shift: false, key: 'k' })
   })
 })

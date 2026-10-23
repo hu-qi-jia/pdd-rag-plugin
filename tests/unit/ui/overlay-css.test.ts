@@ -85,7 +85,7 @@ describe('buildOverlayCss:面板是一张材料(唯一该用 glass 的地方)', 
     // 面板已提到 0.90 不透明,一条实心行不会破坏材料语言。
     // 另配一道 3px 内阴影竖条做第二重保险。
     const cand = block(light, '.pddcs-cand-selected, .pddcs-cand-selected:hover {')
-    expect(cand).toContain('background: #F7EBE5')
+    expect(cand).toContain(`background: ${lightTheme.accentSoft}`)
     expect(light).toContain('inset 3px 0 0')
   })
 

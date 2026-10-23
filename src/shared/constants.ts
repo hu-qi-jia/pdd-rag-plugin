@@ -53,6 +53,11 @@ export const DEFAULT_SETTINGS: PddSettings = {
   classifyProbThreshold: 0.5,
 }
 
+/** 问答记录保留期的下限、上限与固定快捷档位 */
+export const RETENTION_MIN_DAYS = 7
+export const RETENTION_MAX_DAYS = 365
+export const RETENTION_PRESETS = [7, 30, 90] as const
+
 /** 单次整合超时的可配置区间(毫秒):下限防误填 0 变成秒断,上限防变成事实上的无限等待 */
 export const LLM_TIMEOUT_MIN_MS = 2000
 export const LLM_TIMEOUT_MAX_MS = 30000

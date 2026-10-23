@@ -79,6 +79,18 @@ const flush = async () => {
   })
 }
 
+/** 分页后的设置页:先切到目标分区,再断言。 */
+async function gotoPage(label: string) {
+  const btn = Array.from(container.querySelectorAll<HTMLButtonElement>('.pddcs-catnav button')).find(
+    (b) => b.textContent?.trim() === label,
+  )
+  if (!btn) throw new Error(`找不到设置分区:${label}`)
+  await act(async () => {
+    btn.click()
+  })
+  await flush()
+}
+
 async function renderSettings(settings: PddSettings = { ...DEFAULT_SETTINGS }) {
   const stats: GetStatsResponse = {
     type: 'GET_STATS_RESPONSE',
@@ -127,9 +139,13 @@ afterEach(() => {
 describe('设置页滑杆:显示值必须落在自己的量程内(第五十二轮回归)', () => {
   it('每个滑杆的读数都在它的 [min, max] 里', async () => {
     await renderSettings()
-    const all = probeSliders()
-    // 反空转:设置页的滑杆一个都不能少(相似度/标准回答/知识库/概率阈值四档 + 保留期 + 整合超时 + 分类超时 = 7)
-    expect(all.length).toBeGreaterThanOrEqual(7)
+    const all: SliderProbe[] = []
+    for (const page of ['AI 整合', '问题分类']) {
+      await gotoPage(page)
+      all.push(...probeSliders())
+    }
+    // 三个相似度阈值和保留期已改成文字档位；剩余滑杆是概率阈值与两项超时。
+    expect(all.length).toBe(3)
     for (const s of all) {
       expect(s.shown, `滑杆「${s.label}」读数 ${s.shown} 越出量程 [${s.min}, ${s.max}]`).toBeGreaterThanOrEqual(s.min)
       expect(s.shown, `滑杆「${s.label}」读数 ${s.shown} 越出量程 [${s.min}, ${s.max}]`).toBeLessThanOrEqual(s.max)
@@ -138,6 +154,7 @@ describe('设置页滑杆:显示值必须落在自己的量程内(第五十二�
 
   it('整合超时:默认显示 8 秒、量程 2~30 秒(滑杆读秒,不再把毫秒当秒显示)', async () => {
     await renderSettings()
+    await gotoPage('AI 整合')
     const s = probe('整合超时')
     expect(s.min).toBe(LLM_TIMEOUT_MIN_MS / 1000)
     expect(s.max).toBe(LLM_TIMEOUT_MAX_MS / 1000)
@@ -151,6 +168,7 @@ describe('设置页滑杆:显示值必须落在自己的量程内(第五十二�
 
   it('拖动整合超时:读数当场跟着走,落库的是毫秒', async () => {
     await renderSettings()
+    await gotoPage('AI 整合')
     const before = probe('整合超时')
     await drag(before.input, '9')
     // 拖动即时反馈(不等落库):这就是用户说的"拖动无变化"的反面
@@ -169,6 +187,7 @@ describe('设置页滑杆:显示值必须落在自己的量程内(第五十二�
 describe('设置页 · 概率阈值滑杆', () => {
   it('拖动概率阈值到 0 → 落库就是 0(0 是合法值)', async () => {
     await renderSettings()
+    await gotoPage('问题分类')
     const s = probe('概率阈值')
     expect(s.min).toBe(0)
     expect(s.max).toBe(1)
@@ -188,6 +207,7 @@ describe('设置页 · 概率阈值滑杆', () => {
 describe('AI 表单三行不再带解释文案(第五十二轮用户要求)', () => {
   it('三行只剩标签与输入框,原本的说明文字不再出现', async () => {
     await renderSettings()
+    await gotoPage('AI 整合')
     // 先确认三行还在(否则"没出现"可以靠整块没渲染来蒙混)
     expect(container.textContent).toContain('接口地址')
     expect(container.textContent).toContain('API Key')

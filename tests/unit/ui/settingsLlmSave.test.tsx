@@ -81,6 +81,18 @@ const flush = async () => {
   })
 }
 
+/** 分页后的设置页:先切到目标分区,再断言。 */
+async function gotoPage(label: string) {
+  const btn = Array.from(container.querySelectorAll<HTMLButtonElement>('.pddcs-catnav button')).find(
+    (b) => b.textContent?.trim() === label,
+  )
+  if (!btn) throw new Error(`找不到设置分区:${label}`)
+  await act(async () => {
+    btn.click()
+  })
+  await flush()
+}
+
 /** 渲染并等到设置与草稿都读回来(draft → 再异步读草稿,两跳) */
 async function renderSettings(settings: PddSettings) {
   const stats: GetStatsResponse = {
@@ -112,6 +124,7 @@ async function renderSettings(settings: PddSettings) {
     root.render(<SettingsTab onDataChanged={vi.fn()} />)
   })
   await flush()
+  await gotoPage('AI 整合')
 }
 
 /** 填满三个框并点保存 */

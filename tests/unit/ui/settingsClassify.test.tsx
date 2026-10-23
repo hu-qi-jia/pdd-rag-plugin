@@ -85,11 +85,10 @@ const inputIn = (root: HTMLElement, p: string): HTMLInputElement => {
  * 全页查按钮会拿到上面那一张卡的(它默认禁用),测的就不是本卡。一律在卡内查。
  */
 function classifyCard(): HTMLElement {
-  const title = Array.from(container.querySelectorAll<HTMLElement>('div')).find(
-    (e) => e.children.length === 0 && e.textContent?.trim() === '问题分类',
-  )
-  if (!title?.parentElement) throw new Error('找不到「问题分类」卡片')
-  return title.parentElement
+  // 设置页 v2:分区带 data-section 锚点(分区头改成了图标 + 标题,不再是纯文字 div)
+  const section = container.querySelector<HTMLElement>('[data-section="set-classify"]')
+  if (!section) throw new Error('找不到「问题分类」卡片')
+  return section
 }
 
 const textBtnIn = (root: HTMLElement, label: string): HTMLButtonElement => {
@@ -115,6 +114,18 @@ const flush = async () => {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0))
   })
+}
+
+/** 分页后的设置页:先切到目标分区,再断言。 */
+async function gotoPage(label: string) {
+  const btn = Array.from(container.querySelectorAll<HTMLButtonElement>('.pddcs-catnav button')).find(
+    (b) => b.textContent?.trim() === label,
+  )
+  if (!btn) throw new Error(`找不到设置分区:${label}`)
+  await act(async () => {
+    btn.click()
+  })
+  await flush()
 }
 
 /** 渲染并等到设置与草稿都读回来(draft → 再异步读草稿,两跳) */
@@ -171,6 +182,7 @@ async function renderSettings(settings: PddSettings) {
     root.render(<SettingsTab onDataChanged={vi.fn()} />)
   })
   await flush()
+  await gotoPage('问题分类')
 }
 
 beforeEach(() => {
@@ -239,15 +251,15 @@ describe('设置页 · 问题分类区', () => {
     expect(inputByPlaceholder('jev-latest').value).toBe('jev-latest')
   })
 
-  it('★ 开关的说明必须交代「每次检索也会外发」—— 不能只说打标', async () => {
+  it('★ 开关的简短说明仍交代每次检索会发送问题文本', async () => {
     // 这一个开关同时管两件量级差很远的事:
     //   ① 打标 —— 每条记录一次;② 检索路由 —— **每次搜索**一次。
     // v3.0 的"做减法"把 desc 收缩成只说①,于是在不知情下把②一起接受了。
     // 这条断言钉住知情那一半,防止下一次"做减法"又把它删掉。
     await renderSettings(DEFAULT_SETTINGS)
     const text = classifySwitch().closest('.pddcs-srow')?.textContent ?? ''
-    expect(text).toContain('每次搜索')
-    expect(text).toContain('发往接口')
+    expect(text).toContain('每次检索')
+    expect(text).toContain('发送问题文本')
     // 打标那一半也不能被挤掉 —— 两个都写全才算说清
     expect(text).toContain('自动归类')
   })
@@ -262,19 +274,18 @@ describe('设置页 · 问题分类区', () => {
     // 按钮渲染出来了(不是"看不见所以没点"),但缺字段时禁用
     expect(textBtnIn(classifyCard(), '测试连接').disabled).toBe(true)
 
-    // 一行红字:先说"已开启,但…尚未填全"
-    const hint = Array.from(container.querySelectorAll<HTMLElement>('div')).find(
-      (e) => e.children.length === 0 && e.textContent?.includes('尚未填全') && e.textContent?.includes('已开启'),
-    )
+    // 一行红字:先说"已开启,但…尚未填全"。危险色由 NoteRow 的 data-tone 表达
+    const hint = Array.from(
+      container.querySelectorAll<HTMLElement>('.pddcs-srow[data-tone="danger"]'),
+    ).find((e) => e.textContent?.includes('尚未填全') && e.textContent?.includes('已开启'))
     expect(hint).toBeTruthy()
-    expect(hint!.style.color).toBe('var(--pddcs-danger)')
 
     // ADR-0007 零远程:渲染过程中(未点击任何测试按钮)不得发出 TEST_JEV
     expect(sent.some((m) => m.type === 'TEST_JEV')).toBe(false)
     expect(mockedSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'TEST_JEV' }))
   })
 
-  it('点「测试连接」→ 发 TEST_JEV,并把结论显示在按钮右侧(不弹 Notice)', async () => {
+  it('点「测试连接」→ 发 TEST_JEV,结论显示在同一条操作条上(不弹 Notice)', async () => {
     testJevResult = { ok: false, error: 'http 401' }
     await renderSettings({
       ...DEFAULT_SETTINGS,
@@ -304,10 +315,11 @@ describe('设置页 · 问题分类区', () => {
       model: 'jev-latest',
     })
 
-    // 结论显示在按钮**右侧**(同一行的兄弟节点),含 401 这条可动手的线索
-    const row = btn.parentElement!
-    const inline = Array.from(row.children).find((c) => c.textContent?.includes('401'))
-    expect(inline).toBeTruthy()
+    // 结论显示在**同一条操作条**上(说明贴左、按钮贴右),含 401 这条可动手的线索。
+    // 位置从"按钮右侧"改到了左侧,但"就地显示、不弹 Notice"这条不变。
+    const bar = btn.closest('.pddcs-actionbar')
+    expect(bar).toBeTruthy()
+    expect(bar!.textContent).toContain('401')
 
     // 不弹 Notice:页面上没有"失败"字样的提示条(结论只走按钮右侧那一行)
     expect(container.textContent).not.toContain('失败')

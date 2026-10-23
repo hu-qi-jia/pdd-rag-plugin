@@ -26,4 +26,13 @@ export {
   Loader2 as LoaderIcon,
   Eye as EyeIcon,
   EyeOff as EyeOffIcon,
+  Save as SaveIcon,
+  Plug as TestIcon,
+  SlidersHorizontal as SlidersIcon,
+  Bot as BotIcon,
+  Database as DatabaseIcon,
+  Info as InfoIcon,
+  KeyRound as KeyIcon,
+  HardDrive as DriveIcon,
+  BarChart3 as StatsIcon,
 } from 'lucide-react'

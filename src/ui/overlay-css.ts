@@ -1,10 +1,10 @@
 /**
- * 聊天页覆盖层主题 — v5.0「暖纸」
+ * 聊天页覆盖层主题 — v5.1「石墨蓝灰」
  *
  * 与 popup 的差别只在一处:**这份样式注入平台页面**,够不到 popup 的 `<html>`,
  * 所以不吃 `--pddcs-*` 自定义属性,改为按 `ThemeTokens` 插值生成(切换主题时整体
  * 重建,见 contents/pdd-ai-button#applyOverlayTheme)。两边的**视觉语言同源**:
- * 暖调、系统无衬线(数字等宽)、圆角、强调色表达当前项。
+ * 冷灰调、系统无衬线(数字等宽)、圆角、强调色表达当前项。
  *
  * ── 为什么这里还留毛玻璃(v5.0 收紧了它)────────────────────────────────────
  * popup 是**原生窗口,背后没有内容** —— 在那儿做 glass 是白做的。面板压在 PDD
@@ -63,15 +63,15 @@ export const BADGE_RADIUS = 4
 function rowTints(mode: ThemeMode): { hover: string; hair: string } {
   return mode === 'dark'
     ? { hover: 'rgba(255,255,255,0.06)', hair: 'rgba(255,255,255,0.09)' }
-    : { hover: 'rgba(60,45,30,0.05)', hair: 'rgba(60,45,30,0.08)' }
+    : { hover: 'rgba(28,38,52,0.05)', hair: 'rgba(28,38,52,0.08)' }
 }
 
 /**
  * 面板的 1px 实边框 —— v5.0 新增,是"半透明底也能读"的兜底(理由见文件头)。
- * 深色用白描边、浅色用暖褐描边:两边都不是纯黑纯白,免得边框自己跳出来成为主角。
+ * 深色用白描边、浅色用石墨描边:两边都不是纯黑纯白,免得边框自己跳出来成为主角。
  */
 function panelBorder(mode: ThemeMode): string {
-  return mode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(60,45,30,0.10)'
+  return mode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(28,38,52,0.10)'
 }
 
 /**
@@ -82,7 +82,7 @@ function panelBorder(mode: ThemeMode): string {
  * 所以取哪个值由这里单点决定,两边共用、单测可断。
  */
 export function panelSurface(mode: ThemeMode): string {
-  return mode === 'dark' ? 'rgba(35,32,25,0.90)' : 'rgba(252,250,246,0.90)'
+  return mode === 'dark' ? 'rgba(30,33,38,0.90)' : 'rgba(252,253,254,0.90)'
 }
 
 export function buildOverlayCss(tk: ThemeTokens, mode: ThemeMode = 'light'): string {
@@ -182,7 +182,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   padding: 0 ${BADGE_PAD_X}px; border-radius: ${BADGE_RADIUS}px;
   font-family: ${fontFamily}; font-size: ${panelType.meta.size}px; font-weight: 600;
   line-height: 1; white-space: nowrap; color: ${tk.textTertiary}; }
-/* 三类来源各一套"底色 + 文字色":标准回答 = 赭陶、知识库 = 绿、历史 = 中性灰。
+/* 三类来源各一套"底色 + 文字色":标准回答 = 靛蓝、知识库 = 绿、历史 = 中性灰。
    底色都用各自的 soft 档,字色用同色系的深/亮档 —— 不靠明度排序,三类同时可读。 */
 .pddcs-tag[data-kind='golden'] { color: ${tk.accentText}; background: ${tk.accentSoft}; }
 .pddcs-tag[data-kind='knowledge'] { color: ${tk.infoText}; background: ${tk.infoSoft}; }

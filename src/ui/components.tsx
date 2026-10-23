@@ -1,5 +1,5 @@
 /**
- * 通用组件库 — 各页签复用的视觉资产 · v5.0「暖纸」
+ * 通用组件库 — 各页签复用的视觉资产 · v5.1「石墨蓝灰」
  *
  * 清单:Btn / IconBtn / ConfirmRow / CreateBtn / Notice / Section / Tag /
  *      EmptyState / Toggle / Slider / SearchInput / CatNav / StatusBar / List
@@ -299,7 +299,8 @@ export function SearchInput({
 export interface CatNavItem {
   id: string
   label: string
-  count: number
+  /** 右侧计数;不传就不渲染那枚灰标(设置页的分页导航没有计数) */
+  count?: number
 }
 
 /**
@@ -374,7 +375,7 @@ export function CatNav({
             onClick={() => onChange(it.id)}
           >
             {it.label}
-            <span className="n">{it.count}</span>
+            {it.count !== undefined && <span className="n">{it.count}</span>}
           </button>
         ))}
       </nav>
@@ -525,6 +526,45 @@ export function SettingRow({
         {desc && <span className="d">{desc}</span>}
       </span>
       {children}
+    </div>
+  )
+}
+
+/** 文字档位选择器。底层仍是 button，避免原生 radio 在各主题下各画一套。 */
+export function ChoiceGroup<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: ReadonlyArray<{ value: T; label: string; title?: string }>
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="pddcs-srow pddcs-hair">
+      <span className="pddcs-srow-label">
+        <span className="n">{label}</span>
+      </span>
+      <div className="pddcs-choice" role="radiogroup" aria-label={label}>
+        {options.map((option) => {
+          const active = option.value === value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              data-active={active ? 'true' : undefined}
+              title={option.title}
+              onClick={() => onChange(option.value)}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

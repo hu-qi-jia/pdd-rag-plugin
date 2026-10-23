@@ -9,6 +9,8 @@ import {
   JEV_TIMEOUT_MIN_MS,
   LLM_TIMEOUT_MAX_MS,
   LLM_TIMEOUT_MIN_MS,
+  RETENTION_MAX_DAYS,
+  RETENTION_MIN_DAYS,
   SETTINGS_STORAGE_KEY,
 } from '../shared/constants';
 import type { HotkeyConfig, PddSettings } from '../types/memory';
@@ -56,7 +58,13 @@ function clampSettings(raw: Partial<PddSettings>): PddSettings {
     simThreshold: Math.min(1, Math.max(0, Number(base.simThreshold) || DEFAULT_SETTINGS.simThreshold)),
     goldenThreshold: Math.min(1, Math.max(0, Number(base.goldenThreshold) || DEFAULT_SETTINGS.goldenThreshold)),
     kbThreshold: Math.min(1, Math.max(0, Number(base.kbThreshold) || DEFAULT_SETTINGS.kbThreshold)),
-    retentionDays: Math.min(365, Math.max(30, Math.round(Number(base.retentionDays) || DEFAULT_SETTINGS.retentionDays))),
+    retentionDays: Math.min(
+      RETENTION_MAX_DAYS,
+      Math.max(
+        RETENTION_MIN_DAYS,
+        Math.round(Number(base.retentionDays) || DEFAULT_SETTINGS.retentionDays),
+      ),
+    ),
     goldenPriorityEnabled: !!base.goldenPriorityEnabled,
     autoReplyHotkey: clampHotkey(base.autoReplyHotkey),
     panelNavHotkey: clampHotkey(base.panelNavHotkey, DEFAULT_PANEL_NAV_HOTKEY.key),

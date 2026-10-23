@@ -47,6 +47,7 @@ import {
   BotIcon,
   DatabaseIcon,
   DownloadIcon,
+  DriveIcon,
   EyeIcon,
   EyeOffIcon,
   InfoIcon,
@@ -1143,88 +1144,97 @@ export function SettingsTab({ onDataChanged }: { onDataChanged: () => Promise<vo
         </SettingsSection>
       )}
 
+      {/* 「数据」是导航里的一个类别,里面是两张独立的卡:导入与导出 / 本机数据 */}
       {activeSection === 'set-data' && (
-        <SettingsSection
-          id="set-data"
-          icon={<DatabaseIcon size={16} strokeWidth={2} />}
-          title="数据"
-          summary={storage ? `已用 ${fmtBytes(storage.usage)}` : undefined}
-        >
-          <Toggle
-            label="导出包含记忆数据"
-            desc="额外导出问答记录与回复"
-            checked={includeMemory}
-            onChange={setIncludeMemory}
-          />
-          <ActionBar>
-            <Btn disabled={busy} onClick={() => fileRef.current?.click()}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <UploadIcon size={size.icon} strokeWidth={2} />导入 JSON
-              </span>
-            </Btn>
-            <Btn variant="primary" disabled={busy} onClick={() => void exportJson()}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <DownloadIcon size={size.icon} strokeWidth={2} />导出 JSON
-              </span>
-            </Btn>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json,.json"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void importJson(f)
-              }}
-            />
-          </ActionBar>
-          <SubGroup label="本机数据" />
-          <div className="pddcs-srow pddcs-hair">
-            <span className="pddcs-srow-label">
-              <span className="n">本地数据</span>
-              <span className="d pddcs-num">
-                {stats
-                  ? `问答 ${stats.qaCount} · 回复 ${stats.replyCount} · 标准回答 ${stats.goldenCount} · 知识 ${stats.knowledgeCount} · 文件夹 ${stats.folderCount}`
-                  : '读取中…'}
-              </span>
-            </span>
-          </div>
-          <div className="pddcs-srow pddcs-hair">
-            <span className="pddcs-srow-label">
-              <span className="n">已用空间</span>
-              <span className="d">浏览器配额内的本地估算</span>
-            </span>
-            <span className="pddcs-srow-value">
-              {storage && storage.quota > 0
-                ? `${fmtBytes(storage.usage)} / ${fmtBytes(storage.quota)}`
-                : '—'}
-            </span>
-          </div>
-          <ActionBar
-            status={
-              confirmClear && (
-                <span style={{ color: 'var(--pddcs-danger)' }}>
-                  清空全部问答与回复?标准回答/知识库/文件夹保留。
-                </span>
-              )
-            }
+        <>
+          <SettingsSection
+            id="set-import"
+            icon={<DatabaseIcon size={16} strokeWidth={2} />}
+            title="导入与导出"
           >
-            {confirmClear ? (
-              <>
-                <Btn variant="ghost" onClick={() => setConfirmClear(false)}>
-                  取消
-                </Btn>
-                <Btn variant="danger" disabled={busy} onClick={() => void clearMemory()}>
-                  确认清空
-                </Btn>
-              </>
-            ) : (
-              <Btn variant="danger" onClick={() => setConfirmClear(true)}>
-                清空问答数据
+            <Toggle
+              label="导出包含记忆数据"
+              desc="额外导出问答记录与回复"
+              checked={includeMemory}
+              onChange={setIncludeMemory}
+            />
+            <ActionBar>
+              <Btn disabled={busy} onClick={() => fileRef.current?.click()}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <UploadIcon size={size.icon} strokeWidth={2} />导入 JSON
+                </span>
               </Btn>
-            )}
-          </ActionBar>
-        </SettingsSection>
+              <Btn variant="primary" disabled={busy} onClick={() => void exportJson()}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <DownloadIcon size={size.icon} strokeWidth={2} />导出 JSON
+                </span>
+              </Btn>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void importJson(f)
+                }}
+              />
+            </ActionBar>
+          </SettingsSection>
+
+          <SettingsSection
+            id="set-storage"
+            icon={<DriveIcon size={16} strokeWidth={2} />}
+            title="本机数据"
+            summary={storage ? `已用 ${fmtBytes(storage.usage)}` : undefined}
+          >
+            <div className="pddcs-srow pddcs-hair">
+              <span className="pddcs-srow-label">
+                <span className="n">本地数据</span>
+                <span className="d pddcs-num">
+                  {stats
+                    ? `问答 ${stats.qaCount} · 回复 ${stats.replyCount} · 标准回答 ${stats.goldenCount} · 知识 ${stats.knowledgeCount} · 文件夹 ${stats.folderCount}`
+                    : '读取中…'}
+                </span>
+              </span>
+            </div>
+            <div className="pddcs-srow pddcs-hair">
+              <span className="pddcs-srow-label">
+                <span className="n">已用空间</span>
+                <span className="d">浏览器配额内的本地估算</span>
+              </span>
+              <span className="pddcs-srow-value">
+                {storage && storage.quota > 0
+                  ? `${fmtBytes(storage.usage)} / ${fmtBytes(storage.quota)}`
+                  : '—'}
+              </span>
+            </div>
+            <ActionBar
+              status={
+                confirmClear && (
+                  <span style={{ color: 'var(--pddcs-danger)' }}>
+                    清空全部问答与回复?标准回答/知识库/文件夹保留。
+                  </span>
+                )
+              }
+            >
+              {confirmClear ? (
+                <>
+                  <Btn variant="ghost" onClick={() => setConfirmClear(false)}>
+                    取消
+                  </Btn>
+                  <Btn variant="danger" disabled={busy} onClick={() => void clearMemory()}>
+                    确认清空
+                  </Btn>
+                </>
+              ) : (
+                <Btn variant="danger" onClick={() => setConfirmClear(true)}>
+                  清空问答数据
+                </Btn>
+              )}
+            </ActionBar>
+          </SettingsSection>
+        </>
       )}
 
       {/*

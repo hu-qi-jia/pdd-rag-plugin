@@ -19,7 +19,7 @@ import {
   panelSurface,
   parseThemeMode,
 } from '../../../src/ui/overlay-css'
-import { controlH, panelType, radius } from '../../../src/ui/design'
+import { controlH, cornerShape, panelType, radius } from '../../../src/ui/design'
 import { darkTheme, lightTheme } from '../../../src/ui/theme'
 
 const light = buildOverlayCss(lightTheme, 'light')
@@ -301,5 +301,21 @@ describe('parseThemeMode:存储值容错', () => {
     for (const v of ['light', undefined, null, 1, {}, 'DARK']) {
       expect(parseThemeMode(v)).toBe('light')
     }
+  })
+})
+
+describe('连续圆角(iOS squircle):只作用在浮层之内', () => {
+  it('★ 浮层与后代吃 superellipse(2) —— 与 popup 同一口径同一令牌', () => {
+    expect(light).toContain(`#pddcs-overlay, #pddcs-overlay * { corner-shape: ${cornerShape}; }`)
+    expect(dark).toContain(`corner-shape: ${cornerShape};`)
+  })
+
+  it('★ 绝不允许裸通配符 —— 这份样式注入的是拼多多的页面,写宽了就是改人家的界面', () => {
+    expect(light).not.toMatch(/(^|\n)\s*\*\s*\{[^}]*corner-shape/)
+    expect(light).not.toMatch(/(^|\n)\s*\*\s*,[^\n]*corner-shape/)
+  })
+
+  it('图片预览的圆钮保持正圆(胶囊语义,不进连续圆角)', () => {
+    expect(block(light, '.pddcs-imgv-close {')).toContain('corner-shape: round')
   })
 })

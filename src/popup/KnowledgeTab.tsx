@@ -39,7 +39,7 @@ import {
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
-import { fontSize, size, spacing } from '../ui/design'
+import { fontSize, formGap, pageGap, size, spacing } from '../ui/design'
 import {
   CopyIcon,
   DownloadIcon,
@@ -356,7 +356,7 @@ export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<v
           </div>
         </div>
       ) : (
-        <div style={{ paddingTop: spacing.xxl }}>
+        <div style={{ padding: `${spacing.xxl}px 0 ${pageGap.section}px` }}>
           <Toolbar>
             <CreateBtn label="新建条目" onClick={() => setCreating(true)} />
             <Btn
@@ -481,7 +481,7 @@ export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<v
         </div>
       )}
 
-      <div style={{ padding: `0 ${spacing.xxl}px ${spacing.xl}px` }}>
+      <div style={{ padding: `0 ${pageGap.x}px` }}>
         <SearchInput value={keyword} onChange={setKeyword} placeholder="搜索标题或正文" />
       </div>
 
@@ -505,7 +505,7 @@ export function KnowledgeTab({ onDataChanged }: { onDataChanged: () => Promise<v
             if (editingId === k.id) {
               return (
                 <div className="pddcs-gcard pddcs-hair" key={k.id}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.field }}>
                     <input
                       value={draftTitle}
                       onChange={(e) => setDraftTitle(e.target.value)}

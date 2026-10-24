@@ -62,7 +62,7 @@ import {
   inputStyle,
   type NoticeMsg,
 } from '../ui/components'
-import { controlH, fontSize, size, spacing } from '../ui/design'
+import { controlH, fontSize, formGap, pageGap, size, spacing } from '../ui/design'
 import { CopyIcon, PencilIcon, TagIcon, TrashIcon } from '../ui/icons'
 
 /** 图标渲染尺寸(与聊天页覆盖层的 overlay-icons.ICON_SIZE 同源) */
@@ -324,7 +324,7 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
     if (editingId === g.id) {
       return (
         <div className="pddcs-gcard" key={g.id} data-category-id={g.categoryId}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: formGap.field }}>
             <textarea
               value={draftQ}
               onChange={(e) => setDraftQ(e.target.value)}
@@ -342,24 +342,34 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
               className="pddcs-input"
               style={inputStyle({ resize: 'vertical' })}
             />
-            <div className="pddcs-gimgs">
-              {draftImgs.map((a) => (
-                <span className="pddcs-gimg" key={a.url}>
-                  <a className="pddcs-gimg-a" href={a.url} target="_blank" rel="noreferrer" title="打开原图">
-                    <img src={thumbUrl(a.url, 96)} alt="图片附件" loading="lazy" />
-                  </a>
-                  <button
-                    type="button"
-                    className="pddcs-gimg-x"
-                    title="移除这张图"
-                    aria-label="移除这张图"
-                    onClick={() => setDraftImgs((prev) => prev.filter((x) => x.url !== a.url))}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
+            {/* 没有图片时**不渲染这一层**:空 flex 子元素会在上下各吃一道 12,
+                答案与图片地址之间就会变成 24 */}
+            {draftImgs.length > 0 && (
+              <div className="pddcs-gimgs">
+                {draftImgs.map((a) => (
+                  <span className="pddcs-gimg" key={a.url}>
+                    <a
+                      className="pddcs-gimg-a"
+                      href={a.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="打开原图"
+                    >
+                      <img src={thumbUrl(a.url, 96)} alt="图片附件" loading="lazy" />
+                    </a>
+                    <button
+                      type="button"
+                      className="pddcs-gimg-x"
+                      title="移除这张图"
+                      aria-label="移除这张图"
+                      onClick={() => setDraftImgs((prev) => prev.filter((x) => x.url !== a.url))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: spacing.md, alignItems: 'center' }}>
               <input
                 className="pddcs-input"
@@ -601,7 +611,7 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
           </div>
         </div>
       ) : (
-        <div style={{ paddingTop: spacing.xxl }}>
+        <div style={{ padding: `${spacing.xxl}px 0 ${pageGap.section}px` }}>
           <Toolbar>
             <CreateBtn label="新建类型" onClick={() => setCreating(true)} />
           </Toolbar>
@@ -609,7 +619,7 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
       )}
 
       {/* 分类导航:选中自定义类型时,右端才出现改名/删除 */}
-      <div style={{ padding: `0 ${spacing.xxl}px ${spacing.xl}px` }}>
+      <div style={{ padding: `0 ${pageGap.x}px` }}>
         <CatNav
           items={navItems}
           value={activeCat}

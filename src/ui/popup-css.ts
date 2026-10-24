@@ -23,6 +23,7 @@
  */
 import {
   controlH,
+  cornerShape,
   fontFamily,
   fontFamilyMono,
   fontSize,
@@ -43,6 +44,15 @@ html, body { margin: 0; padding: 0; background: var(--pddcs-bg, ${lightTheme.bg}
 /* 原生控件不继承字体,单独接上 —— 否则输入框/按钮会退回 Times,与周围字体打架 */
 button, input, textarea, select { font-family: inherit; }
 * { box-sizing: border-box; }
+
+/* ── 连续圆角(iOS squircle)─────────────────────────────────────────────────
+   全局一条:半径决定"拐多大弯",平滑度决定"怎么拐" —— 正圆弧在切点处曲率突变,
+   连续圆角让曲率从直边渐变到顶。取值 60% 与换算单点在 design.ts#cornerSmoothing,
+   这里不写数字;不支持的浏览器会忽略这条声明,自动退回普通圆角。
+
+   用 * 而不是逐个类名:圆角散在三十多条规则与若干内联样式里,枚举一定漏。
+   胶囊与正圆在各自规则里**明确回到 round**(见开关 / 滑杆 / 分类 pill)。 */
+* { corner-shape: ${cornerShape}; }
 
 /* 焦点环 —— 唯一允许"环套控件"的地方。走强调色:v5.0 起 accent 与两种主题的
    面都反相(浅色 4.88:1 / 深色 6.20:1),而 ink 在深色下是近白、压在卡片上会糊 */
@@ -214,6 +224,7 @@ button, input, textarea, select { font-family: inherit; }
   flex-shrink: 0; height: ${size.navItemH}px; padding: 0 13px;
   display: inline-flex; align-items: center; gap: 6px;
   border: none; border-radius: ${radius.pill}px; cursor: pointer; font-family: inherit;
+  corner-shape: round; /* 胶囊:全圆端,不进连续圆角(见文件头) */
   font-size: ${fontSize.sub}px; background: var(--pddcs-fill); color: var(--pddcs-text-secondary);
   transition: background-color .18s cubic-bezier(.32,.72,0,1), color .18s;
 }
@@ -339,7 +350,10 @@ button, input, textarea, select { font-family: inherit; }
 .pddcs-reply-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* 标准回答卡/编辑态里的图片附件:与回复行同一档尺寸(44)。
    外层只做定位(overflow 必须可见,移除钮要压出角外),裁切交给内层链接 */
-.pddcs-gimgs { display: flex; flex-wrap: wrap; gap: ${spacing.sm}px; margin-top: ${spacing.lg}px; }
+/* 只在**卡片展示态**给上间距(它是 .pddcs-gcard 的直接子元素);
+   编辑态里这条是 flex 列的一员,间距由 formGap.field 统一给,再加就是 22px 的双份 */
+.pddcs-gimgs { display: flex; flex-wrap: wrap; gap: ${spacing.sm}px; }
+.pddcs-gcard > .pddcs-gimgs { margin-top: ${spacing.lg}px; }
 .pddcs-gimg { position: relative; display: block; width: 44px; height: 44px; }
 .pddcs-gimg-a { display: block; width: 100%; height: 100%; overflow: hidden;
   border-radius: ${radius.control}px; border: 1px solid var(--pddcs-border);
@@ -347,6 +361,7 @@ button, input, textarea, select { font-family: inherit; }
 .pddcs-gimg-a img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pddcs-gimg-x { position: absolute; top: -6px; right: -6px; box-sizing: border-box;
   width: 18px; height: 18px; padding: 0; border-radius: ${radius.pill}px;
+  corner-shape: round; /* 18px 上的 pill = 正圆,不进连续圆角 */
   border: 1px solid var(--pddcs-border); background: var(--pddcs-surface);
   color: var(--pddcs-text-secondary); font-size: ${fontSize.cap}px; line-height: 1;
   cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -453,7 +468,8 @@ button, input, textarea, select { font-family: inherit; }
   display: flex; align-items: center; gap: ${spacing.md}px;
   padding: ${spacing.xxl + 6}px ${listGap.inset}px ${spacing.md}px;
 }
-.pddcs-section:first-of-type .pddcs-sect-head { padding-top: ${spacing.sm}px; }
+/* 导航 → 首个分区:导航不再加下边距,由这里给满一档 16(与列表页同一节奏) */
+.pddcs-section:first-of-type .pddcs-sect-head { padding-top: ${spacing.xxl}px; }
 .pddcs-sect-head .ic {
   width: ${controlH.inline}px; height: ${controlH.inline}px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -580,6 +596,7 @@ button, input, textarea, select { font-family: inherit; }
 /* ── 拨杆开关:iOS 胶囊轨 + 圆柄。选中 = 墨色轨(无彩主题下不用 iOS 绿)────── */
 .pddcs-switch { position: relative; display: inline-block; flex-shrink: 0; cursor: pointer;
   width: 48px; height: 28px; border-radius: ${radius.pill}px;
+  corner-shape: round; /* 胶囊轨:全圆端不进连续圆角 */
   background: var(--pddcs-border);
   transition: background-color ${motion.emphasized}; }
 /* 选中 = 强调色轨(v4.0 是墨色轨 —— 那时没有强调色可用)。
@@ -588,6 +605,7 @@ button, input, textarea, select { font-family: inherit; }
 .pddcs-switch-knob {
   position: absolute; top: 2px; left: 2px;
   width: 24px; height: 24px; border-radius: 50%;
+  corner-shape: round; /* 圆柄:正圆 */
   background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,.22);
   /* 位移是开关本身的语义,不是悬浮特效 */
   transition: left ${motion.emphasized}, background-color .18s;
@@ -604,19 +622,23 @@ button, input, textarea, select { font-family: inherit; }
   -webkit-appearance: none; appearance: none; display: block;
   width: 100%; height: 4px; margin: ${spacing.lg}px 0 0;
   border-radius: ${radius.pill}px; background: var(--pddcs-border); outline: none; cursor: pointer;
+  corner-shape: round; /* 轨道是胶囊,不是圆角矩形 */
 }
 .pddcs-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 20px; height: 20px; border-radius: 50%;
+  corner-shape: round; /* 圆拇指 */
   background: #FFFFFF; border: 1px solid var(--pddcs-border);
   box-shadow: 0 1px 3px rgba(0,0,0,.2); cursor: pointer;
 }
 .pddcs-slider::-moz-range-thumb {
   width: 20px; height: 20px; border-radius: 50%;
+  corner-shape: round; /* 圆拇指 */
   background: #FFFFFF; border: 1px solid var(--pddcs-border);
   box-shadow: 0 1px 3px rgba(0,0,0,.2); cursor: pointer;
 }
-.pddcs-slider::-moz-range-track { height: 4px; border-radius: ${radius.pill}px; background: transparent; }
+.pddcs-slider::-moz-range-track { height: 4px; border-radius: ${radius.pill}px; background: transparent;
+  corner-shape: round; }
 
 /* ── 提示条:浮起的小卡片 ───────────────────────────────────────────────────
    旧版是一条通栏底色 + 贴边文字,读起来像"页面多了一段"。改成居中浮起的一块:

@@ -42,7 +42,7 @@ import {
   SettingsSection,
   SubGroup,
 } from '../ui/settings-kit'
-import { controlH, fontSize, formGap, formType, size, spacing } from '../ui/design'
+import { controlH, fontSize, formGap, formType, pageGap, size, spacing } from '../ui/design'
 import {
   BotIcon,
   DatabaseIcon,
@@ -680,7 +680,7 @@ export function SettingsTab({ onDataChanged }: { onDataChanged: () => Promise<vo
       style={{ display: 'flex', flexDirection: 'column', paddingBottom: spacing.xxl }}
     >
       <Notice msg={msg} onDismiss={() => setMsg(null)} />
-      <div className="pddcs-settings-nav" style={{ padding: `0 ${spacing.xxl}px ${spacing.xl}px` }}>
+      <div className="pddcs-settings-nav" style={{ padding: `0 ${pageGap.x}px` }}>
         {/* 与「标准回答」页同一套分类导航:横向 pill、选中走 accentSoft。
             七个固定项必须一屏排下 —— 这里把 chip 的横向内边距收窄一档(见 CSS),
             否则最后一项「关于」会被挤到滚动区外。 */}

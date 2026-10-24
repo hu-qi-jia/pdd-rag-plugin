@@ -23,7 +23,7 @@
  * 也正因如此,本函数需要知道当前是哪种主题,签名比 popup 多一个 `mode`。
  */
 import type { ThemeMode, ThemeTokens } from './theme'
-import { controlH, fontFamily, fontFamilyMono, fontSize, panelType, radius, spacing } from './design'
+import { controlH, cornerShape, fontFamily, fontFamilyMono, fontSize, panelType, radius, spacing } from './design'
 import { thinScrollbarCss } from './scrollbar'
 import { ICON_BTN_SIZE as ICON_BTN } from './overlay-icons'
 
@@ -90,6 +90,12 @@ export function buildOverlayCss(tk: ThemeTokens, mode: ThemeMode = 'light'): str
   return `
 #pddcs-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000;
   font-family: ${fontFamily}; }
+
+/* ── 连续圆角(iOS squircle)────────────────────────────────────────────────
+   与 popup 同一条口径,取值与换算单点在 design.ts#cornerSmoothing(60% → superellipse(2))。
+   **必须限定在 #pddcs-overlay 之内**:这份样式注入的是拼多多的页面,通配符写宽了
+   就是把平台的界面一起改了。胶囊在各自规则里回到 round(见图片预览关闭钮)。 */
+#pddcs-overlay, #pddcs-overlay * { corner-shape: ${cornerShape}; }
 
 /* 焦点环 —— 面板里的每一枚钮都是真 <button>(AI回复、关闭、行尾 ☆/⧉、重试),
    平台页面上 Tab 得到。没有这条,键盘走到哪里**看不出来**。
@@ -234,6 +240,7 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
   border-radius: ${radius.card}px; box-shadow: 0 18px 60px rgba(0,0,0,.55); }
 .pddcs-imgv-close { position: absolute; top: 20px; right: 24px; width: 36px; height: 36px;
   padding: 0; border: none; border-radius: ${radius.pill}px; cursor: pointer;
+  corner-shape: round; /* 正圆钮,不进连续圆角 */
   background: rgba(255,255,255,.16); color: #fff; font-size: 22px; line-height: 1;
   display: flex; align-items: center; justify-content: center; }
 .pddcs-imgv-close:hover { background: rgba(255,255,255,.28); }

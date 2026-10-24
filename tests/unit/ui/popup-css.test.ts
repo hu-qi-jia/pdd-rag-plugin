@@ -9,6 +9,9 @@ import { describe, it, expect } from 'vitest'
 import { POPUP_CSS } from '../../../src/ui/popup-css'
 import {
   controlH,
+  cornerShape,
+  cornerShapeK,
+  cornerSmoothing,
   fontFamily,
   fontFamilyMono,
   fontSize,
@@ -266,5 +269,32 @@ describe('popup-css:滚动条与主题', () => {
     // v4.0 用的是 ink —— 那时 ink 在两种主题下都与所在面反相。
     // v5.0 的深色 ink 是**近白**,压在白色卡片上会糊;accent 两主题下都够(4.88 / 6.20)
     expect(POPUP_CSS).toContain('outline: 2px solid var(--pddcs-accent)')
+  })
+})
+
+describe('popup-css:连续圆角(iOS squircle,corner smoothing 60%)', () => {
+  it('★ 平滑度 60% → superellipse(2),且由令牌单点推出', () => {
+    // k=1 是正圆(等价 round),k=2 是 Chrome 的 squircle 关键字 —— 60% 正好落在 2,
+    // 换算见 design.ts#cornerSmoothing;这里钉住"没有人在各处另写数字"
+    expect(cornerSmoothing).toBe(0.6)
+    expect(cornerShapeK).toBe(2)
+    expect(cornerShape).toBe('superellipse(2)')
+  })
+
+  it('★ 全局一条通配规则 —— 圆角散在三十多条规则与内联样式里,枚举一定漏', () => {
+    expect(POPUP_CSS).toContain(`* { corner-shape: ${cornerShape}; }`)
+  })
+
+  it('★ 胶囊与正圆明确回到 round —— 否则开关与滑杆会被削成超椭圆', () => {
+    const rule = (sel: string): string => {
+      const i = POPUP_CSS.indexOf(sel)
+      expect(i, `找不到规则:${sel}`).toBeGreaterThanOrEqual(0)
+      return POPUP_CSS.slice(i, POPUP_CSS.indexOf('}', i))
+    }
+    for (const sel of ['.pddcs-switch {', '.pddcs-switch-knob {', '.pddcs-slider {']) {
+      expect(rule(sel)).toContain('corner-shape: round')
+    }
+    // 分类 pill、18px 圆钮、两枚滑杆拇指也各有一条
+    expect(POPUP_CSS.match(/corner-shape: round/g)?.length ?? 0).toBeGreaterThanOrEqual(7)
   })
 })

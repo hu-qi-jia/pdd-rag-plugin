@@ -251,7 +251,7 @@ button, input, textarea, select { font-family: inherit; }
 /**
  * 列表容器:v5.0 起**整段内缩**,并且行与行之间**留间隙**。
  *
- * 内缩量必须 ≥ radius.card(15),否则卡片的圆角会被容器边缘视觉上切平 ——
+ * 内缩量必须 ≥ radius.card(16),否则卡片的圆角会被容器边缘视觉上切平 ——
  * 读起来是"直角色块",卡片结构就不成立了。
  */
 .pddcs-list { display: flex; flex-direction: column;

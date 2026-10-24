@@ -183,7 +183,8 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 /* 类别标签 = **矩形 chip**(2026-10-19)。
    方括号终端记法([历史])在用户实测里不够像"标签",只够像正文里的注记;改成带底色的
    矩形块后,三类来源各自成块,扫读时先看到色块再看到字。
-   圆角取 4px 而不是控件档 13px:这是"标签",不是按钮,也不做成胶囊。 */
+   圆角取 4px 而不是控件档(BADGE_RADIUS,圆角规范里的显式例外):
+   这是"标签",不是按钮,也不做成胶囊。 */
 .pddcs-tag { display: inline-flex; align-items: center; height: ${BADGE_H}px;
   padding: 0 ${BADGE_PAD_X}px; border-radius: ${BADGE_RADIUS}px;
   font-family: ${fontFamily}; font-size: ${panelType.meta.size}px; font-weight: 600;

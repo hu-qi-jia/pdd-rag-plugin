@@ -33,11 +33,13 @@ import type {
 } from '../types/messages'
 import { ALL_CATEGORY_ID, catNavItems, filterByCategory, filterQaRecords } from './logic'
 import {
+  IMAGE_PLACEHOLDER,
   LOW_CONFIDENCE_LINE,
   MAX_GOLDENS_PER_QUESTION,
   UNCATEGORIZED_CATEGORY_ID,
   isLowConfidenceCategory,
 } from '../shared/constants'
+import { thumbUrl } from '../shared/images'
 import {
   Btn,
   CatNav,
@@ -375,33 +377,63 @@ export function MemoryListTab({
                       </div>
                     )}
 
-                    {item.replies.map((r) => (
-                      <div className="pddcs-reply" key={r.id}>
-                        <span className="rt">{r.text}</span>
-                        <span className="ric">
-                          <IconBtn
-                            title={r.goldenId ? '取消标准回答' : '设为标准回答'}
-                            on={!!r.goldenId}
-                            busy={busyReplyId === r.id}
-                            disabled={busyReplyId !== null && busyReplyId !== r.id}
-                            onClick={() => void toggleGolden(item, r)}
-                          >
-                            {busyReplyId === r.id ? (
-                              <LoaderIcon size={size.iconBtn} strokeWidth={2} />
-                            ) : (
-                              <StarIcon
-                                size={size.iconBtn}
-                                strokeWidth={2}
-                                style={r.goldenId ? { fill: 'currentColor' } : undefined}
-                              />
-                            )}
-                          </IconBtn>
-                          <IconBtn title="复制该条回复" onClick={() => void copyReply(r.text)}>
-                            <CopyIcon size={size.iconBtn} strokeWidth={2} />
-                          </IconBtn>
-                        </span>
-                      </div>
-                    ))}
+                    {item.replies.map((r) => {
+                      // 图片附件(2026-10-23):纯图片回复的正文是占位符「[图片]」,
+                      // 展示上把缩略图放在正文前;复制动作对纯图片改成复制图片地址
+                      const imgs = r.attachments ?? []
+                      const text = r.text.trim()
+                      // 纯图片回复没有正文:新记录是空串,旧记录是占位符「[图片]」——
+                      // 两种都不显示那四个字,只显示缩略图
+                      const showText =
+                        text.length > 0 && !(imgs.length > 0 && text === IMAGE_PLACEHOLDER)
+                      const copyValue = showText ? r.text : (imgs[0]?.url ?? '')
+                      return (
+                        <div className="pddcs-reply" key={r.id}>
+                          {imgs.length > 0 && (
+                            <span className="pddcs-reply-imgs">
+                              {imgs.map((a) => (
+                                <a
+                                  className="pddcs-reply-img"
+                                  key={a.url}
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="打开原图"
+                                >
+                                  <img src={thumbUrl(a.url, 96)} alt="图片回复" loading="lazy" />
+                                </a>
+                              ))}
+                            </span>
+                          )}
+                          {showText && <span className="rt">{r.text}</span>}
+                          <span className="ric">
+                            <IconBtn
+                              title={r.goldenId ? '取消标准回答' : '设为标准回答'}
+                              on={!!r.goldenId}
+                              busy={busyReplyId === r.id}
+                              disabled={busyReplyId !== null && busyReplyId !== r.id}
+                              onClick={() => void toggleGolden(item, r)}
+                            >
+                              {busyReplyId === r.id ? (
+                                <LoaderIcon size={size.iconBtn} strokeWidth={2} />
+                              ) : (
+                                <StarIcon
+                                  size={size.iconBtn}
+                                  strokeWidth={2}
+                                  style={r.goldenId ? { fill: 'currentColor' } : undefined}
+                                />
+                              )}
+                            </IconBtn>
+                            <IconBtn
+                              title={showText ? '复制该条回复' : '复制图片地址'}
+                              onClick={() => void copyReply(copyValue)}
+                            >
+                              <CopyIcon size={size.iconBtn} strokeWidth={2} />
+                            </IconBtn>
+                          </span>
+                        </div>
+                      )
+                    })}
 
                     {/* 删除的二次确认:入口在问题行(常驻图标),确认条就地出现在展开区底部 ——
                         破坏性操作一定要二次确认,但不该把用户推到另一个页面去确认 */}

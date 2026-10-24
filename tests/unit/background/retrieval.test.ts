@@ -171,6 +171,17 @@ describe('assembleSuggestions:展开回复/折叠/金标准置顶', () => {
     expect(out[0].replyId).toBe('r2') // 同分取最新 ts
   })
 
+  it('纯图片回复:正文相同但图片不同 → 不折叠(折叠键含附件 URL)', () => {
+    const imgReplies = new Map<string, RetReply[]>([
+      ['i1', [{ qaId: 'i1', id: 'r1', text: '[图片]', ts: 100, attachments: [{ type: 'image', url: 'https://x/a.jpeg' }] }]],
+      ['i2', [{ qaId: 'i2', id: 'r2', text: '[图片]', ts: 200, attachments: [{ type: 'image', url: 'https://x/b.jpeg' }] }]],
+    ])
+    const ranked = [sameText('i1', 0.9, 0.03), sameText('i2', 0.9, 0.02)]
+    const out = assembleSuggestions(ranked, { getReplies: (id) => imgReplies.get(id)!, getGoldenAnswer: () => '', goldenPriority, now: 1000 })
+    expect(out.filter((s) => s.kind === 'history')).toHaveLength(2)
+    expect(out.every((s) => s.attachments?.length === 1)).toBe(true)
+  })
+
   it('金标准与历史同文本 → 显示金标准并置顶', () => {
     const answers2 = new Map([['g1', '支持七天无理由']])
     const ranked = [sameText('h1', 0.9, 0.03), { source: mkSource('g1', 'golden', '退货政策'), cosine: 0.85, rrfScore: 0.02 }]

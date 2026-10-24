@@ -692,15 +692,17 @@ export function SettingsTab({ onDataChanged }: { onDataChanged: () => Promise<vo
           id="set-search"
           icon={<SlidersIcon size={16} strokeWidth={2} />}
           title="检索与填充"
-          summary={`${draft.directFillEnabled ? '直接填充' : '弹面板选择'} · 保留 ${draft.retentionDays} 天`}
+          summary={`${draft.directFillEnabled ? '自动选首条' : '弹面板选择'} · 保留 ${draft.retentionDays} 天`}
         >
           <Toggle
-            label="自动回复"
-            desc="开:直接填充第一条;关:弹面板人工选择"
+            label="自动选择首条"
+            desc="开:点 AI 回复时不再弹面板,直接用第一条候选(只填充,不发送)"
             checked={draft.directFillEnabled}
             onChange={(v) => void persist({ ...draft, directFillEnabled: v })}
           />
           <HotkeyRow
+            label="唤起快捷键"
+            desc="在聊天页按此键唤起推荐面板"
             hotkey={draft.autoReplyHotkey}
             onChange={(hk) => void persist({ ...draft, autoReplyHotkey: hk })}
           />
@@ -809,11 +811,11 @@ export function SettingsTab({ onDataChanged }: { onDataChanged: () => Promise<vo
 
           {/* 数据边界那三句解释已删(v3.0 做减法):「什么会外发」属于全工具的统一口径,
               写在「关于」卡一处即可 —— 每张能联网的卡各说一遍,等于哪儿都没说清。
-              这里只保留**会改变行为的自检**:与「自动回复」互斥这件事是操作性的,
+              这里只保留**会改变行为的自检**:与「自动选择首条」互斥这件事是操作性的,
               不说用户只会以为功能坏了(ADR-0006 的外发边界原样留在 ADR 与关于卡里) */}
           {draft.directFillEnabled && (
             <NoteRow tone="danger">
-              <span>当前已开启「自动回复」,AI 整合不会生效。</span>
+              <span>当前已开启「自动选择首条」,AI 整合不会生效。</span>
             </NoteRow>
           )}
 

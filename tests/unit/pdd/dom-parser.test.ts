@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   extractMessages,
+  normalizeImageUrl,
   parseTimeText,
   type DomMessage,
 } from '../../../src/pdd/dom-parser'
@@ -44,6 +45,22 @@ const IMAGE_ROW = `<li id="middlePanel_list_1788858679999" class="clearfix onems
       <span><img src="https://savatar.pddpic.com/a/y.png"></span>
       <div currentuid="1875210170836">
         <div class="msg-content"><img src="https://img.pddpic.com/p.jpg"></div>
+      </div>
+    </div>
+  </div>
+</li>`
+
+/** 图片消息(2026-10-23 校准):.msg-content.image-msg > .msg-img-container > img.img-msg-thumb */
+const IMAGE_MSG_ROW = `<li id="middlePanel_list_1788858679999" class="clearfix onemsg">
+  <div class="merchantMessage">
+    <div class="cs-item isread">
+      <span><img src="https://commimg.pddpic.com/a.png" class="avatar"></span>
+      <div currentuid="1875210170836">
+        <div class="msg-content image-msg buyer-img-st">
+          <div class="msg-img-container" style="width: 171.5px; height: 200px;">
+            <img title="图片" src="https://chat-img.pddugc.com/chat-pic-mall-cs-v1/2026-10-23/b2a623ff.jpeg?imageMogr2/thumbnail/800x800gt;" alt="" class="img-msg-thumb">
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -163,5 +180,41 @@ describe('extractMessages: 真机消息列表 DOM → 文本消息流', () => {
   it('类型收窄:extractMessages 返回值满足 DomMessage', () => {
     const msgs: DomMessage[] = extractMessages(wrap(BUYER_ROW))
     expect(msgs.every((m) => m.role === 'buyer' || m.role === 'agent')).toBe(true)
+  })
+})
+
+describe('图片消息:占位正文 + URL 附件', () => {
+  it('纯图片回复 → 空正文 + 原图 base(七牛处理参数被剥掉)', () => {
+    const msgs = extractMessages(wrap(IMAGE_MSG_ROW))
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].role).toBe('agent')
+    // 占位符只给买家问题用;客服纯图片回复的正文是空串
+    expect(msgs[0].text).toBe('')
+    expect(msgs[0].attachments).toEqual([
+      {
+        type: 'image',
+        url: 'https://chat-img.pddugc.com/chat-pic-mall-cs-v1/2026-10-23/b2a623ff.jpeg',
+      },
+    ])
+  })
+
+  it('头像/普通文本行不会被误认成附件(只认 .image-msg 里的 .img-msg-thumb)', () => {
+    const msgs = extractMessages(wrap(BUYER_ROW, AGENT_ROW))
+    expect(msgs.every((m) => m.attachments === undefined)).toBe(true)
+  })
+})
+
+describe('normalizeImageUrl: 只留原图 base', () => {
+  it('剥掉查询串与锚点', () => {
+    expect(
+      normalizeImageUrl('https://chat-img.pddugc.com/a.jpeg?imageMogr2/thumbnail/800x800gt;#frag'),
+    ).toBe('https://chat-img.pddugc.com/a.jpeg')
+  })
+
+  it('相对路径/空值/非 http(s) → undefined', () => {
+    expect(normalizeImageUrl('/a.jpeg')).toBeUndefined()
+    expect(normalizeImageUrl('')).toBeUndefined()
+    expect(normalizeImageUrl(undefined)).toBeUndefined()
+    expect(normalizeImageUrl('data:image/png;base64,xx')).toBeUndefined()
   })
 })

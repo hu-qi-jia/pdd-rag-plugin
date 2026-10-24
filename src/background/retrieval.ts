@@ -12,9 +12,10 @@
  *  - 折叠现实来源 = 不同问答下相同回复文本 / 金标准与历史同文本
  *    (同一条问答内部已在捕获时按 contentHash 幂等)。
  */
-import { hashText } from '../shared/text'
+import { hashReplyContent, hashText } from '../shared/text'
 import { UNCATEGORIZED_CATEGORY_ID } from '../shared/constants'
 import type { Suggestion } from '../types/messages'
+import type { ImageAttachment } from '../types/memory'
 
 export type { Suggestion }
 
@@ -44,6 +45,8 @@ export interface RetReply {
   id: string
   text: string
   ts: number
+  /** 图片附件(图片回复的 text 是「[图片]」) */
+  attachments?: ImageAttachment[]
 }
 
 /** 过阈源 + 融合得分 */
@@ -238,6 +241,8 @@ export function assembleSuggestions(
   opts: {
     getReplies: (qaId: string) => RetReply[]
     getGoldenAnswer: (goldenId: string) => string
+    /** 金标准的图片附件(可选:老调用方不传 = 无图,与知识库候选同口径) */
+    getGoldenAttachments?: (goldenId: string) => ImageAttachment[] | undefined
     getKbContent?: (id: string) => string
     goldenPriority: boolean
     now: number
@@ -254,9 +259,11 @@ export function assembleSuggestions(
     if (r.source.kind === 'golden') {
       const answer = opts.getGoldenAnswer(r.source.id)
       if (!answer) continue
+      const goldenImgs = opts.getGoldenAttachments?.(r.source.id)
       candidates.push({
         kind: 'golden',
         text: answer,
+        ...(goldenImgs?.length ? { attachments: goldenImgs } : {}),
         sourceQuestion: r.source.question,
         score: r.cosine,
         sourceId: r.source.id,
@@ -284,10 +291,12 @@ export function assembleSuggestions(
       continue
     }
     for (const reply of opts.getReplies(r.source.id)) {
-      if (!reply.text) continue
+      // 纯图片回复没有正文;只要带附件,它就是一条合法候选
+      if (!reply.text && !reply.attachments?.length) continue
       candidates.push({
         kind: 'history',
         text: reply.text,
+        ...(reply.attachments?.length ? { attachments: reply.attachments } : {}),
         sourceQuestion: r.source.question,
         score: r.cosine,
         sourceId: r.source.id,
@@ -302,7 +311,8 @@ export function assembleSuggestions(
   // 同内容折叠:hashText 相同即同内容;金标准优先,其次历史,再次高分,平分取最新
   const groups = new Map<string, Cand[]>()
   for (const c of candidates) {
-    const key = hashText(c.text)
+    // 纯图片候选的正文都是「[图片]」:折叠键必须带上附件 URL,否则不同图片会被合并
+    const key = hashReplyContent(c.text, c.attachments)
     const g = groups.get(key)
     if (g) g.push(c)
     else groups.set(key, [c])
@@ -362,6 +372,7 @@ export function assembleSuggestions(
     .map((c) => ({
       kind: c.kind,
       text: c.text,
+      ...(c.attachments?.length ? { attachments: c.attachments } : {}),
       sourceQuestion: c.sourceQuestion,
       score: c.score,
       sourceId: c.sourceId,

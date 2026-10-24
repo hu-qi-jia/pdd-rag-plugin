@@ -1,13 +1,17 @@
 // ─── 检索与候选消息(content UI → SW,P2)───────────────────────────────────────
 // query = 买家问题(合并全文);SW 混合检索后返回折叠排序的候选。
 
+import type { ImageAttachment } from '../memory'
+
 // ─── GET_SUGGESTIONS:候选查询 ────────────────────────────────────────────────
 
 /** 检索候选(弹窗/直填消费);来源 kind 决定徽标与直填优先级 */
 export interface Suggestion {
   kind: 'golden' | 'knowledge' | 'history'
-  /** 回复正文(填充/复制的内容) */
+  /** 回复正文(填充/复制的内容;纯图片回复是「[图片]」) */
   text: string
+  /** 图片附件(URL);知识库候选目前恒为空 */
+  attachments?: ImageAttachment[]
   /** 来源问题的原始全文(UI 截断展示) */
   sourceQuestion: string
   /** 展示得分 = 来源问题的原始余弦(0~1) */
@@ -30,7 +34,7 @@ export interface UiSettings {
   goldenPriorityEnabled: boolean
   /**
    * 是否渲染「根据知识库内容整合并回复」那一行。SW 单方判定(开关 + 已配 API +
-   * 非自动回复 + 本轮有知识库候选),content 不自行推断 —— 免得两边口径漂移。
+   * 非自动选择首条 + 本轮有知识库候选),content 不自行推断 —— 免得两边口径漂移。
    */
   aiAvailable: boolean
   /**
@@ -42,7 +46,7 @@ export interface UiSettings {
   sizeRoute?: boolean
   /**
    * 尺码生成行**是否可渲染**(第五十八轮):`sizeRoute` 之外还要满足 spec §8.1 前提
-   * ——至少一篇被标记的尺码表 + 三道外发闸门(开关/已配 LLM/非自动回复)。
+   * ——至少一篇被标记的尺码表 + 三道外发闸门(开关/已配 LLM/非自动选择首条)。
    * 与 `aiAvailable` 同源同构:SW 单方判定,content 只照渲染,免得两边口径漂移。
    * 缺省(undefined)=不渲染(旧语义,响应体里不写这个键)。
    */

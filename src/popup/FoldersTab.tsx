@@ -28,10 +28,13 @@ import type {
   UpdateGoldenResponse,
 } from '../types/messages'
 import {
+  IMAGE_PLACEHOLDER,
   LOW_CONFIDENCE_LINE,
   MAX_GOLDENS_PER_QUESTION,
   isLowConfidenceCategory,
 } from '../shared/constants'
+import { thumbUrl } from '../shared/images'
+import type { ImageAttachment } from '../types/memory'
 import {
   ALL_CATEGORY_ID,
   catNavItems,
@@ -78,6 +81,9 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftQ, setDraftQ] = useState('')
   const [draftA, setDraftA] = useState('')
+  /** 编辑中的图片附件(与 draftQ/draftA 同生共死:保存才落库) */
+  const [draftImgs, setDraftImgs] = useState<ImageAttachment[]>([])
+  const [imgUrl, setImgUrl] = useState('')
   const [movingId, setMovingId] = useState<string | null>(null)
   const [confirmGoldenDelete, setConfirmGoldenDelete] = useState<string | null>(null)
 
@@ -169,17 +175,32 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
   const startEdit = (g: PanelGolden) => {
     setEditingId(g.id)
     setDraftQ(g.question)
-    setDraftA(g.answer)
+    // 纯图片标准回答存的是占位符;编辑器里不显示它,留着只会在保存时被当成正文
+    setDraftA(
+      (g.attachments?.length ?? 0) > 0 && g.answer.trim() === IMAGE_PLACEHOLDER ? '' : g.answer,
+    )
+    setDraftImgs(g.attachments ?? [])
+    setImgUrl('')
     setMovingId(null)
     setConfirmGoldenDelete(null)
   }
 
   const submitEdit = async () => {
     if (!editingId) return
+    // 只有图片、没有文字时,标准回答仍需要一个非空 answer 才过校验 —— 用占位符兜底
+    const answer = draftA.trim() ? draftA : draftImgs.length > 0 ? IMAGE_PLACEHOLDER : draftA
+    const originalImgs = goldens.find((g) => g.id === editingId)?.attachments ?? []
+    const imgsChanged = JSON.stringify(originalImgs) !== JSON.stringify(draftImgs)
     try {
       const resp = await sendMessage<UpdateGoldenResponse>({
         type: 'UPDATE_GOLDEN',
-        payload: { id: editingId, question: draftQ, answer: draftA },
+        payload: {
+          id: editingId,
+          question: draftQ,
+          answer,
+          // 图片没动就不发 —— 请求体保持"只带改动",也避免无谓的写库
+          ...(imgsChanged ? { attachments: draftImgs } : {}),
+        },
       })
       if (resp.payload.error) {
         setMsg({ ok: false, text: `保存失败:${resp.payload.error}` })
@@ -321,6 +342,49 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
               className="pddcs-input"
               style={inputStyle({ resize: 'vertical' })}
             />
+            <div className="pddcs-gimgs">
+              {draftImgs.map((a) => (
+                <span className="pddcs-gimg" key={a.url}>
+                  <a className="pddcs-gimg-a" href={a.url} target="_blank" rel="noreferrer" title="打开原图">
+                    <img src={thumbUrl(a.url, 96)} alt="图片附件" loading="lazy" />
+                  </a>
+                  <button
+                    type="button"
+                    className="pddcs-gimg-x"
+                    title="移除这张图"
+                    aria-label="移除这张图"
+                    onClick={() => setDraftImgs((prev) => prev.filter((x) => x.url !== a.url))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: spacing.md, alignItems: 'center' }}>
+              <input
+                className="pddcs-input"
+                placeholder="粘贴图片地址(https://…)"
+                value={imgUrl}
+                onChange={(e) => setImgUrl(e.target.value)}
+                style={{ ...inputStyle({}), flex: 1, minWidth: 0 }}
+              />
+              <Btn
+                variant="ghost"
+                onClick={() => {
+                  const url = imgUrl.trim()
+                  if (!/^https?:\/\//i.test(url)) {
+                    setMsg({ ok: false, text: '图片地址需以 http(s):// 开头' })
+                    return
+                  }
+                  setDraftImgs((prev) =>
+                    prev.some((x) => x.url === url) ? prev : [...prev, { type: 'image', url }],
+                  )
+                  setImgUrl('')
+                }}
+              >
+                添加图片
+              </Btn>
+            </div>
             <div style={{ display: 'flex', gap: spacing.md }}>
               <Btn variant="primary" onClick={() => void submitEdit()} title="保存后自动重新生成问题向量">
                 保存
@@ -383,13 +447,35 @@ export function FoldersTab({ onDataChanged }: { onDataChanged: () => Promise<voi
           )}
         </div>
 
-        {/* 答案是成品,完整直出 —— 不折叠、不截断 */}
-        <div className="pddcs-qa-line">
-          <span className="pddcs-qa" aria-hidden>
-            A
-          </span>
-          <span className="txt a">{g.answer}</span>
-        </div>
+        {/* 答案是成品,完整直出 —— 不折叠、不截断。
+            纯图片回答存的是占位符,只显示图,不显示那四个字 */}
+        {!(g.answer.trim() === IMAGE_PLACEHOLDER && (g.attachments?.length ?? 0) > 0) && (
+          <div className="pddcs-qa-line">
+            <span className="pddcs-qa" aria-hidden>
+              A
+            </span>
+            <span className="txt a">{g.answer}</span>
+          </div>
+        )}
+
+        {/* 图片附件:提升自历史回复时自动带过来;卡片上只读,编辑态才能增删 */}
+        {(g.attachments?.length ?? 0) > 0 && (
+          <div className="pddcs-gimgs">
+            {g.attachments!.map((a) => (
+              <span className="pddcs-gimg" key={a.url}>
+                <a
+                  className="pddcs-gimg-a"
+                  href={a.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="打开原图"
+                >
+                  <img src={thumbUrl(a.url, 96)} alt="图片附件" loading="lazy" />
+                </a>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="pddcs-gops">
           {confirmGoldenDelete === g.id ? (

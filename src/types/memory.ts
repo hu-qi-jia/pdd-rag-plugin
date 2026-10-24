@@ -6,6 +6,25 @@
 /** 会话消息角色 —— 平台 JSON 中 from.role 的映射(user→buyer, mall_cs→agent) */
 export type PddRole = 'buyer' | 'agent'
 
+/**
+ * 消息附件(图片)。
+ *
+ * v1 **只存 URL,不下载二进制**:2026-10-23 真机校准确认,客服/买家图片在 DOM 里
+ * 就是一条 `<div class="msg-content image-msg">` 包着一张 CDN 直链
+ * (`chat-img.pddugc.com/chat-pic-mall-cs-v1/<日期>/<uuid>.jpeg`),地址不带签名、
+ * 没有过期参数,原图与缩略图同一个 base —— 展示侧按需拼 `?imageMogr2/thumbnail/WxH`
+ * 就有任意尺寸,存储与导出都只多一个字符串。
+ *
+ * 代价:链接若被平台清理就失效。兜底方案是"本地缓存 blob",作为后续开关(见设计文档 §6.5)。
+ */
+export interface ImageAttachment {
+  type: 'image'
+  /** 原图直链:已剥掉七牛处理参数(?imageMogr2/…),展示时再按需拼 */
+  url: string
+  /** 来源消息的平台幂等键(去重与溯源;DOM 路线的行 id 毫秒号) */
+  msgId?: string
+}
+
 /** 问答记录(qaRecords):一次捕获单元 = 买家问题 + 挂载其下的客服回复;仅存保留期内 */
 export interface QaRecord {
   /** 主键 uuid */
@@ -56,6 +75,8 @@ export interface ReplyRecord {
   msgId?: string
   /** 平台消息时间 */
   ts: number
+  /** 图片附件(客服发出的图片;纯文本回复没有这个字段) */
+  attachments?: ImageAttachment[]
   /** v1 回复不单独向量化:字段预留,恒 0 */
   hasEmbedding: number
   embeddingModel?: string
@@ -72,6 +93,8 @@ export interface GoldenRecord {
   question: string
   /** 标准回复字段(可编辑) */
   answer: string
+  /** 随答案一起沉淀的图片(提升时从来源回复复制;纯文本标准回答没有这个字段) */
+  attachments?: ImageAttachment[]
   /** 归一化哈希 —— 导入/提升幂等去重 */
   questionHash: string
   /** 问题锚向量;编辑保存即作废旧向量、自动重嵌 */
@@ -223,7 +246,7 @@ export interface HotkeyConfig {
 // ─── 设置(chrome.storage.local) ────────────────────────────────────────────────
 
 export interface PddSettings {
-  /** 直接填充开关:开 → 不弹窗,按优先级填充;默认关 */
+  /** 直接填充开关(「自动选择首条」):开 → 不弹窗,直接用第一条候选;默认关 */
   directFillEnabled: boolean
   /** 历史回答相似度阈值(0~1),默认 0.5 */
   simThreshold: number
@@ -235,7 +258,7 @@ export interface PddSettings {
   retentionDays: number
   /** 候选排序"金标准优先"开关,默认开 */
   goldenPriorityEnabled: boolean
-  /** 「自动回复」快捷键(默认 Ctrl+Enter):关=弹推荐回复面板再按 Enter 填第一条;开=直接填第一条 */
+  /** 「自动选择首条」快捷键(默认 Ctrl+Enter):关=弹推荐回复面板再按 Enter 填第一条;开=直接填第一条 */
   autoReplyHotkey: HotkeyConfig
   /** 推荐面板「下一候选」键(默认 Tab,可单键)。反向键与 Shift+同键已于第二十四轮移除,只保留正向循环 */
   panelNavHotkey: HotkeyConfig

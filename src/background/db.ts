@@ -619,6 +619,18 @@ export class PddDatabase extends Dexie {
     return count > 0;
   }
 
+  /** 同问答同内容的首条回复(幂等复用:重放时要拿它的 id 继续更新) */
+  async findReplyByContent(
+    qaId: string,
+    contentHash: string,
+  ): Promise<ReplyRecord | undefined> {
+    return this.replies
+      .where("qaId")
+      .equals(qaId)
+      .filter((r) => r.contentHash === contentHash)
+      .first();
+  }
+
   async getRepliesForQa(qaId: string): Promise<ReplyRecord[]> {
     return this.replies.where("qaId").equals(qaId).sortBy("ts");
   }

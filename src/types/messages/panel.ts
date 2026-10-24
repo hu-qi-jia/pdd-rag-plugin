@@ -1,12 +1,16 @@
 // ─── 面板消息(popup → SW,P3):记忆列表 / 金标准 / 文件夹 ────────────────────
 // 面板线类型:剥离向量字段,减小消息体积(向量只活在 SW/IndexedDB 内)。
 
+import type { ImageAttachment } from '../memory'
+
 // ─── 记忆列表 ─────────────────────────────────────────────────────────────────
 
 export interface MemoryReplyItem {
   id: string
   text: string
   ts: number
+  /** 图片附件;纯图片回复的 text 是「[图片]」 */
+  attachments?: ImageAttachment[]
   /** 该回复已被提升为标准回答时的金标准 id(goldens.sourceReplyId 反查,2026-09-15 PM1) */
   goldenId?: string
 }
@@ -84,6 +88,8 @@ export interface PanelGolden {
   folderId: string | null
   question: string
   answer: string
+  /** 随答案沉淀的图片(URL) */
+  attachments?: ImageAttachment[]
   hasEmbedding: number
   updatedAt: number
   /** 问题类型 id;**已归一**(缺省 → 'uncategorized') */
@@ -168,6 +174,8 @@ export interface UpdateGoldenRequest {
     question?: string
     answer?: string
     folderId?: string | null
+    /** 图片附件;不传 = 不改,传空数组 = 全部移除 */
+    attachments?: ImageAttachment[]
   }
 }
 

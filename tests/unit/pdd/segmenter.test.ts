@@ -24,6 +24,8 @@ function makeFake(): { store: FakeStore; hooks: SegmenterHooks } {
     },
     async attachReply(ctx) {
       store.attached.push(ctx)
+      // 模拟落盘端:首条新建返回 id,后续消息带 replyId 回来继续更新同一条
+      return ctx.replyId ?? `rep-${store.attached.length}`
     },
     async recentQaId(sessionKey) {
       return store.recent.get(sessionKey)
@@ -39,7 +41,7 @@ describe('PddSegmenter: 会话内问答分段状态机', () => {
 
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '这个杯子能保温多久?', ts: 1000 })
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '12 小时以上哦。', ts: 4000 })
-    await seg.settled()
+    await seg.onIdle('s1') // 客服回复段在空闲/买家再次开口时落盘
 
     expect(store.closed).toHaveLength(1)
     expect(store.closed[0].question).toBe('这个杯子能保温多久?')
@@ -55,7 +57,7 @@ describe('PddSegmenter: 会话内问答分段状态机', () => {
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '什么颜色好看?', ts: 3000 })
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '粉色有吗?', ts: 5000 })
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '都有现货,粉色最受欢迎。', ts: 9000 })
-    await seg.settled()
+    await seg.onIdle('s1')
 
     expect(store.closed).toHaveLength(1)
     expect(store.closed[0].question).toBe('有货吗?\n什么颜色好看?\n粉色有吗?')
@@ -81,7 +83,7 @@ describe('PddSegmenter: 会话内问答分段状态机', () => {
     const seg = new PddSegmenter(hooks)
 
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '您好,欢迎光临~', ts: 1000 })
-    await seg.settled()
+    await seg.onIdle('s1')
 
     expect(store.closed).toHaveLength(0)
     expect(store.attached).toHaveLength(1)
@@ -122,7 +124,7 @@ describe('PddSegmenter: 会话内问答分段状态机', () => {
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '答一', ts: 2000 })
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '问二', ts: 3000 })
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '答二', ts: 4000 })
-    await seg.settled()
+    await seg.onIdle('s1')
 
     expect(store.closed).toHaveLength(2)
     expect(store.closed.map((c) => c.question)).toEqual(['问一', '问二'])
@@ -138,7 +140,8 @@ describe('PddSegmenter: 会话内问答分段状态机', () => {
     seg.onMessage({ sessionKey: 's2', role: 'buyer', text: 'B 的提问', ts: 2000 })
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: 'A 的回复', ts: 3000 })
     seg.onMessage({ sessionKey: 's2', role: 'agent', text: 'B 的回复', ts: 4000 })
-    await seg.settled()
+    await seg.onIdle('s1')
+    await seg.onIdle('s2')
 
     expect(store.closed).toHaveLength(2)
     expect(store.closed.map((c) => c.sessionKey).sort()).toEqual(['s1', 's2'])
@@ -179,7 +182,7 @@ describe('PddSegmenter: msgId 透传(库级幂等锚点)', () => {
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '有货吗?', msgId: 'b-1', ts: 1000 })
     seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '粉色有吗?', msgId: 'b-2', ts: 3000 })
     seg.onMessage({ sessionKey: 's1', role: 'agent', text: '都有现货。', msgId: 'a-1', ts: 9000 })
-    await seg.settled()
+    await seg.onIdle('s1')
 
     expect(store.closed[0].firstMsgId).toBe('b-1')
     expect(store.attached[0].msgId).toBe('a-1')
@@ -206,17 +209,17 @@ describe('PddSegmenter: 快照导出/恢复(SW 休眠防御)', () => {
     seg.onMessage({ sessionKey: 's2', role: 'buyer', text: '包邮吗?', ts: 2000 })
     const snap = await seg.exportState()
 
-    expect(snap.s1).toEqual({
+    expect(snap.questions!.s1).toEqual({
       buyerTexts: ['有货吗?'],
       firstMsgId: 'b-1',
       firstTs: 1000,
       buyerIdTail: undefined,
     })
-    expect(Object.keys(snap).sort()).toEqual(['s1', 's2'])
+    expect(Object.keys(snap.questions!).sort()).toEqual(['s1', 's2'])
 
     await seg.onIdle('s1')
     const after = await seg.exportState()
-    expect(Object.keys(after)).toEqual(['s2'])
+    expect(Object.keys(after.questions!)).toEqual(['s2'])
   })
 
   it('★ 回归:restore 往返后(SW 重启模拟)agent 消息到达仍能关闭恢复的问题段', async () => {
@@ -232,7 +235,7 @@ describe('PddSegmenter: 快照导出/恢复(SW 休眠防御)', () => {
     await seg2.restoreState(snap)
 
     seg2.onMessage({ sessionKey: 's1', role: 'agent', text: '可以的哦。', ts: 9000 })
-    await seg2.settled()
+    await seg2.onIdle('s1')
 
     expect(store2.closed).toHaveLength(1)
     expect(store2.closed[0]).toMatchObject({
@@ -242,7 +245,7 @@ describe('PddSegmenter: 快照导出/恢复(SW 休眠防御)', () => {
     })
     expect(store2.attached[0]).toMatchObject({ text: '可以的哦。' })
     // 快照对象本身未被改动(恢复为拷贝)
-    expect(snap.s1.buyerTexts).toEqual(['能开发票吗?', '电子版就行'])
+    expect(snap.questions!.s1.buyerTexts).toEqual(['能开发票吗?', '电子版就行'])
   })
 
   it('空快照 restore 为 no-op,不产生副作用', async () => {
@@ -255,5 +258,111 @@ describe('PddSegmenter: 快照导出/恢复(SW 休眠防御)', () => {
 
     expect(store.closed).toHaveLength(0)
     expect(store.attached).toHaveLength(0)
+  })
+
+  it('客服只发图片也算回复:关闭问题段,附件挂到回复上', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+    const shot = { type: 'image' as const, url: 'https://chat-img.pddugc.com/a.jpeg' }
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '能发个实拍图吗?', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '', ts: 2000, attachments: [shot] })
+    await seg.onIdle('s1')
+
+    expect(store.closed).toHaveLength(1)
+    // 纯图片回复没有正文(占位符只给买家问题用)
+    expect(store.attached[0]).toMatchObject({ qaId: 'qa-1', text: '', attachments: [shot] })
+  })
+
+  it('客服连发"一句话 + 一张图"合并成同一条回复', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+    const shot = { type: 'image' as const, url: 'https://chat-img.pddugc.com/guide.jpeg' }
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '这个怎么用', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '您好,可以看一下操作指南', ts: 2000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '', ts: 2500, attachments: [shot] })
+    await seg.onIdle('s1')
+
+    // 记录是"即时写入 + 后续更新":第一条先落文字,第二条把它更新成"文字 + 图片"
+    expect(store.attached).toHaveLength(2)
+    expect(store.attached[0]).toMatchObject({ qaId: 'qa-1', text: '您好,可以看一下操作指南' })
+    expect(store.attached[1]).toMatchObject({
+      qaId: 'qa-1',
+      text: '您好,可以看一下操作指南',
+      attachments: [shot],
+      replyId: 'rep-1',
+    })
+  })
+
+  it('客服连发两条文字也合并成一条回复(不再碎成两条)', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '多久发货', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '48 小时内发出', ts: 2000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '偏远地区顺延一天', ts: 3000 })
+    await seg.onIdle('s1')
+
+    // 即时写入 + 后续更新:第一条先落"48 小时内发出",第二条把同一条更新成两句
+    expect(store.attached).toHaveLength(2)
+    expect(store.attached[1]).toMatchObject({ replyId: 'rep-1' })
+    expect(store.attached[1].text).toBe('48 小时内发出\n偏远地区顺延一天')
+  })
+
+  it('买家再次开口立刻结掉上一段回复,不会被下一轮吞掉', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '有红色吗', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '有的', ts: 2000 })
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '那蓝色呢', ts: 3000 })
+    await seg.settled()
+
+    expect(store.attached.map((a) => a.text)).toEqual(['有的'])
+    expect(store.attached[0].qaId).toBe('qa-1')
+  })
+
+  it('买家图片并入问题段:占位符只记一次,不把"图图图"堆进问题正文', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '[图片]', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '[图片]', ts: 1500 })
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '这个颜色有吗?', ts: 2000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '有的哦。', ts: 3000 })
+    await seg.settled()
+
+    expect(store.closed[0].question).toBe('[图片]\n这个颜色有吗?')
+  })
+})
+
+describe('回复合并的边界:以问题为界', () => {
+  it('同一问题的连续客服消息合并;买家开新问题后另起一条,绝不并入上一条', async () => {
+    const { store, hooks } = makeFake()
+    const seg = new PddSegmenter(hooks)
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '问题一', ts: 1000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '答一甲', ts: 2000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '答一乙', ts: 3000 })
+    await seg.settled()
+
+    // 同一问题内:第二条更新第一条(同一个 replyId、同一个 qaId)
+    expect(store.attached).toHaveLength(2)
+    expect(store.attached[0]).toMatchObject({ qaId: 'qa-1', text: '答一甲' })
+    expect(store.attached[1]).toMatchObject({
+      qaId: 'qa-1',
+      replyId: 'rep-1',
+      text: '答一甲\n答一乙',
+    })
+
+    seg.onMessage({ sessionKey: 's1', role: 'buyer', text: '问题二', ts: 4000 })
+    seg.onMessage({ sessionKey: 's1', role: 'agent', text: '答二', ts: 5000 })
+    await seg.settled()
+
+    const last = store.attached[store.attached.length - 1]
+    expect(last.qaId).toBe('qa-2')
+    expect(last.replyId).toBeUndefined()
+    expect(last.text).toBe('答二')
   })
 })

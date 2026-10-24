@@ -13,6 +13,7 @@ import {
   aiButtonY,
   popupPosition,
   scrollForSelection,
+  isImageOnlySuggestion,
 } from '../../../src/pdd/ui-logic'
 import type { Suggestion } from '../../../src/types/messages'
 
@@ -160,5 +161,21 @@ describe('kindLabel:候选类别 → 中文名(第五十一轮单点化)', () =>
 
   it('历史不叫「历史回忆」—— 徽标与「已填充:…」提示此前各说一个词', () => {
     expect(kindLabel('history')).not.toContain('回忆')
+  })
+})
+
+describe('isImageOnlySuggestion:图片候选不参与填充', () => {
+  const img = { type: 'image' as const, url: 'https://chat-img.pddugc.com/a.jpeg' }
+
+  it('占位符正文 + 有附件 → 是图片候选', () => {
+    expect(isImageOnlySuggestion({ ...sug('[图片]'), attachments: [img] })).toBe(true)
+  })
+
+  it('带文字的回复即使有附件也照常可填', () => {
+    expect(isImageOnlySuggestion({ ...sug('这是实拍图'), attachments: [img] })).toBe(false)
+  })
+
+  it('没有附件 → 不是(普通文本候选)', () => {
+    expect(isImageOnlySuggestion(sug('[图片]'))).toBe(false)
   })
 })

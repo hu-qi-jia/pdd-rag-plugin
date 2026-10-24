@@ -13,7 +13,7 @@
 // 一改 '2.0' → '2.1' 会把用户手里所有存量备份直接拒收。新增字段一律走
 // "旧文件没有该字段 → 导入端按缺省处理"这条路(KbDoc.isSizeTable 当年就是这么做的)。
 
-import type { CategoryRecord, FolderRecord, PddSettings } from './memory'
+import type { CategoryRecord, FolderRecord, ImageAttachment, PddSettings } from './memory'
 
 /**
  * 分类字段在导出记录上的公共形状。
@@ -53,6 +53,8 @@ export interface ExportedGolden extends ExportedCategoryFields {
   answer: string
   questionHash: string
   hasEmbedding: number
+  /** 随答案沉淀的图片(URL);旧备份没有该字段 → 按无图处理 */
+  attachments?: ImageAttachment[]
   sourceRecordId?: string
   sourceReplyId?: string
   createdAt: number
@@ -81,6 +83,8 @@ export interface ExportedReply {
   contentHash: string
   msgId?: string
   ts: number
+  /** 图片附件(URL);旧备份没有该字段 → 按无图处理 */
+  attachments?: ImageAttachment[]
   hasEmbedding: number
 }
 

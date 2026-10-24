@@ -13,6 +13,7 @@ import { queueEmbedding } from "./offscreen";
 import { hashText, normalizeText } from "../shared/text";
 import { planGoldenAdd, planGoldenEdit } from "./goldenEdit";
 import {
+  IMAGE_PLACEHOLDER,
   MAX_GOLDENS_PER_QUESTION,
   UNCATEGORIZED_CATEGORY_ID,
   UNCATEGORIZED_FOLDER_ID,
@@ -46,7 +47,24 @@ export async function addGoldenFromSuggestion(
 ): Promise<AddGoldenOutcome> {
   const question = normalizeText(payload.question ?? "");
   const siblings = question ? await siblingsOf(hashText(question)) : [];
-  const plan = planGoldenAdd(siblings, { question: question, answer: payload.answer ?? "" }, MAX_GOLDENS_PER_QUESTION);
+
+  // 图片随标准回答一起沉淀:提升时从来源回复复制附件(URL 是平台 CDN 直链,
+  // 复制一个字符串即可;回复被 TTL 清掉后标准回答里的图仍在)
+  const sourceReply = payload.sourceReplyId
+    ? await db.replies.get(payload.sourceReplyId)
+    : undefined;
+
+  // 纯图片回复的正文是空串,但标准回答的 answer 必须有值(校验与检索都靠它)——
+  // 用占位符兜底;界面在"有附件 + 正文是占位符"时不显示那四个字
+  const answerInput =
+    normalizeText(payload.answer ?? "") ||
+    (sourceReply?.attachments?.length ? IMAGE_PLACEHOLDER : "");
+
+  const plan = planGoldenAdd(
+    siblings,
+    { question: question, answer: answerInput },
+    MAX_GOLDENS_PER_QUESTION,
+  );
 
   if (plan.action === "invalid") return { error: plan.error };
   if (plan.action === "exists") {
@@ -54,7 +72,7 @@ export async function addGoldenFromSuggestion(
   }
   if (plan.action === "limit") return { limitReached: true, count: plan.count };
 
-  const answer = normalizeText(payload.answer ?? "");
+  const answer = answerInput;
   const now = Date.now();
   const id = `gd-${now}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -70,6 +88,7 @@ export async function addGoldenFromSuggestion(
     folderId: UNCATEGORIZED_FOLDER_ID,
     question,
     answer,
+    ...(sourceReply?.attachments ? { attachments: sourceReply.attachments } : {}),
     questionHash: hashText(question),
     hasEmbedding: 0,
     sourceRecordId: payload.sourceRecordId,
@@ -127,6 +146,8 @@ export async function updateGoldenWithReembed(
 
   const patch = { ...plan.updates };
   if (plan.reembed) patch.hasEmbedding = 0;
+  // 图片附件独立于"问题/答案是否实质变更":只改图不该触发重嵌(向量锚是问题)
+  if (payload.attachments !== undefined) patch.attachments = payload.attachments;
   await db.updateGolden(payload.id, patch);
   if (plan.reembed) {
     queueEmbedding("golden", payload.id, patch.question ?? existing.question);

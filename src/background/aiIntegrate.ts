@@ -1,7 +1,7 @@
 /**
  * AI 整合编排(P4 AI 整合):门禁 → 取材料 → 流式生成 → 转发给面板。
  *
- * 门禁先于一切 IO:开关关闭、未配 API、「自动回复」开启、本轮无知识库候选 ——
+ * 门禁先于一切 IO:开关关闭、未配 API、「自动选择首条」开启、本轮无知识库候选 ——
  * 四条任一不成立就直接返回,**一次 fetch 都不发**。这是 ADR-0006 里那条
  * 「不开启则扩展保持完全本地」的落点。
  *
@@ -15,7 +15,7 @@ import { AI_PORT_NAME, type AiIntegrateRequest, type AiPortEvent } from '../type
 
 /** 面板整合行的渲染门禁(与 handleAiIntegrate 的前三条门禁同源,不可分叉) */
 export function aiRowAvailable(s: PddSettings, hasKnowledgeCandidate: boolean): boolean {
-  // 「自动回复」开 → 走直接填充,不弹面板,也就没有整合行
+  // 「自动选择首条」开 → 走直接填充,不弹面板,也就没有整合行
   if (!s.aiIntegrateEnabled || s.directFillEnabled) return false
   if (!isLlmConfigured(llmConfigFromSettings(s))) return false
   return hasKnowledgeCandidate
@@ -25,7 +25,7 @@ export function aiRowAvailable(s: PddSettings, hasKnowledgeCandidate: boolean): 
  * 尺码生成行的渲染门禁(spec §8.1 前提)——**与知识库整合行同一套外发闸门**,不新增开关:
  *   ① `aiIntegrateEnabled`(ADR-0006 的总开关)
  *   ② 已配 LLM
- *   ③ 非「自动回复」(那条路径不弹面板、不调 LLM)
+ *   ③ 非「自动选择首条」(那条路径不弹面板、不调 LLM)
  * 外加 §8.1 的前提 1:**至少一篇被标记的尺码表** —— 没有材料,发出去也无意义。
  *
  * 与 aiRowAvailable 的差别只在"候选"的含义:那边是本轮知识库候选,这边是尺码表文档。

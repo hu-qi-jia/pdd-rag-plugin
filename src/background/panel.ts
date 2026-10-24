@@ -50,7 +50,13 @@ export async function getMemoryList(
   for (const r of replies) {
     const list = byQa.get(r.qaId) ?? [];
     const goldenId = goldenByReply.get(r.id);
-    list.push({ id: r.id, text: r.text, ts: r.ts, ...(goldenId ? { goldenId } : {}) });
+    list.push({
+      id: r.id,
+      text: r.text,
+      ts: r.ts,
+      ...(r.attachments ? { attachments: r.attachments } : {}),
+      ...(goldenId ? { goldenId } : {}),
+    });
     byQa.set(r.qaId, list);
   }
 
@@ -131,6 +137,7 @@ export async function getPanelData(
       folderId: g.folderId,
       question: g.question,
       answer: g.answer,
+      ...(g.attachments?.length ? { attachments: g.attachments } : {}),
       hasEmbedding: g.hasEmbedding,
       updatedAt: g.updatedAt,
       categoryId: g.categoryId ?? UNCATEGORIZED_CATEGORY_ID,

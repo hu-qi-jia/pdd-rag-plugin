@@ -6,6 +6,7 @@
 // 此处不再截断。
 
 import type { Suggestion } from "../types/messages";
+import { IMAGE_PLACEHOLDER } from "../shared/constants";
 
 export type UiAction =
   | { action: "none" }
@@ -38,6 +39,20 @@ export function kindLabel(kind: Suggestion["kind"]): string {
 }
 
 /** 候选列表 + 直填开关 → UI 动作 */
+/**
+ * 纯图片候选:带附件,且正文就是占位符「[图片]」。
+ *
+ * 这类候选**不参与填充** —— 输入框只收文本,填进去的只会是那四个字,
+ * 客服以为回了、买家收到一句占位符。所有填充入口都必须先问过它
+ * (直填判定 / 自动选择首条 / 键盘 Enter / 弹窗转发填充)。
+ */
+export function isImageOnlySuggestion(s: Suggestion): boolean {
+  if (!s.attachments?.length) return false
+  const text = s.text.trim()
+  // 新记录:纯图片回复的正文是空串;旧记录:正文是占位符「[图片]」
+  return text === '' || text === IMAGE_PLACEHOLDER
+}
+
 export function decideUiAction(
   suggestions: Suggestion[],
   directFillEnabled: boolean,

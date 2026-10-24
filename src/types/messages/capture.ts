@@ -1,7 +1,7 @@
 // ─── 捕获链路消息(content 桥 → SW,P1)────────────────────────────────────────
 // 页面内采集到的会话事件批量上报;SW 侧做 msgId 幂等 + 分段状态机落盘。
 
-import type { PddRole } from '../memory'
+import type { PddRole, ImageAttachment } from '../memory'
 
 /** 单条捕获消息(网络层解析产物或 DOM 兜底) */
 export interface PddCapturedMsg {
@@ -10,6 +10,8 @@ export interface PddCapturedMsg {
   source: 'net' | 'dom'
   role: PddRole
   text: string
+  /** 图片附件;纯图片消息的 text 是占位符「[图片]」 */
+  attachments?: ImageAttachment[]
   /** 平台消息幂等键(网络层 msg_id) */
   msgId?: string
   /** 平台时间(毫秒);缺失由接收端补 now */

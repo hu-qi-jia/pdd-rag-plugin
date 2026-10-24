@@ -330,6 +330,27 @@ button, input, textarea, select { font-family: inherit; }
 .pddcs-reply .rt { flex: 1; min-width: 0; font-size: ${fontSize.sub}px; line-height: 1.7;
   color: var(--pddcs-text-secondary); white-space: pre-wrap; word-break: break-word; }
 .pddcs-reply .ric { display: flex; gap: 2px; flex-shrink: 0; }
+/* 回复里的图片附件:44px 方形缩略图,尺寸取"一行文字高度"上下,不把行撑高。
+   圆角用 control 档(13)—— 卡片内的小方块再往上走就成胶囊了 */
+.pddcs-reply-imgs { display: flex; gap: ${spacing.xs}px; flex-shrink: 0; }
+.pddcs-reply-img { display: block; width: 44px; height: 44px; overflow: hidden;
+  border-radius: ${radius.control}px; border: 1px solid var(--pddcs-border);
+  background: var(--pddcs-surface); }
+.pddcs-reply-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 标准回答卡/编辑态里的图片附件:与回复行同一档尺寸(44)。
+   外层只做定位(overflow 必须可见,移除钮要压出角外),裁切交给内层链接 */
+.pddcs-gimgs { display: flex; flex-wrap: wrap; gap: ${spacing.sm}px; margin-top: ${spacing.lg}px; }
+.pddcs-gimg { position: relative; display: block; width: 44px; height: 44px; }
+.pddcs-gimg-a { display: block; width: 100%; height: 100%; overflow: hidden;
+  border-radius: ${radius.control}px; border: 1px solid var(--pddcs-border);
+  background: var(--pddcs-surface); }
+.pddcs-gimg-a img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pddcs-gimg-x { position: absolute; top: -6px; right: -6px; box-sizing: border-box;
+  width: 18px; height: 18px; padding: 0; border-radius: ${radius.pill}px;
+  border: 1px solid var(--pddcs-border); background: var(--pddcs-surface);
+  color: var(--pddcs-text-secondary); font-size: ${fontSize.cap}px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.pddcs-gimg-x:hover { color: var(--pddcs-text); }
 .pddcs-qopen-foot { display: flex; justify-content: flex-start; margin-top: ${spacing.md}px; }
 
 /* ── 标准回答卡 / 知识库卡 ──────────────────────────────────────────────────

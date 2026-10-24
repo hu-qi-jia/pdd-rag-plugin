@@ -137,6 +137,22 @@ describe('buildExportEnvelope', () => {
     expect(g.question).toBe('问题一')
   })
 
+  it('图片附件原样往返:导出不剥 URL,导入计划带着它', () => {
+    const img = { type: 'image' as const, url: 'https://chat-img.pddugc.com/chat-pic-mall-cs-v1/2026-10-23/a.jpeg' }
+    const g: GoldenRecord = { ...golden('g-img', '能看实拍吗'), attachments: [img] }
+    const env = buildExportEnvelope({
+      goldens: [g],
+      folders: [],
+      settings: DEFAULT_SETTINGS,
+      includeMemory: false,
+      exportedAt: 1,
+    })
+    expect(env.goldens[0].attachments).toEqual([img])
+
+    const plan = planGoldenImports(env.goldens, goldenImportContext([]), MAX_GOLDENS_PER_QUESTION)
+    expect(plan.toAdd[0].attachments).toEqual([img])
+  })
+
   it('includeMemory=false 不含 qaRecords/replies 字段', () => {
     const env = buildExportEnvelope({
       goldens: [],

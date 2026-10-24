@@ -67,7 +67,7 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
   //   aiIntegrateEnabled ∧ ¬directFillEnabled ∧ isLlmConfigured ∧ hasSizeTableDoc
   // (四条的判定集中在 aiIntegrate.sizeRowAvailable,此处不另起一套口径。)
   //
-  // 为什么 directFillEnabled 也算前提:"自动回复"开着时,尺码那条路径既不弹面板、
+  // 为什么 directFillEnabled 也算前提:"自动选择首条"开着时,尺码那条路径既不弹面板、
   // 也不调 LLM —— 尺码路线**没有任何交付渠道**,取它等于什么都没发生。没有渠道 =
   // 前提不满足,与"没材料"同义。
   //
@@ -130,7 +130,13 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
     const replies = await db.getRepliesByQaIds(qaIds);
     for (const r of replies) {
       const list = repliesByQa.get(r.qaId) ?? [];
-      list.push({ qaId: r.qaId, id: r.id, text: r.text, ts: r.ts });
+      list.push({
+        qaId: r.qaId,
+        id: r.id,
+        text: r.text,
+        ts: r.ts,
+        ...(r.attachments?.length ? { attachments: r.attachments } : {}),
+      });
       repliesByQa.set(r.qaId, list);
     }
   }
@@ -158,6 +164,7 @@ export async function searchSuggestions(rawQuery: string): Promise<SearchOutcome
   const suggestions = assembleSuggestions(ranked, {
     getReplies: (id) => repliesByQa.get(id) ?? [],
     getGoldenAnswer: (id) => goldensById.get(id)?.answer ?? "",
+    getGoldenAttachments: (id) => goldensById.get(id)?.attachments,
     getKbContent: (id) => kbById.get(id)?.content ?? "",
     goldenPriority: settings.goldenPriorityEnabled,
     now,

@@ -11,6 +11,14 @@ export const UNCATEGORIZED_FOLDER_NAME = '默认文件夹'
 /** 自检(示例)数据专用会话标识:统计时排除、一键清理 */
 export const SELF_TEST_SESSION_KEY = '__pddcs_selftest__'
 
+/**
+ * 纯图片消息的正文占位符。
+ *
+ * 捕获(dom-parser)、落盘(ingest 的"无文本"判据)与面板展示三处必须同一口径:
+ * 空串会被 ingest 当成"无文本"整条丢掉,纯图片回复就再也进不了记忆。
+ */
+export const IMAGE_PLACEHOLDER = '[图片]'
+
 /** 推荐回复快捷键(主键取 KeyboardEvent.key,如 Enter / a / ArrowDown)默认值 */
 export const DEFAULT_HOTKEY: HotkeyConfig = {
   ctrl: true,

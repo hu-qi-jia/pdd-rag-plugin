@@ -28,3 +28,18 @@ export function hashText(text: string): string {
   if (!normalized) return 'empty'
   return `${fnv1a(normalized).toString(16)}-${normalized.length}`
 }
+
+/**
+ * 回复内容的哈希口径(捕获幂等 + 候选折叠 + 导出折叠共用一处)。
+ *
+ * 纯图片回复的正文都是「[图片]」,只拿正文做哈希会把同一问题下的不同图片
+ * 折叠成一条 —— 附件 URL 一并纳入。纯文本回复与旧口径**完全一致**,
+ * 存量 contentHash 不受影响。
+ */
+export function hashReplyContent(
+  text: string,
+  attachments?: ReadonlyArray<{ url: string }>,
+): string {
+  if (!attachments?.length) return hashText(text)
+  return hashText(`${text}|${attachments.map((a) => a.url).join(',')}`)
+}

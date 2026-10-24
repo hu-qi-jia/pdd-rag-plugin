@@ -75,6 +75,7 @@ const stripGolden = (g: GoldenRecord): ExportedGolden => ({
   folderId: g.folderId,
   question: g.question,
   answer: g.answer,
+  ...(g.attachments?.length ? { attachments: g.attachments } : {}),
   questionHash: g.questionHash,
   hasEmbedding: 0,
   ...(g.sourceRecordId !== undefined ? { sourceRecordId: g.sourceRecordId } : {}),
@@ -106,6 +107,7 @@ const stripReply = (r: ReplyRecord): ExportedReply => ({
   text: r.text,
   contentHash: r.contentHash,
   ...(r.msgId !== undefined ? { msgId: r.msgId } : {}),
+  ...(r.attachments?.length ? { attachments: r.attachments } : {}),
   ts: r.ts,
   hasEmbedding: 0,
 })
@@ -329,6 +331,7 @@ export function planGoldenImports(
       folderId: g.folderId,
       question: g.question,
       answer: g.answer,
+      ...(g.attachments?.length ? { attachments: g.attachments } : {}),
       questionHash: g.questionHash,
       hasEmbedding: 0,
       ...(g.sourceRecordId !== undefined ? { sourceRecordId: g.sourceRecordId } : {}),
@@ -434,6 +437,7 @@ export function planMemoryImports(
       text: r.text,
       contentHash: r.contentHash,
       ...(r.msgId !== undefined ? { msgId: r.msgId } : {}),
+      ...(r.attachments?.length ? { attachments: r.attachments } : {}),
       ts: r.ts,
       hasEmbedding: 0,
     })

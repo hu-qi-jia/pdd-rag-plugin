@@ -216,6 +216,27 @@ ${thinScrollbarCss('.pddcs-popup-body', tk.scrollThumb)}
 .pddcs-cand-q { margin-bottom: ${ROW_GAP_Y}px; color: ${tk.textTertiary};
   font-size: ${panelType.meta.size}px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 图片附件:48px 缩略图一行。宽度取"两条正文行高",在候选行里不喧宾夺主;
+   圆角用控件档,与候选内的标签/按钮同一套几何 */
+.pddcs-cand-imgs { display: flex; gap: ${spacing.sm}px; margin-top: ${ROW_GAP_Y}px; }
+.pddcs-cand-img { display: block; width: 48px; height: 48px; overflow: hidden; padding: 0;
+  box-sizing: border-box; cursor: pointer;
+  border-radius: ${radius.control}px; border: 1px solid ${tk.border};
+  background: ${tk.fill}; }
+.pddcs-cand-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* 图片预览:页内遮罩,不跳标签页(客服正在核对回复,跳走会打断会话)。
+   z-index 比浮层再高一档 —— 它要盖住推荐面板本身 */
+.pddcs-imgv { position: fixed; inset: 0; z-index: 2147483001; pointer-events: auto;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.72); }
+.pddcs-imgv-img { max-width: min(86vw, 900px); max-height: 84vh;
+  border-radius: ${radius.card}px; box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+.pddcs-imgv-close { position: absolute; top: 20px; right: 24px; width: 36px; height: 36px;
+  padding: 0; border: none; border-radius: ${radius.pill}px; cursor: pointer;
+  background: rgba(255,255,255,.16); color: #fff; font-size: 22px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; }
+.pddcs-imgv-close:hover { background: rgba(255,255,255,.28); }
 
 /* ── 「根据知识库内容整合并回复」行 ────────────────────────────────────────
    它是**一次动作**,不是一条候选 —— 靠**底色**说清楚,不靠描边(v4.0 把框去掉了:

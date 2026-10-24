@@ -12,7 +12,8 @@ import { classifyRecord } from "./classify";
 import { queueEmbedding } from "./offscreen";
 import { PddSegmenter, type SegmenterHooks, type SegmenterSnapshot } from "../pdd/segmenter";
 import { loadSettings } from "./settings";
-import { hashText, normalizeText } from "../shared/text";
+import { hashReplyContent, hashText, normalizeText } from "../shared/text";
+import { IMAGE_PLACEHOLDER } from "../shared/constants";
 import type { QaRecord, ReplyRecord } from '../types/memory';
 import type { PddIngestRequest, PddIngestResponse } from "../types/messages";
 
@@ -97,30 +98,59 @@ const segmenterHooks: SegmenterHooks = {
     }
   },
 
-  /** 回复挂到 qaId;同内容(contentHash)幂等,附言计数刷新 */
+  /**
+   * 回复落盘:一段连续客服消息 = 一条 replies。
+   *
+   * 首条消息新建记录,后续消息带 replyId 回来**更新同一条**(文本合并、附件累加)——
+   * 这样既保留了"一句话 + 一张图算一条回复"的合并口径,又能**即时入库**,
+   * 不必等买家开口或 3 分钟空闲(那会让面板看起来"没记录")。
+   */
   async attachReply(ctx) {
     try {
       const qa = await db.getQaRecord(ctx.qaId);
-      if (!qa) return; // 问答已被 TTL/删除 → 丢弃孤回复
+      if (!qa) return undefined; // 问答已被 TTL/删除 → 丢弃孤回复
 
-      // 库级 msgId 幂等(SW 重启后重放防御,优先于内容折叠判定)
-      if (ctx.msgId && (await db.findReplyByMsgId(ctx.msgId))) return;
+      const contentHash = hashReplyContent(ctx.text, ctx.attachments);
 
-      const contentHash = hashText(ctx.text);
-      if (await db.hasReplyContent(ctx.qaId, contentHash)) return;
+      // 段内后续消息:更新已有记录
+      if (ctx.replyId) {
+        const existing = await db.replies.get(ctx.replyId);
+        if (existing) {
+          await db.replies.update(ctx.replyId, {
+            text: ctx.text,
+            contentHash,
+            ts: ctx.ts,
+            ...(ctx.attachments?.length ? { attachments: ctx.attachments } : {}),
+          });
+          return ctx.replyId;
+        }
+      }
+
+      // 库级 msgId 幂等(页面重放/重渲染):复用既有记录,段内后续消息接着更新它
+      const firstMsgId = ctx.firstMsgId ?? ctx.msgId;
+      if (firstMsgId) {
+        const known = await db.findReplyByMsgId(firstMsgId);
+        if (known) return known.id;
+      }
+
+      // 同问题同内容已在 → 复用,避免重放造出第二条
+      const dup = await db.findReplyByContent(ctx.qaId, contentHash);
+      if (dup) return dup.id;
 
       const id = crypto.randomUUID();
       const reply: ReplyRecord = {
         id,
         qaId: ctx.qaId,
         text: ctx.text,
+        ...(ctx.attachments ? { attachments: ctx.attachments } : {}),
         contentHash,
-        msgId: ctx.msgId,
+        msgId: firstMsgId,
         ts: ctx.ts,
         hasEmbedding: 0,
       };
       await db.addReply(reply);
       await db.recountReplyCount(ctx.qaId);
+      return id;
     } catch (err) {
       await hookLog("attachReply", { qaId: ctx.qaId, t: ctx.text.slice(0, 60) }, err);
       throw err;
@@ -227,8 +257,10 @@ export async function handlePddIngest(
         tabSessions.set(senderTabId, sessionKey);
       }
 
-      const text = normalizeText(m.text);
-      if (!text) {
+      // 图片消息没有正文:买家侧补占位符(问题正文不能为空),客服侧允许空正文(由附件承载)
+      const rawText = normalizeText(m.text);
+      const text = rawText || (m.attachments?.length ? (m.role === "buyer" ? IMAGE_PLACEHOLDER : "") : "");
+      if (!text && !m.attachments?.length) {
         markSkip("notext");
         continue;
       }
@@ -242,7 +274,11 @@ export async function handlePddIngest(
 
       // 消息级幂等:DOM 行 id 为平台毫秒号(重放/重渲染/重开会话均靠它去重)。
       // 内存 seen 随 SW 休眠丢失 → 未命中时再查库(SW 重启后 content 重放防御)
-      if (m.msgId) {
+      //
+      // ⚠️ **只对买家消息做**。客服消息现在按"连续消息合并成一条回复"落盘,
+      // 若在入口把段里的第一条按 msgId 丢掉,重放时这段就会少一句话、落出一条残缺回复;
+      // 客服侧的幂等交给 flush 时的 contentHash 与首条 msgId(attachReply 内既有)。
+      if (m.msgId && m.role === "buyer") {
         if (isMsgIdSeen(sessionKey, m.msgId)) {
           markSkip("dupmsgid");
           continue;
@@ -264,6 +300,7 @@ export async function handlePddIngest(
         sessionKey,
         role: m.role,
         text,
+        ...(m.attachments ? { attachments: m.attachments } : {}),
         msgId: m.msgId,
         ts,
         buyerIdTail: ev.buyerIdTail ?? m.buyerIdTail,

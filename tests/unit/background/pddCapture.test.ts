@@ -20,6 +20,7 @@ vi.mock('../../../src/background/db', () => {
       }),
       getQaRecord: vi.fn(async (id: string) => qaStore.get(id)),
       hasReplyContent: vi.fn(async () => false),
+      findReplyByContent: vi.fn(async () => undefined),
       addReply: vi.fn(async () => undefined),
       recountReplyCount: vi.fn(async () => undefined),
       updateQaCategory: vi.fn(async () => undefined),
@@ -107,11 +108,13 @@ describe('handlePddIngest: 会话解析', () => {
               ts: Date.now(),
             },
           },
+          // 客服回复段在 idle/买家再次开口时落盘(2026-10-24 合并口径)
+          { kind: 'idle', sessionKey: 'u1875210170836' },
         ],
       },
     })
 
-    expect(resp.queued).toBe(2)
+    expect(resp.queued).toBe(3)
     expect(resp.skipped).toBe(0)
     expect(db.addQaRecord).toHaveBeenCalledTimes(1)
     expect(vi.mocked(db.addQaRecord).mock.calls[0][0]).toMatchObject({
@@ -172,6 +175,8 @@ describe('handlePddIngest: msgId 库级幂等(SW 重启后重放防御)', () => 
     // 内存 seenMsgIds 随 SW 休眠已丢失(mock 里 find* 命中既有记录 = 库里已有)
     vi.mocked(db.findQaByMsgId).mockResolvedValue({ id: 'qa-exist' } as QaRecord)
     vi.mocked(db.findReplyByMsgId).mockResolvedValue({ id: 'r-exist' } as ReplyRecord)
+    // 客服消息不再在入口按 msgId 拦截(合并回复需要完整段),改为 flush 时查库
+    vi.mocked(db.latestQaOfSession).mockResolvedValue({ id: 'qa-exist' } as QaRecord)
     const ts = Date.now()
     const resp = await ingest({
       type: 'PDD_INGEST',
@@ -195,12 +200,13 @@ describe('handlePddIngest: msgId 库级幂等(SW 重启后重放防御)', () => 
               ts,
             },
           },
+          { kind: 'idle', sessionKey: 'u8888' },
         ],
       },
     })
 
-    expect(resp.queued).toBe(0)
-    expect(resp.detail).toContain('dupmsgid=2')
+    // 买家消息仍由入口的 msgId 查重拦下;客服消息进段,落盘时再由 attachReply 的 msgId 拦
+    expect(resp.detail).toContain('dupmsgid=1')
     expect(db.addQaRecord).not.toHaveBeenCalled()
     expect(db.addReply).not.toHaveBeenCalled()
   })
@@ -227,6 +233,7 @@ describe('handlePddIngest: msgId 库级幂等(SW 重启后重放防御)', () => 
             buyerIdTail: '7777',
             msg: { source: 'dom', role: 'agent', text: '48 小时内发货。', msgId: 'a-new', ts },
           },
+          { kind: 'idle', sessionKey: 'u7777' },
         ],
       },
     })
@@ -267,9 +274,9 @@ describe('未结段持久化(chrome.storage.session,SW 休眠防御)', () => {
 
     expect(chromeMock.storage.session.set).toHaveBeenCalled()
     const arg = vi.mocked(chromeMock.storage.session.set).mock.calls[0][0] as {
-      pddSegmenterState: Record<string, { buyerTexts: string[] }>
+      pddSegmenterState: { questions: Record<string, { buyerTexts: string[] }> }
     }
-    expect(arg.pddSegmenterState.u6666).toMatchObject({ buyerTexts: ['还在吗?'] })
+    expect(arg.pddSegmenterState.questions.u6666).toMatchObject({ buyerTexts: ['还在吗?'] })
   })
 
   it('SW 重启后 restoreSegmenterState 恢复未结段:agent 回复到达仍能配对落盘', async () => {
@@ -299,6 +306,7 @@ describe('未结段持久化(chrome.storage.session,SW 休眠防御)', () => {
               ts: Date.now(),
             },
           },
+          { kind: 'idle', sessionKey: 'u5555' },
         ],
       },
     })

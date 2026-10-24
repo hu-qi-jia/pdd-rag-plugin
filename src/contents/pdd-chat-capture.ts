@@ -3,7 +3,8 @@
  *
  * 读取渲染结果而非网络层:观察 #msgListContainer 消息列表,
  * 新出现的文本行(买家/客服)去重后批量上报 SW(PDD_INGEST)。
- * 不上报非文本行(图片/商品卡),不改写页面,不自动发送(见 docs/adr/0002 边界)。
+ * 图片消息按「[图片] + 附件 URL」上报(2026-10-23);商品卡/表情仍跳过。
+ * 不改写页面,不自动发送(见 docs/adr/0002 边界)。
  *
  * 会话级语义:
  *  - 切换会话(检测到会话键变化) → 先发 leave 关闭上一会话未结问题段
@@ -32,7 +33,35 @@ let listEl: Element | null = null
 let lastSessionKey: string | undefined
 let pendingScan = 0
 let idleTimer = 0
-let seen = new Set<string>()
+const SEEN_KEY = 'pddcs:seenRows'
+
+/**
+ * 已处理行 id **跨页面刷新保留**(同一标签页的 sessionStorage)。
+ *
+ * 2026-10-24 实机问题:刷新后整表重放,买家消息在 SW 入口按 msgId 被拦下、
+ * 客服消息没有(为了合并回复需要完整段)—— 于是几十条旧客服消息重新进入分段器,
+ * 被合并成一条并挂到最早的问答上,新回复看着"没记录"或记到了旧问题下。
+ * 记住已处理的行,重放就真正变成 no-op;新会话/新标签页仍是空集,回填照常。
+ */
+function readSeen(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(SEEN_KEY)
+    const arr = raw ? (JSON.parse(raw) as unknown) : []
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeSeen(): void {
+  try {
+    window.sessionStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-MAX_SEEN)))
+  } catch {
+    /* 存不进去就退回纯内存去重 */
+  }
+}
+
+let seen = new Set<string>(readSeen())
 
 function markSeen(key: string): void {
   if (seen.size >= MAX_SEEN) {
@@ -112,6 +141,7 @@ function scanOnce(): void {
         source: 'dom',
         role: r.role,
         text: r.text,
+        ...(r.attachments ? { attachments: r.attachments } : {}),
         msgId: r.msgId,
         ts: r.ts,
       },
@@ -123,6 +153,7 @@ function scanOnce(): void {
       )
     }
   }
+  if (added > 0) writeSeen()
   if (added > 0 || events.length > 0) {
     if (curSession) lastSessionKey = curSession
     sendEvents(events)
@@ -169,7 +200,8 @@ window.setInterval(() => {
     return
   }
   listEl = null
-  seen = new Set() // 新节点会重放已有行,去重交给 SW(内存 + 库级 msgId)
+  // 新节点会重放已有行:从 sessionStorage 重新载入已处理集合,别把重放当新消息
+  seen = new Set(readSeen())
   tries = 0
   waitContainer()
 }, SCAN_MS)

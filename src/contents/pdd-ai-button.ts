@@ -7,7 +7,7 @@
  *  - 状态机:无候选提示 / 单候选或直填开关开 → 直填 / 多候选弹推荐回复面板
  *    (条数 = 检索侧类别配额:标准回答/历史/知识库各至多 3;
  *     快捷键唤起的面板与此完全同构,共用 openPopup)
- *  - 快捷键面板(自动回复关):Tab/Shift+Tab 移动选中项(键可在设置自定义,
+ *  - 快捷键面板(自动选择关):Tab/Shift+Tab 移动选中项(键可在设置自定义,
  *    第二十二轮;↑↓ 与平台切换会话冲突已让位),Enter 填充**选中项**
  *    (选中态**只认键盘**:鼠标悬浮不改选中、也不给悬浮回执 —— 第五十三轮)
  *  - 弹窗:金标准徽标+置顶、同内容×n、原始问题摘要、设为金标准、仅复制
@@ -53,13 +53,15 @@ import {
   isRowVisible,
   kindLabel,
   mergeBuyerQuery,
+  isImageOnlySuggestion,
   moveSelection,
   popupPosition,
   scrollForSelection,
   type UiAction,
 } from '../pdd/ui-logic'
 import { findBubbleElement } from '../pdd/bubble-anchor'
-import { DEFAULT_HOTKEY, DEFAULT_SETTINGS, MAX_GOLDENS_PER_QUESTION, SETTINGS_STORAGE_KEY } from '../shared/constants'
+import { DEFAULT_HOTKEY, DEFAULT_SETTINGS, IMAGE_PLACEHOLDER, MAX_GOLDENS_PER_QUESTION, SETTINGS_STORAGE_KEY } from '../shared/constants'
+import { thumbUrl } from '../shared/images'
 import {
   fillEventOf,
   type MetricEventKey,
@@ -394,6 +396,16 @@ async function onButtonClick(li: Element, btn: HTMLButtonElement): Promise<void>
   }
   if (act.action === 'fill') {
     const s = suggestions[act.fillIndex]
+    // 带图的候选不进"直填":直填是"不弹面板直接填",而图片一旦填就是发出去。
+    // 这种候选一律退回面板,让用户明确点一次(与自动选择首条同一条口径)
+    if (s.attachments?.length) {
+      trackEvent('panel.open.click')
+      openPopup(btn, suggestions, query, {
+        aiAvailable: settings.aiAvailable,
+        sizeAvailable: settings.sizeAvailable,
+      })
+      return
+    }
     if (fillInput(s.text)) {
       trackFill(s)
       toast(
@@ -517,7 +529,7 @@ function setBusy(btn: HTMLButtonElement, on: boolean): void {
 /**
  * 生成行(P4 AI 整合;第五十八轮加尺码来源)。
  *
- * 只在 SW 判定行可用(aiAvailable / sizeAvailable:开关开 + 已配 API + 非自动回复 +
+ * 只在 SW 判定行可用(aiAvailable / sizeAvailable:开关开 + 已配 API + 非自动选择首条 +
  * 有材料)时才由 openPopup 渲染;点它才发起请求 —— 面板出现本身不产生任何网络流量。
  * 结果直接填输入框,但**发送仍由人工点击**(与候选行同一条硬边界)。
  *
@@ -660,10 +672,145 @@ function aiIntegrateRow(
   return row
 }
 
+// ─── 图片候选:预览而不是"填" ──────────────────────────────────────────────────
+//
+// 输入框只收文本。图片候选若照常走 fillInput,填进去的只会是「[图片]」四个字 ——
+// 客服看着像已经回了,买家收到的却是一句占位符。所以图片候选一律**不参与填充**:
+// 点它(或键盘 Enter)打开页内大图,想发就复制地址/另存后手动上传。
+// 用页内预览而不是新标签页:客服在核对回复,跳走一个 tab 会打断手上的会话。
+
+function onPreviewKey(ev: KeyboardEvent): void {
+  if (ev.key !== 'Escape') return
+  ev.stopPropagation()
+  closeImagePreview()
+}
+
+function closeImagePreview(): void {
+  document.getElementById('pddcs-imgv')?.remove()
+  window.removeEventListener('keydown', onPreviewKey, true)
+}
+
+function openImagePreview(url: string): void {
+  closeImagePreview()
+  const wrap = document.createElement('div')
+  wrap.className = 'pddcs-imgv'
+  wrap.id = 'pddcs-imgv'
+  const img = document.createElement('img')
+  img.className = 'pddcs-imgv-img'
+  img.src = url
+  img.alt = '图片回复'
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.className = 'pddcs-imgv-close'
+  close.textContent = '×'
+  close.title = '关闭( Esc )'
+  close.setAttribute('aria-label', '关闭图片预览')
+  close.addEventListener('click', (ev) => {
+    ev.stopPropagation()
+    closeImagePreview()
+  })
+  // 点遮罩关闭;点图片本身不关
+  wrap.addEventListener('click', (ev) => {
+    if (ev.target === wrap) closeImagePreview()
+  })
+  wrap.append(img, close)
+  ensureOverlay().appendChild(wrap)
+  window.addEventListener('keydown', onPreviewKey, true)
+}
+
+// ─── 图片:放进输入框(不发送) ────────────────────────────────────────────────
+//
+// 图片没法像文字那样"填"。平台回复框里有一个隐藏的上传输入框
+// `input[type=file][accept*=image]`:把图设进去并 dispatch change,平台会走它自己的
+// 上传流程 —— 图进入待发送区、并弹出「是否发送图片」,**最后一下仍由人工点**。
+// (2026-10-24:自动确认、自动发送都已按用户要求移除,这里只负责"把图递到门口"。)
+
+const IMAGE_FILE_SEL = 'input[type=file][accept*="image"]'
+let imageBusy = false
+
+async function prepareImageFiles(s: Suggestion): Promise<File[]> {
+  const files: File[] = []
+  for (const a of s.attachments ?? []) {
+    try {
+      const res = await fetch(thumbUrl(a.url, 800))
+      if (!res.ok) continue
+      const blob = await res.blob()
+      const type = blob.type || 'image/jpeg'
+      const ext = type === 'image/png' ? 'png' : 'jpg'
+      files.push(new File([blob], `pddcs-${Date.now()}${files.length}.${ext}`, { type }))
+    } catch {
+      /* 单张失败跳过;全部失败按 failed 处理 */
+    }
+  }
+  return files
+}
+
+/** 把候选里的图片放进平台输入框;成功后用 successMsg 提示(发送仍由人工完成) */
+function stageImages(s: Suggestion, successMsg: string): void {
+  if (imageBusy) return
+  imageBusy = true
+  void (async () => {
+    const input = document.querySelector<HTMLInputElement>(IMAGE_FILE_SEL)
+    if (!input) {
+      toast('未找到图片上传入口,请手动上传')
+      return
+    }
+    const files = await prepareImageFiles(s)
+    if (files.length === 0) {
+      toast('图片下载失败,请手动上传')
+      return
+    }
+    const dt = new DataTransfer()
+    for (const f of files) dt.items.add(f)
+    input.files = dt.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    toast(successMsg)
+  })().finally(() => {
+    imageBusy = false
+  })
+}
+
+/**
+ * 使用一条候选 —— **只填充/上传,绝不发送**。
+ *
+ * 2026-10-24 用户决定砍掉"选中即发送"(平台的 isTrusted 守卫让自动发送只能依赖
+ * 组件内部方法)。现在的口径:
+ *  - 纯文字 → 填进输入框,发送由人工点;
+ *  - 纯图片 → **上传进输入框**(平台弹「是否发送图片」),由人工确认后发出;
+ *  - 文字+图片 → 填文字 + 上传图片,两者都由人工发送。
+ */
+function applySuggestion(s: Suggestion): void {
+  const imgs = s.attachments ?? []
+  const imageOnly = isImageOnlySuggestion(s)
+
+  if (imageOnly) {
+    stageImages(s, '图片已放入输入框,请在平台弹框点「发送」')
+    closePopup()
+    return
+  }
+
+  const text = s.text.trim()
+  if (text) {
+    if (!fillInput(text)) {
+      toast('未找到输入框,请手动粘贴')
+      return
+    }
+    trackFill(s)
+  }
+
+  if (imgs.length > 0) {
+    stageImages(s, `文字已填充;${imgs.length} 张图片已放入输入框,请手动发送`)
+    closePopup()
+    return
+  }
+  if (!text) return
+  toast(`已填充:${kindLabel(s.kind)} · 请手动发送`)
+  closePopup()
+}
+
 function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   const row = document.createElement('div')
   row.className = 'pddcs-cand'
-  row.title = '点击填入输入框(不自动发送)'
 
   // 行内状态:该候选当前对应的标准回答 id
   //  - 候选本身就是标准回答(kind=golden)→ 进面板即可"取消";
@@ -762,10 +909,11 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
       ev.stopPropagation()
       void (isGolden ? cancelGolden(goldBtn) : addGolden(goldBtn))
     })
-    const copyBtn = iconBtn(COPY_ICON, '复制该条答复文本', 'copy')
+    const imgOnly = isImageOnlySuggestion(s)
+    const copyBtn = iconBtn(COPY_ICON, imgOnly ? '复制图片地址' : '复制该条答复文本', 'copy')
     copyBtn.addEventListener('click', (ev) => {
       ev.stopPropagation()
-      void copyText(s.text).then((ok) =>
+      void copyText(imgOnly ? s.attachments![0].url : s.text).then((ok) =>
         toast(ok ? '已复制到剪贴板' : '复制失败,请手动选择文本'),
       )
     })
@@ -782,20 +930,47 @@ function candidateRow(s: Suggestion, query: string): HTMLDivElement {
   q.title = s.sourceQuestion
   row.appendChild(q)
 
-  const text = document.createElement('div')
-  text.className = 'pddcs-cand-text'
-  text.textContent = s.text
-  row.appendChild(text)
+  // 图片附件:缩略图走 CDN 的按需缩放(不下载原图),点开是原图
+  const imgs = s.attachments ?? []
+  const imageOnly = isImageOnlySuggestion(s)
+  row.title = imageOnly
+    ? '点击查看大图(发送请手动上传)'
+    : imgs.length > 0
+      ? '点击填入文字(图片需手动发送)'
+      : '点击填入输入框(不自动发送)'
 
-  row.addEventListener('click', () => {
-    if (fillInput(s.text)) {
-      trackFill(s)
-      toast(`已填充:${kindLabel(s.kind)} · 请手动发送`)
-      closePopup()
-    } else {
-      toast('未找到输入框,请手动粘贴')
+  // 纯图片候选没有正文可显示(库里是空串/旧占位符),只给缩略图
+  if (!imageOnly) {
+    const text = document.createElement('div')
+    text.className = 'pddcs-cand-text'
+    text.textContent = s.text
+    row.appendChild(text)
+  }
+  if (imgs.length > 0) {
+    const strip = document.createElement('div')
+    strip.className = 'pddcs-cand-imgs'
+    for (const a of imgs) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'pddcs-cand-img'
+      btn.title = '查看大图'
+      btn.setAttribute('aria-label', '查看大图')
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        openImagePreview(a.url)
+      })
+      const img = document.createElement('img')
+      img.src = thumbUrl(a.url, 96)
+      img.alt = '图片回复'
+      img.loading = 'lazy'
+      btn.appendChild(img)
+      strip.appendChild(btn)
     }
-  })
+    row.appendChild(strip)
+  }
+
+  // 一条候选可能同时带文字和图片:文字填进输入框、图片走发送(见 applySuggestion)
+  row.addEventListener('click', () => applySuggestion(s))
   return row
 }
 
@@ -934,8 +1109,8 @@ document.addEventListener('keydown', (ev) => {
 })
 
 // ─── 快捷键(默认 Ctrl+Enter,可在设置中自定义)─────────────────────────────────
-// 「自动回复」关:检索**用户最新消息** → 弹推荐回复面板 → Tab/Shift+Tab 选候选,Enter 填充选中项;
-// 「自动回复」开:检索 → 直接把第一条填入输入框。全程不自动发送。
+// 「自动选择首条」关:检索**用户最新消息** → 弹推荐回复面板 → Tab/Shift+Tab 选候选,Enter 填充选中项;
+// 「自动选择首条」开:检索 → 直接把第一条填入输入框。全程不自动发送。
 
 let hotkeySettings: PddSettings = { ...DEFAULT_SETTINGS }
 
@@ -1013,8 +1188,10 @@ async function onHotkey(): Promise<void> {
     return
   }
 
-  // 「自动回复」开 → 直接填充第一条(不弹面板)
-  if (settings.directFillEnabled) {
+  // 「自动选择首条」开 → 直接填充第一条(不弹面板)。
+  // 带图的候选例外:自动发送图片风险太大,退回面板让用户自己点
+  const firstHasImage = (suggestions[0]?.attachments?.length ?? 0) > 0
+  if (settings.directFillEnabled && !firstHasImage) {
     const first = suggestions[0]
     if (fillInput(first.text)) {
       trackFill(first)
@@ -1074,13 +1251,7 @@ document.addEventListener(
         else aiRow?.click()
         return
       }
-      if (fillInput(picked.s.text)) {
-        trackFill(picked.s)
-        toast(`已填充:${kindLabel(picked.s.kind)} · 请手动发送`)
-        closePopup()
-      } else {
-        toast('未找到输入框,请手动粘贴')
-      }
+      applySuggestion(picked.s)
       return
     }
     // 快捷键唤起(默认 Ctrl+Enter)
@@ -1108,6 +1279,15 @@ chrome.runtime.onMessage.addListener(
     const text = String(message.payload?.text ?? '')
     if (!text) {
       sendResponse({ type: 'PDD_FILL_INPUT_RESPONSE', payload: { success: false, error: '填充内容为空' } })
+      return false
+    }
+    // 图片回复的正文就是占位符:从任何入口填进来都只会在输入框里留下「[图片]」
+    if (text === IMAGE_PLACEHOLDER) {
+      toast('图片回复无法直接填充,请手动上传图片')
+      sendResponse({
+        type: 'PDD_FILL_INPUT_RESPONSE',
+        payload: { success: false, error: '图片回复无法直接填充' },
+      })
       return false
     }
     if (fillInput(text)) {
